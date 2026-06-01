@@ -1,0 +1,43 @@
+{
+  "name": "lead-management-dashboard",
+  "version": "1.0.0",
+  "description": "Professional SaaS lead management dashboard",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env MONGODB_TARGET=local next dev",
+    "dev:local": "cross-env MONGODB_TARGET=local next dev",
+    "dev:production": "cross-env MONGODB_TARGET=production next dev",
+    "build": "cross-env MONGODB_TARGET=production next build",
+    "build:local": "cross-env MONGODB_TARGET=local next build",
+    "build:production": "cross-env MONGODB_TARGET=production next build",
+    "start": "cross-env MONGODB_TARGET=production next start",
+    "start:local": "cross-env MONGODB_TARGET=local next start",
+    "start:production": "cross-env MONGODB_TARGET=production next start",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.9.0",
+    "mongoose": "^9.5.0",
+    "next": "^16.2.4",
+    "pdfkit": "^0.18.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "@types/pdfkit": "^0.17.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.4",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3"
+  }
+}
