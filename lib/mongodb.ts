@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const isVercelDeployment = process.env.VERCEL === "1" || typeof process.env.VERCEL_ENV === "string";
 
-const mongoTarget =
+export const mongoTarget =
   process.env.MONGODB_TARGET === "production"
     ? "production"
     : process.env.MONGODB_TARGET === "local"
@@ -25,6 +25,10 @@ if (!resolvedMongoUri) {
 }
 
 const mongoUri: string = resolvedMongoUri;
+
+export function getResolvedMongoUri() {
+  return mongoUri;
+}
 
 type MongooseCache = {
   conn: typeof mongoose | null;
