@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import PDFDocument from "pdfkit";
 import {
   CODE_THEME_BY_LANGUAGE,
@@ -44,30 +42,11 @@ const SAMPLE_REQUEST_OVERRIDES: Record<string, unknown> = {
   zip_code: "550000",
 };
 
-function resolveFontPath(candidates: string[]) {
-  const matchedPath = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!matchedPath) {
-    throw new Error(`Unable to locate a PDF font. Checked: ${candidates.join(", ")}`);
-  }
-  return matchedPath;
-}
-
-const windowsFontDir = path.join(process.env.WINDIR ?? "C:\\Windows", "Fonts");
-const FONT_REGULAR = resolveFontPath([
-  path.join(windowsFontDir, "arial.ttf"),
-  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-  "/System/Library/Fonts/Supplemental/Arial.ttf",
-]);
-const FONT_BOLD = resolveFontPath([
-  path.join(windowsFontDir, "arialbd.ttf"),
-  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-  "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-]);
-const FONT_MONO = resolveFontPath([
-  path.join(windowsFontDir, "cour.ttf"),
-  "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-  "/System/Library/Fonts/Supplemental/Courier New.ttf",
-]);
+// Use PDFKit's built-in fonts so PDF generation works on serverless
+// environments like Vercel without depending on OS font files.
+const FONT_REGULAR = "Helvetica";
+const FONT_BOLD = "Helvetica-Bold";
+const FONT_MONO = "Courier";
 
 function normalizeType(type: string) {
   return type.trim().toLowerCase();
