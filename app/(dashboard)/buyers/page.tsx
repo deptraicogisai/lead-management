@@ -1,39 +1,70 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { BuyerForm, type BuyerFormValues } from "@/components/forms/buyer-form";
+import {
+  ChevronDown,
+  CircleHelp,
+  Download,
+  Settings2,
+  UserRound,
+} from "lucide-react";
+import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { ListControls } from "@/components/ui/list-controls";
-import { Modal } from "@/components/ui/modal";
+import { IdBadge } from "@/components/ui/id-badge";
+import { Input } from "@/components/ui/form-controls";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
-import type { Buyer } from "@/lib/mock-data";
+import {
+  BUYER_LABEL_OPTIONS,
+  BUYER_MANAGER_OPTIONS,
+  formatBuyerCreated,
+  getManagerLabel,
+  type BuyerCreatePayload,
+  type BuyerListRecord,
+} from "@/lib/buyer";
+import { cn } from "@/lib/utils";
 
 type BuyerListResponse = {
-  items: Buyer[];
+  items: BuyerListRecord[];
   page: number;
   pageSize: number;
   totalItems: number;
   totalPages: number;
 };
 
+function parseDateInput(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export default function BuyersPage() {
-  const [buyerRows, setBuyerRows] = useState<Buyer[]>([]);
-  const [editingBuyerId, setEditingBuyerId] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Buyer | null>(null);
+  const [buyerRows, setBuyerRows] = useState<BuyerListRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [tableFilter, setTableFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const editingBuyer = useMemo(
-    () => buyerRows.find((buyer) => buyer.id === editingBuyerId) ?? null,
-    [buyerRows, editingBuyerId]
-  );
+  const [labelFilter, setLabelFilter] = useState("All");
+  const [agentFilter, setAgentFilter] = useState("All");
+  const [prepaidFilter, setPrepaidFilter] = useState("All");
+  const [dateFrom, setDateFrom] = useState("2000-01-01");
+  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+
+  const [appliedFilters, setAppliedFilters] = useState({
+    labelFilter: "All",
+    agentFilter: "All",
+    prepaidFilter: "All",
+    dateFrom: "2000-01-01",
+    dateTo: new Date().toISOString().slice(0, 10),
+  });
 
   useEffect(() => {
     const fetchBuyers = async () => {
@@ -42,7 +73,6 @@ export default function BuyersPage() {
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(pageSize),
-          search,
         });
         const response = await fetch(`/api/buyers?${params.toString()}`);
         if (!response.ok) return;
@@ -57,216 +87,411 @@ export default function BuyersPage() {
     };
 
     void fetchBuyers();
-  }, [page, pageSize, search, reloadKey]);
+  }, [page, pageSize, reloadKey]);
 
-  const openCreateModal = () => {
-    setEditingBuyerId(null);
-    setIsFormOpen(true);
+  const filteredRows = useMemo(() => {
+    const fromDate = parseDateInput(appliedFilters.dateFrom);
+    const toDate = parseDateInput(appliedFilters.dateTo);
+
+    return buyerRows.filter((row) => {
+      const matchesLabel = appliedFilters.labelFilter === "All" ? true : row.label === appliedFilters.labelFilter;
+      const matchesAgent =
+        appliedFilters.agentFilter === "All" ? true : row.personalManagerId === appliedFilters.agentFilter;
+      const matchesPrepaid =
+        appliedFilters.prepaidFilter === "All"
+          ? true
+          : appliedFilters.prepaidFilter === "Yes"
+            ? row.prepaid
+            : !row.prepaid;
+
+      const createdAt = row.createdAt ? new Date(row.createdAt) : null;
+      const matchesDateFrom = !fromDate || !createdAt ? true : createdAt >= fromDate;
+      const matchesDateTo = !toDate || !createdAt ? true : createdAt <= new Date(`${appliedFilters.dateTo}T23:59:59`);
+
+      const search = tableFilter.trim().toLowerCase();
+      const matchesTableFilter = search
+        ? row.name.toLowerCase().includes(search) ||
+          String(row.displayId).includes(search) ||
+          row.integrations.some((item) => item.toLowerCase().includes(search))
+        : true;
+
+      return matchesLabel && matchesAgent && matchesPrepaid && matchesDateFrom && matchesDateTo && matchesTableFilter;
+    });
+  }, [buyerRows, appliedFilters, tableFilter]);
+
+  const handleSearch = () => {
+    setAppliedFilters({
+      labelFilter,
+      agentFilter,
+      prepaidFilter,
+      dateFrom,
+      dateTo,
+    });
+    setPage(1);
   };
 
-  const openEditModal = (buyer: Buyer) => {
-    setEditingBuyerId(buyer.id);
-    setIsFormOpen(true);
+  const clearFilters = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setLabelFilter("All");
+    setAgentFilter("All");
+    setPrepaidFilter("All");
+    setDateFrom("2000-01-01");
+    setDateTo(today);
+    setTableFilter("");
+    setAppliedFilters({
+      labelFilter: "All",
+      agentFilter: "All",
+      prepaidFilter: "All",
+      dateFrom: "2000-01-01",
+      dateTo: today,
+    });
+    setSelectedIds([]);
+    setPage(1);
   };
 
-  const closeFormModal = () => {
-    setEditingBuyerId(null);
-    setIsFormOpen(false);
-  };
-
-  const handleSubmitBuyer = async (values: BuyerFormValues) => {
-    if (editingBuyerId) {
-      const response = await fetch(`/api/buyers/${encodeURIComponent(editingBuyerId)}`, {
-        method: "PATCH",
+  const handleAddBuyer = async (values: BuyerCreatePayload) => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/buyers", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
+
       if (!response.ok) return;
 
-      closeFormModal();
-      setReloadKey((prev) => prev + 1);
-      return;
-    }
-
-    const response = await fetch("/api/buyers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
-    if (!response.ok) return;
-
-    closeFormModal();
-    setPage(1);
-    setReloadKey((prev) => prev + 1);
-  };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-
-    const response = await fetch(`/api/buyers/${encodeURIComponent(deleteTarget.id)}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) return;
-
-    if (editingBuyerId === deleteTarget.id) {
-      closeFormModal();
-    }
-    setDeleteTarget(null);
-    if (buyerRows.length === 1 && page > 1) {
-      setPage((prev) => prev - 1);
-    } else {
-      setReloadKey((prev) => prev + 1);
+      setIsAddModalOpen(false);
+      setPage(1);
+      setReloadKey((current) => current + 1);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const columns: Column<Buyer>[] = [
-    { key: "firstName", label: "First Name" },
-    { key: "lastName", label: "Last Name" },
-    { key: "email", label: "Email" },
-    { key: "phone", label: "Phone" },
-    { key: "company", label: "Company" },
-    { key: "verticalName", label: "Vertical" },
+  const toggleRow = (rowId: string) => {
+    setSelectedIds((current) => (current.includes(rowId) ? current.filter((id) => id !== rowId) : [...current, rowId]));
+  };
+
+  const toggleAllRows = (checked: boolean) => {
+    setSelectedIds(checked ? filteredRows.map((row) => row.id) : []);
+  };
+
+  const columns: Column<BuyerListRecord>[] = [
+    {
+      key: "id",
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          <span>ID</span>
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500">
+            <CircleHelp size={10} strokeWidth={2.5} />
+          </span>
+          <ChevronDown size={14} className="text-slate-500" aria-hidden />
+        </span>
+      ),
+      render: (row) => (
+        <Link href={`/buyers/${encodeURIComponent(row.id)}`} className="inline-flex transition hover:opacity-80">
+          <IdBadge id={row.displayId} />
+        </Link>
+      ),
+    },
+    { key: "name", label: "Name" },
+    {
+      key: "label",
+      label: "Label",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Settings2 size={14} className="text-blue-600 dark:text-blue-300" />
+          {row.label !== "-" ? (
+            <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+              {row.label}
+            </span>
+          ) : (
+            <span>-</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "createdAt",
+      label: "Created",
+      render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
+    },
+    {
+      key: "lastTrafficLabel",
+      label: "Last Traffic",
+      render: (row) => <span className="text-xs">{row.lastTrafficLabel}</span>,
+    },
+    {
+      key: "buyerType",
+      label: "Type",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Settings2 size={14} className="text-blue-600 dark:text-blue-300" />
+          <span>{row.buyerType}</span>
+        </div>
+      ),
+    },
+    {
+      key: "accounting",
+      label: "Accounting Set",
+      render: () => (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+        >
+          <Settings2 size={12} />
+          <span>Set Invoice Setting</span>
+        </button>
+      ),
+    },
+    {
+      key: "manager",
+      label: "Manager",
+      render: (row) =>
+        row.personalManagerName ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+          >
+            <UserRound size={12} />
+            <span>{getManagerLabel(row.personalManagerId, row.personalManagerName)}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+          >
+            <UserRound size={12} />
+            <span>Set Buyer Agent</span>
+          </button>
+        ),
+    },
     {
       key: "status",
       label: "Status",
       render: (row) => (
         <span
-          className={
+          className={cn(
+            "rounded-full border px-2.5 py-0.5 text-xs font-semibold",
             row.status === "Active"
-              ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700"
-              : "rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700"
-          }
+              ? "border-emerald-600 bg-white text-emerald-700 dark:border-emerald-500 dark:bg-transparent dark:text-emerald-300"
+              : "border-red-500 bg-white text-red-600 dark:border-red-500 dark:bg-transparent dark:text-red-300"
+          )}
         >
           {row.status}
         </span>
       ),
     },
     {
-      key: "actions",
-      label: "Actions",
+      key: "integrations",
+      label: "Integrations",
       render: (row) => (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => openEditModal(row)}
-            className="rounded-lg border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
-          >
-            Mapping Field
-          </button>
-          <button
-            type="button"
-            onClick={() => openEditModal(row)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteTarget(row)}
-            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-          >
-            Delete
-          </button>
+        <div className="max-w-xs space-y-1 text-xs text-slate-700 dark:text-slate-200">
+          {row.integrations.length > 0 ? row.integrations.map((item) => <p key={item}>{item}</p>) : <span>-</span>}
         </div>
+      ),
+    },
+    {
+      key: "questionnaireStatus",
+      label: "Questionnaire",
+      render: (row) => (
+        <span className="rounded-full border border-red-400 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:border-red-500 dark:text-red-300">
+          {row.questionnaireStatus}
+        </span>
+      ),
+    },
+    {
+      key: "quality",
+      label: "Quality",
+      render: (row) => (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white dark:bg-emerald-500">
+          {row.quality}
+        </span>
       ),
     },
   ];
 
+  const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = filteredRows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
   return (
     <div className="space-y-6">
-      <ListControls
-        searchValue={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(1);
-        }}
-        searchPlaceholder="Search by name, email, phone, company, vertical or status"
-      />
+      <PageSection title="Buyer List">
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Label</label>
+                <select
+                  value={labelFilter}
+                  onChange={(event) => setLabelFilter(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="All">All</option>
+                  {BUYER_LABEL_OPTIONS.filter((label) => label !== "-").map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      <PageSection
-        title="Buyer List"
-        actions={
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
-          >
-            Create Buyer
-          </button>
-        }
-      >
-        <DataTable<Buyer>
-          columns={columns}
-          rows={buyerRows}
-          emptyMessage={isLoading ? "Loading buyers..." : "No buyers yet. Create your first buyer to start distribution mapping."}
-        />
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Agent</label>
+                <select
+                  value={agentFilter}
+                  onChange={(event) => setAgentFilter(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="All">All</option>
+                  {BUYER_MANAGER_OPTIONS.map((manager) => (
+                    <option key={manager.id} value={manager.id}>
+                      [{manager.id}] {manager.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Prepaid</label>
+                <select
+                  value={prepaidFilter}
+                  onChange={(event) => setPrepaidFilter(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  <option value="All">All</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date Range</label>
+                <div className="flex items-center gap-2">
+                  <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+                  <span className="text-sm text-slate-500">-</span>
+                  <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleSearch}
+                className="rounded-xl border border-emerald-700 bg-emerald-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                  {[15, 50].map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setPageSize(size);
+                        setPage(1);
+                      }}
+                      className={cn(
+                        "px-3 py-2 text-sm font-medium transition",
+                        pageSize === size
+                          ? "bg-emerald-800 text-white dark:bg-emerald-600"
+                          : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-300">
+                  Showing <span className="font-semibold text-slate-900 dark:text-slate-100">{showingFrom}</span> to{" "}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{showingTo}</span> of{" "}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{totalItems}</span> entries
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <CircleHelp size={14} />
+                  <span>Filter:</span>
+                  <input
+                    type="text"
+                    value={tableFilter}
+                    onChange={(event) => setTableFilter(event.target.value)}
+                    className="w-28 border-none bg-transparent text-sm outline-none dark:text-slate-100"
+                    placeholder=""
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                >
+                  <Download size={15} />
+                  <span>Export</span>
+                  <ChevronDown size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                >
+                  Add New Buyer
+                </button>
+                <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white dark:border-emerald-500 dark:bg-emerald-600">
+                  {selectedIds.length} selected
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                Loading buyers...
+              </div>
+            ) : (
+              <DataTable<BuyerListRecord>
+                columns={columns}
+                rows={filteredRows}
+                emptyMessage="No buyers found."
+                selectedRowIds={selectedIds}
+                onToggleRow={toggleRow}
+                onToggleAllRows={toggleAllRows}
+              />
+            )}
+          </div>
+
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+            onPageChange={setPage}
+          />
+        </div>
       </PageSection>
 
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        pageSize={pageSize}
-        onPageSizeChange={(value) => {
-          setPageSize(value);
-          setPage(1);
-        }}
-        onPageChange={setPage}
-      />
-
-      <Modal
-        open={isFormOpen}
-        title={editingBuyer ? `Edit Buyer - ${editingBuyer.company}` : "Create Buyer"}
-        onClose={closeFormModal}
-        panelClassName="max-w-3xl"
-      >
-        <BuyerForm
-          key={editingBuyerId ?? "create-buyer"}
-          initialValues={
-            editingBuyer
-              ? {
-                  firstName: editingBuyer.firstName,
-                  lastName: editingBuyer.lastName,
-                  email: editingBuyer.email,
-                  phone: editingBuyer.phone,
-                  company: editingBuyer.company,
-                  verticalId: editingBuyer.verticalId,
-                    apiKey: editingBuyer.apiKey,
-                    postLeadUrl: editingBuyer.postLeadUrl,
-                  status: editingBuyer.status,
-                  mappings: editingBuyer.mappings,
-                }
-              : undefined
-          }
-          isEditing={Boolean(editingBuyer)}
-          onCancelEdit={closeFormModal}
-          onSubmitBuyer={handleSubmitBuyer}
-        />
-      </Modal>
-
-      <Modal
-        open={deleteTarget !== null}
-        title="Delete Buyer"
-        description={deleteTarget ? `Delete buyer "${deleteTarget.company}"?` : undefined}
-        onClose={() => setDeleteTarget(null)}
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(null)}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
-            >
-              Delete
-            </button>
-          </>
-        }
+      <BuyerAddModal
+        open={isAddModalOpen}
+        isSaving={isSaving}
+        onClose={() => setIsAddModalOpen(false)}
+        onSubmit={handleAddBuyer}
       />
     </div>
   );

@@ -1,11 +1,24 @@
+import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { BuyerModel } from "@/lib/models/buyer";
+import {
+  getAvailableIntegrationOptions,
+  resolveBuyerIntegrations,
+} from "@/lib/buyer-integrations";
+import {
+  normalizeBuyerStatus,
+  resolveBuyerName,
+  resolveManagerOption,
+  toBuyerListRecord,
+  type BuyerDoc,
+  type BuyerUpdatePayload,
+} from "@/lib/buyer";
+import { BuyerModel, ensureBuyerFieldsMigrated } from "@/lib/models/buyer";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 
 type Params = { params: Promise<{ id: string }> };
 
-type BuyerPayload = {
+type LegacyBuyerPayload = {
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -14,31 +27,14 @@ type BuyerPayload = {
   verticalId?: string;
   apiKey?: string;
   postLeadUrl?: string;
-  status?: "Active" | "Paused";
+  status?: "Active" | "Inactive" | "Disabled" | "Paused";
   mappings?: Array<{
     source?: string;
     destination?: string;
   }>;
 };
 
-type BuyerDoc = {
-  _id?: { toString(): string };
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  company: string;
-  verticalRef?: { toString(): string } | string | null;
-  apiKey: string;
-  postLeadUrl: string;
-  status: "Active" | "Paused";
-  mappings?: Array<{
-    source: string;
-    destination: string;
-  }>;
-};
-
-function sanitizeMappings(payloadMappings: BuyerPayload["mappings"]) {
+function sanitizeMappings(payloadMappings: LegacyBuyerPayload["mappings"]) {
   return (payloadMappings ?? [])
     .map((mapping) => ({
       source: mapping.source?.trim() ?? "",
@@ -47,77 +43,154 @@ function sanitizeMappings(payloadMappings: BuyerPayload["mappings"]) {
     .filter((mapping) => mapping.source && mapping.destination);
 }
 
-function toBuyerResponse(doc: BuyerDoc, verticalName: string) {
-  const verticalId =
-    typeof doc.verticalRef === "string" ? doc.verticalRef : doc.verticalRef?.toString() ?? "";
+function isLegacyBuyerPayload(body: LegacyBuyerPayload & Partial<BuyerUpdatePayload>) {
+  return Boolean(
+    body.firstName ||
+      body.lastName ||
+      body.email ||
+      body.phone ||
+      body.company ||
+      body.verticalId ||
+      body.apiKey ||
+      body.postLeadUrl ||
+      body.mappings
+  );
+}
 
-  return {
-    id: doc._id?.toString() ?? "",
-    firstName: doc.firstName,
-    lastName: doc.lastName,
-    email: doc.email,
-    phone: doc.phone,
-    company: doc.company,
-    verticalId,
-    verticalName,
-    apiKey: doc.apiKey,
-    postLeadUrl: doc.postLeadUrl,
-    status: doc.status,
-    mappings: (doc.mappings ?? []).map((mapping) => ({
-      source: mapping.source,
-      destination: mapping.destination,
-    })),
-  };
+async function mapBuyerResponse(buyer: BuyerDoc) {
+  const options = await getAvailableIntegrationOptions();
+  const { integrationIds, integrationLabels } = resolveBuyerIntegrations(buyer, options);
+  return toBuyerListRecord(buyer, integrationLabels, integrationIds);
+}
+
+function sanitizeIntegrationIds(integrationIds?: string[]) {
+  return (integrationIds ?? []).filter((id) => Types.ObjectId.isValid(id));
+}
+
+export async function GET(_req: Request, context: Params) {
+  try {
+    const { id } = await context.params;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid buyer id." }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    await ensureVerticalCollectionMigrated();
+    await ensureBuyerFieldsMigrated();
+
+    const buyer = await BuyerModel.findById(id).lean();
+    if (!buyer) {
+      return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+    }
+
+    return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
+  } catch {
+    return NextResponse.json({ message: "Failed to fetch buyer." }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: Request, context: Params) {
   try {
     const { id } = await context.params;
-    const body = (await req.json()) as BuyerPayload;
-    if (
-      !body.firstName?.trim() ||
-      !body.lastName?.trim() ||
-      !body.email?.trim() ||
-      !body.phone?.trim() ||
-      !body.company?.trim() ||
-      !body.verticalId?.trim() ||
-      !body.apiKey?.trim() ||
-      !body.postLeadUrl?.trim() ||
-      !body.status
-    ) {
-      return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
+    const body = (await req.json()) as LegacyBuyerPayload & Partial<BuyerUpdatePayload>;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid buyer id." }, { status: 400 });
     }
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
+    await ensureBuyerFieldsMigrated();
 
-    const vertical = await VerticalModel.findById(body.verticalId.trim()).lean();
-    if (!vertical) {
-      return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
+    if (isLegacyBuyerPayload(body)) {
+      if (
+        !body.firstName?.trim() ||
+        !body.lastName?.trim() ||
+        !body.email?.trim() ||
+        !body.phone?.trim() ||
+        !body.company?.trim() ||
+        !body.verticalId?.trim() ||
+        !body.apiKey?.trim() ||
+        !body.postLeadUrl?.trim() ||
+        !body.status
+      ) {
+        return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
+      }
+
+      const vertical = await VerticalModel.findById(body.verticalId.trim()).lean();
+      if (!vertical) {
+        return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
+      }
+
+      const buyer = await BuyerModel.findByIdAndUpdate(
+        id,
+        {
+          name: body.company.trim(),
+          company: body.company.trim(),
+          firstName: body.firstName.trim(),
+          lastName: body.lastName.trim(),
+          email: body.email.trim(),
+          phone: body.phone.trim(),
+          verticalRef: vertical._id,
+          apiKey: body.apiKey.trim(),
+          postLeadUrl: body.postLeadUrl.trim(),
+          status: normalizeBuyerStatus(body.status),
+          mappings: sanitizeMappings(body.mappings),
+        },
+        { new: true }
+      ).lean();
+
+      if (!buyer) {
+        return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
     }
 
-    const buyer = await BuyerModel.findByIdAndUpdate(
-      id,
-      {
-        firstName: body.firstName.trim(),
-        lastName: body.lastName.trim(),
-        email: body.email.trim(),
-        phone: body.phone.trim(),
-        company: body.company.trim(),
-        verticalRef: vertical._id,
-        apiKey: body.apiKey.trim(),
-        postLeadUrl: body.postLeadUrl.trim(),
-        status: body.status,
-        mappings: sanitizeMappings(body.mappings),
-      },
-      { new: true }
-    ).lean();
+    if (body.integrationIds !== undefined && body.name === undefined) {
+      const integrationRefs = sanitizeIntegrationIds(body.integrationIds);
+
+      const buyer = await BuyerModel.findByIdAndUpdate(
+        id,
+        { integrationRefs },
+        { new: true }
+      ).lean();
+
+      if (!buyer) {
+        return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
+    }
+
+    if (!body.name?.trim()) {
+      return NextResponse.json({ message: "Name is required." }, { status: 400 });
+    }
+
+    const manager = body.personalManagerId ? resolveManagerOption(body.personalManagerId) : null;
+    const trimmedName = body.name.trim();
+    const updatePayload: Record<string, unknown> = {
+      name: trimmedName,
+      company: trimmedName,
+      status: body.status ? normalizeBuyerStatus(body.status) : "Active",
+      buyerLabel: body.label?.trim() || "-",
+      buyerType: body.buyerType?.trim() || "-",
+      personalManagerId: manager?.id ?? "",
+      personalManagerName: manager?.name ?? "",
+    };
+
+    if (body.integrationIds !== undefined) {
+      updatePayload.integrationRefs = sanitizeIntegrationIds(body.integrationIds);
+    }
+
+    const buyer = await BuyerModel.findByIdAndUpdate(id, updatePayload, { new: true }).lean();
 
     if (!buyer) {
       return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
     }
 
-    return NextResponse.json(toBuyerResponse(buyer, vertical.name));
+    return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
   } catch {
     return NextResponse.json({ message: "Failed to update buyer." }, { status: 500 });
   }
@@ -127,7 +200,13 @@ export async function DELETE(_: Request, context: Params) {
   try {
     const { id } = await context.params;
 
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid buyer id." }, { status: 400 });
+    }
+
     await connectToDatabase();
+    await ensureBuyerFieldsMigrated();
+
     const buyer = await BuyerModel.findByIdAndDelete(id).lean();
 
     if (!buyer) {

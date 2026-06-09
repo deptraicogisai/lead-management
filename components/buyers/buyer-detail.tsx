@@ -1,0 +1,511 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CircleHelp, ExternalLink, Globe, Info, X } from "lucide-react";
+import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import {
+  BUYER_LABEL_OPTIONS,
+  BUYER_MANAGER_OPTIONS,
+  BUYER_TYPE_OPTIONS,
+  normalizeBuyerStatus,
+  type BuyerListRecord,
+  type BuyerUpdatePayload,
+} from "@/lib/buyer";
+import type { IntegrationOption } from "@/lib/buyer-integrations";
+import { cn } from "@/lib/utils";
+
+const buyerTabs = [
+  { id: "global", label: "Global" },
+  { id: "integrations", label: "Integrations" }
+] as const;
+
+const leftHeaderActions = ["Summary Report", "Summary by Campaign", "Summary by Publisher"] as const;
+const rightHeaderActions = ["Lead Details", "Campaigns"] as const;
+
+const headerButtonClassName =
+  "whitespace-nowrap rounded-lg border border-emerald-800 bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-700 dark:hover:bg-emerald-600";
+
+const selectClassName =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
+
+function FieldLabelWithHelp({
+  htmlFor,
+  label,
+  showLinkIcon = false,
+}: {
+  htmlFor: string;
+  label: string;
+  showLinkIcon?: boolean;
+}) {
+  return (
+    <label htmlFor={htmlFor} className={cn("text-sm font-medium text-slate-700 dark:text-slate-200", "sm:text-right")}>
+      <span className="inline-flex items-center justify-end gap-1.5">
+        <span>{label}</span>
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500 dark:text-slate-400">
+          <CircleHelp size={10} strokeWidth={2.5} />
+        </span>
+        {showLinkIcon ? <ExternalLink size={12} className="text-slate-500 dark:text-slate-400" /> : null}
+      </span>
+    </label>
+  );
+}
+
+type BuyerDetailProps = {
+  buyer: BuyerListRecord;
+};
+
+export function BuyerDetail({ buyer }: BuyerDetailProps) {
+  const router = useRouter();
+  const [activeTabId, setActiveTabId] = useState<(typeof buyerTabs)[number]["id"]>("global");
+  const [name, setName] = useState(buyer.name);
+  const [status, setStatus] = useState<"Active" | "Inactive">(normalizeBuyerStatus(buyer.status));
+  const [personalManagerId, setPersonalManagerId] = useState(buyer.personalManagerId);
+  const [label, setLabel] = useState(buyer.label);
+  const [buyerType, setBuyerType] = useState(buyer.buyerType);
+  const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
+  const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
+  const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
+  const [integrationPickerValue, setIntegrationPickerValue] = useState("");
+  const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
+  const [integrationSaveError, setIntegrationSaveError] = useState("");
+  const [integrationSaveMessage, setIntegrationSaveMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
+  const activeTab = buyerTabs.find((tab) => tab.id === activeTabId) ?? buyerTabs[0];
+
+  useEffect(() => {
+    setName(buyer.name);
+    setStatus(normalizeBuyerStatus(buyer.status));
+    setPersonalManagerId(buyer.personalManagerId);
+    setLabel(buyer.label);
+    setBuyerType(buyer.buyerType);
+    setSelectedIntegrationIds(buyer.integrationIds);
+  }, [buyer]);
+
+  useEffect(() => {
+    const fetchIntegrationOptions = async () => {
+      setIsLoadingIntegrations(true);
+      try {
+        const response = await fetch("/api/integration-builder");
+        if (!response.ok) return;
+
+        const records = (await response.json()) as Array<{
+          id: string;
+          displayId: number;
+          name: string;
+          product: string;
+          productLabel: string;
+        }>;
+
+        setIntegrationOptions(
+          records.map((record) => ({
+            id: record.id,
+            displayId: record.displayId,
+            name: record.name,
+            product: record.product,
+            label: `[${record.displayId}] ${record.name} (Custom) (${record.product})`,
+          }))
+        );
+      } finally {
+        setIsLoadingIntegrations(false);
+      }
+    };
+
+    void fetchIntegrationOptions();
+  }, []);
+
+  const selectedIntegrations = useMemo(
+    () =>
+      selectedIntegrationIds
+        .map((id) => integrationOptions.find((option) => option.id === id))
+        .filter((option): option is IntegrationOption => Boolean(option)),
+    [integrationOptions, selectedIntegrationIds]
+  );
+
+  const availableIntegrationOptions = useMemo(
+    () => integrationOptions.filter((option) => !selectedIntegrationIds.includes(option.id)),
+    [integrationOptions, selectedIntegrationIds]
+  );
+
+  const renderDetailRow = (labelText: string, control: ReactNode, showLinkIcon = false) => (
+    <div className="grid gap-2 py-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center sm:gap-6">
+      <FieldLabelWithHelp htmlFor={`buyer-${labelText.toLowerCase().replace(/\s+/g, "-")}`} label={`${labelText}:`} showLinkIcon={showLinkIcon} />
+      <div className="min-w-0">{control}</div>
+    </div>
+  );
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      setSaveError("Name cannot be blank.");
+      setSaveMessage("");
+      return;
+    }
+
+    const payload: BuyerUpdatePayload = {
+      name: name.trim(),
+      status,
+      personalManagerId,
+      label,
+      buyerType,
+    };
+
+    setIsSaving(true);
+    setSaveError("");
+    setSaveMessage("");
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        setSaveError(result?.message ?? "Failed to save buyer.");
+        return;
+      }
+
+      setSaveMessage("Buyer saved successfully.");
+      router.refresh();
+    } catch {
+      setSaveError("Failed to save buyer.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveIntegrations = async () => {
+    setIsSavingIntegrations(true);
+    setIntegrationSaveError("");
+    setIntegrationSaveMessage("");
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ integrationIds: selectedIntegrationIds }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        setIntegrationSaveError(result?.message ?? "Failed to save integrations.");
+        return;
+      }
+
+      setIntegrationSaveMessage("Integrations saved successfully.");
+      router.refresh();
+    } catch {
+      setIntegrationSaveError("Failed to save integrations.");
+    } finally {
+      setIsSavingIntegrations(false);
+    }
+  };
+
+  const addIntegration = (integrationId: string) => {
+    if (!integrationId || selectedIntegrationIds.includes(integrationId)) return;
+    setSelectedIntegrationIds((current) => [...current, integrationId]);
+    setIntegrationPickerValue("");
+  };
+
+  const removeIntegration = (integrationId: string) => {
+    setSelectedIntegrationIds((current) => current.filter((id) => id !== integrationId));
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete buyer "${name}"?`)) return;
+
+    setIsDeleting(true);
+    setDeleteError("");
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        setDeleteError(result?.message ?? "Failed to delete buyer.");
+        return;
+      }
+
+      router.push("/buyers");
+      router.refresh();
+    } catch {
+      setDeleteError("Failed to delete buyer.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const renderGlobalTab = () => (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex justify-end border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+        <button
+          type="button"
+          disabled={isDeleting}
+          onClick={() => void handleDelete()}
+          className="rounded-xl border border-orange-500 bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
+        >
+          {isDeleting ? "Deleting..." : "Delete Buyer"}
+        </button>
+      </div>
+
+      <div className="px-6 py-8">
+        <div className="mx-auto w-full max-w-3xl space-y-1">
+          {renderDetailRow(
+            "Name",
+            <Input
+              id="buyer-name"
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                if (saveError) setSaveError("");
+              }}
+            />
+          )}
+          {renderDetailRow(
+            "Status",
+            <select
+              id="buyer-status"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as "Active" | "Inactive")}
+              className={selectClassName}
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          )}
+          {renderDetailRow(
+            "Personal manager",
+            <select
+              id="buyer-personal-manager"
+              value={personalManagerId}
+              onChange={(event) => setPersonalManagerId(event.target.value)}
+              className={selectClassName}
+            >
+              <option value="">-</option>
+              {BUYER_MANAGER_OPTIONS.map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  [{manager.id}] {manager.name}
+                </option>
+              ))}
+            </select>,
+            true
+          )}
+          {renderDetailRow(
+            "Label",
+            <select id="buyer-label" value={label} onChange={(event) => setLabel(event.target.value)} className={selectClassName}>
+              {BUYER_LABEL_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          )}
+          {renderDetailRow(
+            "Type",
+            <select id="buyer-type" value={buyerType} onChange={(event) => setBuyerType(event.target.value)} className={selectClassName}>
+              {BUYER_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
+            <div aria-hidden />
+            <div className="space-y-2">
+              <PrimaryButton
+                type="button"
+                disabled={isSaving}
+                onClick={() => void handleSave()}
+                className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </PrimaryButton>
+              <FormError error={saveError || deleteError} />
+              {saveMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{saveMessage}</p> : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderIntegrationsTab = () => (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="px-6 py-8">
+        <div className="mx-auto w-full max-w-4xl space-y-1">
+          {renderDetailRow(
+            "Available integrations",
+            <div className="flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-800">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {selectedIntegrations.map((integration) => (
+                  <span
+                    key={integration.id}
+                    className="inline-flex max-w-full items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <span className="truncate">{integration.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeIntegration(integration.id)}
+                      className="shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                      aria-label={`Remove ${integration.label}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
+                ))}
+
+                <select
+                  id="buyer-available-integrations"
+                  value={integrationPickerValue}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setIntegrationPickerValue(value);
+                    addIntegration(value);
+                  }}
+                  disabled={isLoadingIntegrations || availableIntegrationOptions.length === 0}
+                  className="min-w-[12rem] flex-1 border-0 bg-transparent py-1.5 text-sm text-slate-800 outline-none dark:text-slate-50"
+                >
+                  <option value="">
+                    {isLoadingIntegrations
+                      ? "Loading integrations..."
+                      : availableIntegrationOptions.length === 0
+                        ? selectedIntegrations.length > 0
+                          ? ""
+                          : "No integrations available"
+                        : "Select integration"}
+                  </option>
+                  {availableIntegrationOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
+            <div aria-hidden />
+            <div className="space-y-2">
+              <PrimaryButton
+                type="button"
+                disabled={isSavingIntegrations}
+                onClick={() => void handleSaveIntegrations()}
+                className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
+                {isSavingIntegrations ? "Saving..." : "Save"}
+              </PrimaryButton>
+              <FormError error={integrationSaveError} />
+              {integrationSaveMessage ? (
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">{integrationSaveMessage}</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPlaceholderTab = () => (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200">
+          <Globe size={20} />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{activeTab.label}</h3>
+          <p className="max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+            This section is ready for the detailed buyer configuration controls you want to add next.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 dark:border-slate-600 dark:bg-slate-800/40">
+        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+          <Info size={16} />
+          <h4 className="text-sm font-semibold">Coming Soon</h4>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+          The tab layout now matches your buyer detail reference. Global settings are fully wired to the database.
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Buyer Detail - [{buyer.displayId}] {buyer.name}
+        </h3>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {leftHeaderActions.map((action) => (
+              <button key={action} type="button" className={headerButtonClassName}>
+                {action}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {rightHeaderActions.map((action) => (
+              <button key={action} type="button" className={headerButtonClassName}>
+                {action}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-5">
+        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+          <span className="font-medium text-slate-700 dark:text-slate-200">Active Users:</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
+            M
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="flex min-w-max items-center gap-2">
+            {buyerTabs.map((tab) => {
+              const isActive = tab.id === activeTab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTabId(tab.id)}
+                  className={cn(
+                    "whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
+                    isActive
+                      ? "border-emerald-700 bg-emerald-800 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                  )}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {activeTab.id === "global"
+          ? renderGlobalTab()
+          : activeTab.id === "integrations"
+            ? renderIntegrationsTab()
+            : renderPlaceholderTab()}
+      </section>
+    </div>
+  );
+}

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
+import { ensureVerticalCollectionMigrated } from "@/lib/models/industry";
+import { findVerticalById, isValidVerticalId } from "@/lib/vertical-db";
+import { toVerticalFieldResponse } from "@/lib/vertical-field-api";
 
 type Params = { params: Promise<{ id: string; fieldId: string }> };
 
@@ -10,44 +12,18 @@ type VerticalFieldPayload = {
   type?: string;
   required?: boolean;
   format?: string;
+  displayArrayMapping?: boolean;
+  dataTypeFilter?: string | null;
+  options?: Array<{
+    label?: string;
+    value?: string;
+  }>;
   emailDuplicateRule?: {
     mode?: "days" | "forever";
     days?: number;
   };
   ignoreValues?: string[];
 };
-
-function toFieldResponse(doc: {
-  _id?: { toString(): string };
-  fieldName: string;
-  description: string;
-  type: string;
-  required: boolean;
-  format?: string | null;
-  emailDuplicateRule?: {
-    mode?: "days" | "forever" | null;
-    days?: number | null;
-  } | null;
-  ignoreValues?: string[] | null;
-}) {
-  return {
-    id: doc._id?.toString() ?? "",
-    fieldName: doc.fieldName,
-    description: doc.description,
-    type: doc.type,
-    required: doc.required,
-    format: doc.format,
-    emailDuplicateRule: doc.emailDuplicateRule?.mode
-      ? {
-          mode: doc.emailDuplicateRule.mode,
-          ...(doc.emailDuplicateRule.mode === "days" && typeof doc.emailDuplicateRule.days === "number"
-            ? { days: doc.emailDuplicateRule.days }
-            : {}),
-        }
-      : undefined,
-    ignoreValues: Array.isArray(doc.ignoreValues) ? doc.ignoreValues : [],
-  };
-}
 
 function sanitizeIgnoreValues(ignoreValues?: string[]) {
   const seen = new Set<string>();
@@ -129,9 +105,13 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json({ message: normalizedConfig.error }, { status: 400 });
     }
 
+    if (!isValidVerticalId(id)) {
+      return NextResponse.json({ message: "Invalid vertical id." }, { status: 400 });
+    }
+
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
-    const vertical = await VerticalModel.findById(id);
+    const vertical = await findVerticalById(id);
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
     }
@@ -149,10 +129,20 @@ export async function PATCH(req: Request, context: Params) {
     fields[fieldIndex].format = normalizedConfig.value.format;
     fields[fieldIndex].emailDuplicateRule = normalizedConfig.value.emailDuplicateRule;
     fields[fieldIndex].ignoreValues = normalizedConfig.value.ignoreValues;
+    fields[fieldIndex].displayArrayMapping = Boolean(body.displayArrayMapping);
+    fields[fieldIndex].dataTypeFilter = body.dataTypeFilter?.trim() || null;
+    fields[fieldIndex].options = (
+      Array.isArray(body.options)
+        ? body.options.map((option) => ({
+            label: option.label?.trim() ?? "",
+            value: option.value?.trim() ?? "",
+          }))
+        : []
+    ) as typeof fields[number]["options"];
 
     await vertical.save();
 
-    return NextResponse.json(toFieldResponse(fields[fieldIndex]));
+    return NextResponse.json(toVerticalFieldResponse(fields[fieldIndex]));
   } catch {
     return NextResponse.json({ message: "Failed to update vertical field." }, { status: 500 });
   }
@@ -161,10 +151,15 @@ export async function PATCH(req: Request, context: Params) {
 export async function DELETE(_: Request, context: Params) {
   try {
     const { id, fieldId } = await context.params;
+
+    if (!isValidVerticalId(id)) {
+      return NextResponse.json({ message: "Invalid vertical id." }, { status: 400 });
+    }
+
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
 
-    const vertical = await VerticalModel.findById(id);
+    const vertical = await findVerticalById(id);
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
     }

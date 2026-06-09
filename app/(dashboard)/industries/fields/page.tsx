@@ -1,298 +1,695 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
+import { cn } from "@/lib/utils";
+import { formatVerticalFieldTypeLabel, type VerticalFieldOption } from "@/lib/vertical-field";
 
-type FormState = {
+const inlineInputClass =
+  "min-w-[9rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
+
+const inlineSelectClass =
+  "min-w-[7rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
+
+const dataTypeOptions = [
+  { value: "string", label: "String" },
+  { value: "number", label: "Number" },
+  { value: "boolean", label: "Boolean" },
+  { value: "email", label: "Email" },
+  { value: "date", label: "Date" },
+];
+
+const dataTypeFilterOptions = ["", "Text", "Range", "Checkbox"];
+
+type NewFieldDraft = {
   fieldName: string;
   description: string;
   type: string;
   required: boolean;
-  format: string;
+  displayArrayMapping: boolean;
+  dataTypeFilter: string;
   emailDuplicateMode: "days" | "forever";
   emailDuplicateDays: string;
-  ignoreValues: string[];
-  ignoreValueInput: string;
 };
 
-const defaultForm: FormState = {
+const defaultNewFieldDraft: NewFieldDraft = {
   fieldName: "",
   description: "",
   type: "string",
   required: false,
-  format: "",
+  displayArrayMapping: false,
+  dataTypeFilter: "",
   emailDuplicateMode: "days",
-  emailDuplicateDays: "",
-  ignoreValues: [],
-  ignoreValueInput: "",
+  emailDuplicateDays: "30",
 };
+
+function buildFieldPayload(field: ApiFieldConfig) {
+  return {
+    fieldName: field.fieldName.trim(),
+    description: field.description.trim(),
+    type: field.type.trim() || "string",
+    required: field.required,
+    format: field.format,
+    displayArrayMapping: field.displayArrayMapping,
+    dataTypeFilter: field.dataTypeFilter ?? null,
+    options: field.options,
+    ignoreValues: field.ignoreValues ?? [],
+    emailDuplicateRule: field.emailDuplicateRule,
+  };
+}
+
+function cloneField(field: ApiFieldConfig): ApiFieldConfig {
+  return {
+    ...field,
+    options: field.options.map((option) => ({ ...option })),
+  };
+}
 
 export default function IndustryFieldsPage() {
   const searchParams = useSearchParams();
   const verticalId = searchParams.get("verticalId");
   const verticalName = searchParams.get("verticalName");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fields, setFields] = useState<ApiFieldConfig[]>([]);
-  const [form, setForm] = useState<FormState>(defaultForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importMessage, setImportMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<ApiFieldConfig | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [optionsModalFieldId, setOptionsModalFieldId] = useState<string | null>(null);
+  const [optionsDraft, setOptionsDraft] = useState<VerticalFieldOption[]>([]);
+  const [optionsError, setOptionsError] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<NewFieldDraft>(defaultNewFieldDraft);
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
+  const [isCreatingField, setIsCreatingField] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    { mode: "single"; field: ApiFieldConfig } | { mode: "bulk"; ids: string[] } | null
+  >(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
+  const fetchFields = async () => {
     if (!verticalId) return;
 
-    const fetchFields = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields`);
-        if (!response.ok) return;
-        const data = (await response.json()) as ApiFieldConfig[];
-        setFields(data);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields`);
+      if (!response.ok) return;
+      const data = (await response.json()) as ApiFieldConfig[];
+      setFields(data);
+      setSelectedFieldIds((current) => current.filter((id) => data.some((field) => field.id === id)));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     void fetchFields();
   }, [verticalId]);
 
   const rows = verticalId ? fields : [];
-  const isEmailType = form.type.trim().toLowerCase() === "email";
-  const shouldShowDuplicateDays = isEmailType && form.emailDuplicateMode === "days";
+  const optionsModalField =
+    (editingFieldId === optionsModalFieldId && editDraft) ||
+    fields.find((field) => field.id === optionsModalFieldId) ||
+    null;
 
-  const handleChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const clearActionFeedback = () => {
+    setActionMessage("");
+    setActionError("");
   };
 
-  const handleTypeChange = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      type: value,
-      format: value === "email" ? "email" : prev.format === "email" ? "" : prev.format,
-      emailDuplicateMode: value === "email" ? prev.emailDuplicateMode : "days",
-      emailDuplicateDays: value === "email" ? prev.emailDuplicateDays : "",
-      ignoreValues: value === "email" ? [] : prev.ignoreValues,
-      ignoreValueInput: "",
-    }));
-  };
+  const saveField = async (field: ApiFieldConfig): Promise<{ ok: true; data: ApiFieldConfig } | { ok: false; message: string }> => {
+    if (!verticalId) return { ok: false, message: "Vertical is missing." };
 
-  const addIgnoreValue = (rawValue: string) => {
-    const normalized = rawValue.trim();
-    if (!normalized) return;
-
-    setForm((prev) => {
-      const alreadyExists = prev.ignoreValues.some((item) => item.toLowerCase() === normalized.toLowerCase());
-      if (alreadyExists) {
-        return { ...prev, ignoreValueInput: "" };
-      }
-
-      return {
-        ...prev,
-        ignoreValues: [...prev.ignoreValues, normalized],
-        ignoreValueInput: "",
-      };
-    });
-  };
-
-  const removeIgnoreValue = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      ignoreValues: prev.ignoreValues.filter((item) => item !== value),
-    }));
-  };
-
-  const getFieldConditionLabel = (row: ApiFieldConfig) => {
-    if (row.type.trim().toLowerCase() === "email") {
-      if (row.emailDuplicateRule?.mode === "forever") {
-        return "Email must be unique forever";
-      }
-
-      if (row.emailDuplicateRule?.mode === "days" && typeof row.emailDuplicateRule.days === "number") {
-        return `Email must be unique within ${row.emailDuplicateRule.days} day(s)`;
-      }
-
-      return "Email rule not configured";
+    if (!field.fieldName.trim() || !field.description.trim()) {
+      return { ok: false, message: "Field Name and Description are required." };
     }
 
-    if ((row.ignoreValues?.length ?? 0) > 0) {
-      return `Ignore: ${row.ignoreValues?.join(", ")}`;
+    try {
+      const response = await fetch(
+        `/api/industries/${encodeURIComponent(verticalId)}/fields/${encodeURIComponent(field.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildFieldPayload(field)),
+        }
+      );
+
+      const result = (await response.json().catch(() => null)) as ApiFieldConfig | { message?: string } | null;
+
+      if (!response.ok) {
+        return { ok: false, message: (result as { message?: string } | null)?.message ?? "Failed to save field." };
+      }
+
+      const updatedField = result as ApiFieldConfig;
+      setFields((current) => current.map((item) => (item.id === field.id ? updatedField : item)));
+      return { ok: true, data: updatedField };
+    } catch {
+      return { ok: false, message: "Failed to save field." };
     }
-
-    return "-";
   };
 
-  const formatDataTypeLabel = (value: string) => {
-    const normalized = value.trim();
-    if (!normalized) return "";
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  const startEdit = (field: ApiFieldConfig) => {
+    clearActionFeedback();
+    setEditingFieldId(field.id);
+    setEditDraft(cloneField(field));
   };
 
-  const validate = () => {
+  const cancelEdit = () => {
+    setEditingFieldId(null);
+    setEditDraft(null);
+    setIsSavingEdit(false);
+  };
+
+  const updateEditDraft = (patch: Partial<ApiFieldConfig>) => {
+    setEditDraft((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const openCreateModal = () => {
+    clearActionFeedback();
+    cancelEdit();
+    setCreateDraft(defaultNewFieldDraft);
+    setCreateErrors({});
+    setIsCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setIsCreateModalOpen(false);
+    setCreateDraft(defaultNewFieldDraft);
+    setCreateErrors({});
+    setIsCreatingField(false);
+  };
+
+  const updateCreateDraft = (patch: Partial<NewFieldDraft>) => {
+    setCreateDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const validateCreateDraft = () => {
     const nextErrors: Record<string, string> = {};
-    if (!form.fieldName.trim()) nextErrors.fieldName = "Field Name is required.";
-    if (!form.description.trim()) nextErrors.description = "Description is required.";
-    if (!form.type.trim()) nextErrors.type = "Type is required.";
-    if (isEmailType && form.emailDuplicateMode === "days") {
-      const days = Number(form.emailDuplicateDays);
+
+    if (!createDraft.fieldName.trim()) {
+      nextErrors.fieldName = "Field Name is required.";
+    }
+
+    if (!createDraft.description.trim()) {
+      nextErrors.description = "Description is required.";
+    }
+
+    if (createDraft.type.trim().toLowerCase() === "email" && createDraft.emailDuplicateMode === "days") {
+      const days = Number(createDraft.emailDuplicateDays);
       if (!Number.isInteger(days) || days <= 0) {
         nextErrors.emailDuplicateDays = "Please enter a valid number of days.";
       }
     }
-    setErrors(nextErrors);
+
+    setCreateErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const resetForm = () => {
-    setForm(defaultForm);
-    setErrors({});
-    setEditingId(null);
-  };
+  const handleCreateField = async () => {
+    if (!verticalId || !validateCreateDraft()) return;
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!verticalId || !validate()) return;
+    setIsCreatingField(true);
+    clearActionFeedback();
 
+    const isEmailType = createDraft.type.trim().toLowerCase() === "email";
     const payload = {
-      fieldName: form.fieldName.trim(),
-      description: form.description.trim(),
-      type: form.type.trim(),
-      required: form.required,
-      format: isEmailType ? "email" : form.format.trim() || undefined,
-      emailDuplicateRule: isEmailType
+      fieldName: createDraft.fieldName.trim(),
+      description: createDraft.description.trim(),
+      type: createDraft.type.trim(),
+      required: createDraft.required,
+      displayArrayMapping: createDraft.displayArrayMapping,
+      dataTypeFilter: createDraft.dataTypeFilter.trim() || null,
+      options: [],
+      ...(isEmailType
         ? {
-            mode: form.emailDuplicateMode,
-            ...(form.emailDuplicateMode === "days" ? { days: Number(form.emailDuplicateDays) } : {}),
+            format: "email",
+            emailDuplicateRule: {
+              mode: createDraft.emailDuplicateMode,
+              ...(createDraft.emailDuplicateMode === "days"
+                ? { days: Number(createDraft.emailDuplicateDays) }
+                : {}),
+            },
           }
-        : undefined,
-      ignoreValues: isEmailType ? [] : form.ignoreValues,
+        : {}),
     };
 
-    if (editingId) {
-      const response = await fetch(
-        `/api/industries/${encodeURIComponent(verticalId)}/fields/${encodeURIComponent(editingId)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-      if (!response.ok) return;
-
-      const updatedField = (await response.json()) as ApiFieldConfig;
-      setFields((prev) => prev.map((item) => (item.id === editingId ? updatedField : item)));
-    } else {
+    try {
       const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) return;
 
-      const createdField = (await response.json()) as ApiFieldConfig;
-      setFields((prev) => [...prev, createdField]);
-    }
+      const result = (await response.json().catch(() => null)) as ApiFieldConfig | { message?: string } | null;
 
-    resetForm();
-  };
+      if (!response.ok) {
+        setCreateErrors({
+          form: (result as { message?: string } | null)?.message ?? "Failed to create field.",
+        });
+        return;
+      }
 
-  const handleEdit = (row: ApiFieldConfig) => {
-    setEditingId(row.id);
-    setForm({
-      fieldName: row.fieldName,
-      description: row.description,
-      type: row.type,
-      required: row.required,
-      format: row.format ?? "",
-      emailDuplicateMode: row.emailDuplicateRule?.mode ?? "days",
-      emailDuplicateDays:
-        row.emailDuplicateRule?.mode === "days" && typeof row.emailDuplicateRule.days === "number"
-          ? String(row.emailDuplicateRule.days)
-          : "",
-      ignoreValues: row.ignoreValues ?? [],
-      ignoreValueInput: "",
-    });
-    setErrors({});
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!verticalId) return;
-    const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) return;
-
-    setFields((prev) => prev.filter((item) => item.id !== id));
-    if (editingId === id) {
-      resetForm();
+      const createdField = result as ApiFieldConfig;
+      setFields((current) => [...current, createdField]);
+      setActionMessage(`Field "${createdField.fieldName}" created successfully.`);
+      closeCreateModal();
+    } catch {
+      setCreateErrors({ form: "Failed to create field." });
+    } finally {
+      setIsCreatingField(false);
     }
   };
+
+  const handleSaveEdit = async () => {
+    if (!editDraft) return;
+
+    setIsSavingEdit(true);
+    clearActionFeedback();
+
+    const result = await saveField(editDraft);
+    setIsSavingEdit(false);
+
+    if (result.ok) {
+      setActionMessage(`Field "${result.data.fieldName}" saved successfully.`);
+      cancelEdit();
+    } else {
+      setActionError(result.message);
+    }
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !verticalId) return;
+
+    clearActionFeedback();
+    setImportError("");
+    setImportMessage("");
+    setIsImporting(true);
+    cancelEdit();
+
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as unknown;
+
+      const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await response.text();
+      let result: { message?: string; count?: number } | null = null;
+
+      try {
+        result = JSON.parse(responseText) as { message?: string; count?: number };
+      } catch {
+        setImportError(
+          response.ok
+            ? "Import completed but the server returned an unexpected response."
+            : "Import failed. Please restart the dev server and try again."
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        setImportError(result?.message ?? "Failed to import fields.");
+        return;
+      }
+
+      setImportMessage(result?.message ?? `Imported ${result?.count ?? 0} field(s).`);
+      setSelectedFieldIds([]);
+      await fetchFields();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Invalid JSON file.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleToggleRow = (rowId: string) => {
+    setSelectedFieldIds((current) =>
+      current.includes(rowId) ? current.filter((id) => id !== rowId) : [...current, rowId]
+    );
+  };
+
+  const handleToggleAllRows = (checked: boolean) => {
+    setSelectedFieldIds(checked ? rows.map((row) => row.id) : []);
+  };
+
+  const openDeleteConfirm = (field: ApiFieldConfig) => {
+    clearActionFeedback();
+    setDeleteConfirm({ mode: "single", field });
+  };
+
+  const openBulkDeleteConfirm = () => {
+    if (selectedFieldIds.length === 0) return;
+    clearActionFeedback();
+    setDeleteConfirm({ mode: "bulk", ids: [...selectedFieldIds] });
+  };
+
+  const closeDeleteConfirm = () => {
+    if (isDeleting) return;
+    setDeleteConfirm(null);
+  };
+
+  const deleteFieldsByIds = async (idsToDelete: string[]) => {
+    if (!verticalId || idsToDelete.length === 0) return { deletedCount: 0, failed: false };
+
+    let deletedCount = 0;
+    let failed = false;
+
+    for (const id of idsToDelete) {
+      const response = await fetch(
+        `/api/industries/${encodeURIComponent(verticalId)}/fields/${encodeURIComponent(id)}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        failed = true;
+        continue;
+      }
+
+      deletedCount += 1;
+    }
+
+    setFields((current) => current.filter((item) => !idsToDelete.includes(item.id)));
+    setSelectedFieldIds((current) => current.filter((id) => !idsToDelete.includes(id)));
+
+    if (editingFieldId && idsToDelete.includes(editingFieldId)) {
+      cancelEdit();
+    }
+
+    return { deletedCount, failed };
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm || !verticalId) return;
+
+    setIsDeleting(true);
+    clearActionFeedback();
+
+    const idsToDelete =
+      deleteConfirm.mode === "single" ? [deleteConfirm.field.id] : deleteConfirm.ids;
+    const { deletedCount, failed } = await deleteFieldsByIds(idsToDelete);
+
+    if (deleteConfirm.mode === "single") {
+      if (failed) {
+        setActionError(`Failed to delete field "${deleteConfirm.field.fieldName}".`);
+      } else {
+        setActionMessage(`Field "${deleteConfirm.field.fieldName}" deleted successfully.`);
+      }
+    } else if (failed) {
+      setActionError(`Deleted ${deletedCount} field(s), but some deletions failed.`);
+    } else {
+      setActionMessage(`Deleted ${deletedCount} field(s).`);
+    }
+
+    setIsDeleting(false);
+    setDeleteConfirm(null);
+  };
+
+  const openOptionsModal = (field: ApiFieldConfig) => {
+    const source = editingFieldId === field.id && editDraft ? editDraft : field;
+    setOptionsModalFieldId(field.id);
+    setOptionsDraft(source.options.map((option) => ({ ...option })));
+    setOptionsError("");
+  };
+
+  const closeOptionsModal = () => {
+    setOptionsModalFieldId(null);
+    setOptionsDraft([]);
+    setOptionsError("");
+  };
+
+  const updateOptionDraft = (index: number, key: keyof VerticalFieldOption, value: string) => {
+    setOptionsDraft((current) => current.map((option, optionIndex) => (optionIndex === index ? { ...option, [key]: value } : option)));
+  };
+
+  const addOptionDraft = () => {
+    setOptionsDraft((current) => [...current, { label: "", value: "" }]);
+  };
+
+  const removeOptionDraft = (index: number) => {
+    setOptionsDraft((current) => current.filter((_, optionIndex) => optionIndex !== index));
+  };
+
+  const handleSaveOptions = () => {
+    if (!optionsModalField) return;
+
+    const normalizedOptions = optionsDraft
+      .map((option) => ({
+        label: option.label.trim(),
+        value: option.value.trim(),
+      }))
+      .filter((option) => option.label || option.value);
+
+    for (const option of normalizedOptions) {
+      if (!option.label) {
+        setOptionsError("Each option must have a label.");
+        return;
+      }
+    }
+
+    const nextOptions = normalizedOptions.map((option) => ({
+      label: option.label,
+      value: option.value || option.label,
+    }));
+
+    if (editingFieldId === optionsModalField.id && editDraft) {
+      setEditDraft({ ...editDraft, options: nextOptions });
+      closeOptionsModal();
+      return;
+    }
+
+    void (async () => {
+      setOptionsError("");
+      clearActionFeedback();
+
+      const result = await saveField({ ...optionsModalField, options: nextOptions });
+
+      if (result.ok) {
+        setActionMessage(`Options for "${result.data.fieldName}" saved successfully.`);
+        closeOptionsModal();
+      } else {
+        setOptionsError(result.message);
+      }
+    })();
+  };
+
+  const renderFieldCell = (
+    row: ApiFieldConfig,
+    view: ReactNode,
+    edit: ReactNode
+  ) => (editingFieldId === row.id ? edit : view);
 
   const columns: Column<ApiFieldConfig>[] = [
-    { key: "fieldName", label: "Field Name" },
-    { key: "description", label: "Description" },
+    {
+      key: "fieldName",
+      label: "Field Name",
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span className="font-medium text-slate-800 dark:text-slate-100">{row.fieldName}</span>,
+          <Input
+            value={editDraft?.fieldName ?? ""}
+            onChange={(event) => updateEditDraft({ fieldName: event.target.value })}
+            className={inlineInputClass}
+          />
+        ),
+    },
+    {
+      key: "description",
+      label: "Description",
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span className="text-slate-700 dark:text-slate-200">{row.description}</span>,
+          <Input
+            value={editDraft?.description ?? ""}
+            onChange={(event) => updateEditDraft({ description: event.target.value })}
+            className={cn(inlineInputClass, "min-w-[12rem]")}
+          />
+        ),
+    },
     {
       key: "type",
       label: "Data Type",
-      render: (row) => <span className="text-sm text-slate-700 dark:text-slate-100">{formatDataTypeLabel(row.type)}</span>,
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span className="text-slate-700 dark:text-slate-200">{formatVerticalFieldTypeLabel(row.type)}</span>,
+          <select
+            value={(editDraft?.type ?? row.type).toLowerCase()}
+            onChange={(event) => updateEditDraft({ type: event.target.value })}
+            className={inlineSelectClass}
+          >
+            {dataTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ),
     },
     {
       key: "required",
       label: "Required",
-      render: (row) => (
-        <span
-          className={
-            row.required
-              ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700"
-              : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"
-          }
-        >
-          {row.required ? "Yes" : "No"}
-        </span>
-      ),
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span
+            className={
+              row.required
+                ? "rounded-full bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            }
+          >
+            {row.required ? "Yes" : "No"}
+          </span>,
+          <select
+            value={editDraft?.required ? "yes" : "no"}
+            onChange={(event) => updateEditDraft({ required: event.target.value === "yes" })}
+            className={inlineSelectClass}
+          >
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        ),
     },
-    { key: "format", label: "Format" },
     {
-      key: "condition",
-      label: "Condition",
-      render: (row) => <span className="text-xs text-slate-600 dark:text-slate-300">{getFieldConditionLabel(row)}</span>,
+      key: "displayArrayMapping",
+      label: "Display Array Mapping",
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span
+            className={
+              row.displayArrayMapping
+                ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            }
+          >
+            {row.displayArrayMapping ? "Yes" : "No"}
+          </span>,
+          <select
+            value={editDraft?.displayArrayMapping ? "yes" : "no"}
+            onChange={(event) => updateEditDraft({ displayArrayMapping: event.target.value === "yes" })}
+            className={inlineSelectClass}
+          >
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        ),
+    },
+    {
+      key: "dataTypeFilter",
+      label: "Data Type Filter",
+      render: (row) =>
+        renderFieldCell(
+          row,
+          <span className="text-slate-700 dark:text-slate-200">{row.dataTypeFilter ?? "-"}</span>,
+          <select
+            value={editDraft?.dataTypeFilter ?? ""}
+            onChange={(event) => updateEditDraft({ dataTypeFilter: event.target.value || null })}
+            className={inlineSelectClass}
+          >
+            {dataTypeFilterOptions.map((option) => (
+              <option key={option || "none"} value={option}>
+                {option || "-"}
+              </option>
+            ))}
+          </select>
+        ),
+    },
+    {
+      key: "options",
+      label: "Options",
+      render: (row) => {
+        const optionCount =
+          editingFieldId === row.id && editDraft ? editDraft.options.length : row.options.length;
+
+        return (
+          <button
+            type="button"
+            onClick={() => openOptionsModal(row)}
+            className="text-left text-sm font-medium text-blue-600 underline-offset-2 transition hover:underline dark:text-blue-300"
+          >
+            {optionCount > 0 ? `${optionCount} option(s)` : "View options"}
+          </button>
+        );
+      },
     },
     {
       key: "actions",
       label: "Actions",
-      render: (row) => (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleEdit(row)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(row.id)}
-            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-          >
-            Delete
-          </button>
-        </div>
-      ),
+      render: (row) =>
+        editingFieldId === row.id ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isSavingEdit}
+              onClick={() => void handleSaveEdit()}
+              className="rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60 dark:border-emerald-500 dark:bg-emerald-600"
+            >
+              {isSavingEdit ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              disabled={isSavingEdit}
+              onClick={cancelEdit}
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={Boolean(editingFieldId && editingFieldId !== row.id)}
+              onClick={() => startEdit(row)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              <Pencil size={13} />
+              <span>Edit</span>
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(editingFieldId)}
+              onClick={() => openDeleteConfirm(row)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+          </div>
+        ),
     },
   ];
 
   return (
     <div className="space-y-6">
       {verticalId ? (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
           Managing fields for vertical: <span className="font-semibold">{verticalName ?? verticalId}</span>
         </div>
       ) : (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           Please open Fields Configuration from the Vertical page for a specific vertical.
         </div>
       )}
@@ -300,193 +697,334 @@ export default function IndustryFieldsPage() {
       <PageSection
         title="Vertical Field List"
         actions={
-          <Link
-            href="/verticals"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Back to Vertical List
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <PrimaryButton
+              type="button"
+              disabled={!verticalId || Boolean(editingFieldId)}
+              onClick={openCreateModal}
+            >
+              <Plus size={15} />
+              <span>Add Field</span>
+            </PrimaryButton>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => void handleImportFile(event)}
+            />
+            <PrimaryButton
+              type="button"
+              disabled={!verticalId || isImporting}
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+            >
+              <Upload size={15} />
+              <span>{isImporting ? "Importing..." : "Upload JSON"}</span>
+            </PrimaryButton>
+            <Link
+              href="/verticals"
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Back to Vertical List
+            </Link>
+          </div>
         }
       >
+        <div className="mb-4 space-y-3">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
+            <span className="font-medium">Edit</span> on a row to update it directly in the grid. Use checkboxes to select
+            fields and delete them in bulk. Click Options to view or edit option values.
+          </p>
+
+          {selectedFieldIds.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/70">
+              <span className="text-sm text-slate-700 dark:text-slate-200">
+                {selectedFieldIds.length} field(s) selected
+              </span>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={openBulkDeleteConfirm}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+              >
+                <Trash2 size={14} />
+                <span>Delete selected</span>
+              </button>
+            </div>
+          ) : null}
+
+          <FormError error={importError} />
+          <FormError error={actionError} />
+          {importMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{importMessage}</p> : null}
+          {actionMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{actionMessage}</p> : null}
+        </div>
+
         <DataTable<ApiFieldConfig>
           columns={columns}
           rows={rows}
-          emptyMessage={isLoading ? "Loading fields..." : "No fields configured yet. Create your first field to get started."}
+          emptyMessage={
+            isLoading
+              ? "Loading fields..."
+              : "No fields configured yet. Add a field or upload a JSON file to get started."
+          }
+          selectedRowIds={selectedFieldIds}
+          onToggleRow={handleToggleRow}
+          onToggleAllRows={handleToggleAllRows}
         />
       </PageSection>
 
-      <PageSection title={editingId ? "Update Field" : "Create Field"}>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <Modal
+        open={Boolean(optionsModalField)}
+        title={optionsModalField ? `Options — ${optionsModalField.fieldName}` : "Options"}
+        description={
+          editingFieldId === optionsModalFieldId
+            ? "Changes will apply to the current edit. Click Save on the row to persist them."
+            : "Edit option labels and values for this field."
+        }
+        onClose={closeOptionsModal}
+        panelClassName="max-w-2xl"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={closeOptionsModal}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <PrimaryButton type="button" onClick={handleSaveOptions}>
+              {editingFieldId === optionsModalFieldId ? "Apply options" : "Save options"}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Label</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</p>
+          </div>
+
+          {optionsDraft.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+              No options yet. Click Add option to create one.
+            </div>
+          ) : (
+            optionsDraft.map((option, index) => (
+              <div key={`option-${index}`} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px]">
+                <Input
+                  value={option.label}
+                  onChange={(event) => updateOptionDraft(index, "label", event.target.value)}
+                  placeholder="Any time"
+                />
+                <Input
+                  value={option.value}
+                  onChange={(event) => updateOptionDraft(index, "value", event.target.value)}
+                  placeholder="ANY_TIME"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeOptionDraft(index)}
+                  className="flex h-11 items-center justify-center rounded-xl border border-red-200 text-red-500 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+          )}
+
+          <button
+            type="button"
+            onClick={addOptionDraft}
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            <Plus size={15} />
+            <span>Add option</span>
+          </button>
+
+          <FormError error={optionsError} />
+        </div>
+      </Modal>
+
+      <Modal
+        open={isCreateModalOpen}
+        title="Add New Field"
+        description="Create a new field for this vertical."
+        onClose={closeCreateModal}
+        panelClassName="max-w-2xl"
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={isCreatingField}
+              onClick={closeCreateModal}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <PrimaryButton
+              type="button"
+              disabled={isCreatingField}
+              onClick={() => void handleCreateField()}
+              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+            >
+              {isCreatingField ? "Creating..." : "Create Field"}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <FieldLabel htmlFor="industry-field-name" label="Field Name" />
+            <FieldLabel htmlFor="create-field-name" label="Field Name" />
             <Input
-              id="industry-field-name"
+              id="create-field-name"
+              value={createDraft.fieldName}
+              onChange={(event) => updateCreateDraft({ fieldName: event.target.value })}
               placeholder="first_name"
-              value={form.fieldName}
-              onChange={(event) => handleChange("fieldName", event.target.value)}
-              disabled={!verticalId}
             />
-            <FormError error={errors.fieldName} />
+            <FormError error={createErrors.fieldName} />
           </div>
 
           <div>
-            <FieldLabel htmlFor="industry-field-description" label="Description" />
+            <FieldLabel htmlFor="create-description" label="Description" />
             <Input
-              id="industry-field-description"
+              id="create-description"
+              value={createDraft.description}
+              onChange={(event) => updateCreateDraft({ description: event.target.value })}
               placeholder="First Name"
-              value={form.description}
-              onChange={(event) => handleChange("description", event.target.value)}
-              disabled={!verticalId}
             />
-            <FormError error={errors.description} />
+            <FormError error={createErrors.description} />
           </div>
 
           <div>
-            <FieldLabel htmlFor="industry-field-type" label="Data Type" />
+            <FieldLabel htmlFor="create-data-type" label="Data Type" />
             <select
-              id="industry-field-type"
-              value={form.type}
-              onChange={(event) => handleTypeChange(event.target.value)}
-              disabled={!verticalId}
+              id="create-data-type"
+              value={createDraft.type.toLowerCase()}
+              onChange={(event) => updateCreateDraft({ type: event.target.value })}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
             >
-              <option value="string">String</option>
-              <option value="email">Email</option>
-              <option value="date">Date</option>
-              <option value="boolean">Boolean</option>
-              <option value="numberic">Numberic</option>
-            </select>
-            <FormError error={errors.type} />
-          </div>
-
-          <div>
-            <FieldLabel htmlFor="industry-field-format" label="Format" />
-            <Input
-              id="industry-field-format"
-              placeholder={isEmailType ? "Automatically set to email" : "email / E.164 / ISO-8601"}
-              value={isEmailType ? "email" : form.format}
-              onChange={(event) => handleChange("format", event.target.value)}
-              disabled={!verticalId || isEmailType}
-            />
-          </div>
-
-          <div>
-            <FieldLabel htmlFor="industry-field-required" label="Required (boolean)" />
-            <select
-              id="industry-field-required"
-              value={form.required ? "true" : "false"}
-              onChange={(event) => handleChange("required", event.target.value === "true")}
-              disabled={!verticalId}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              <option value="false">false</option>
-              <option value="true">true</option>
+              {dataTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
-          {isEmailType ? (
+          <div>
+            <FieldLabel htmlFor="create-required" label="Required" />
+            <select
+              id="create-required"
+              value={createDraft.required ? "yes" : "no"}
+              onChange={(event) => updateCreateDraft({ required: event.target.value === "yes" })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="create-display-array" label="Display Array Mapping" />
+            <select
+              id="create-display-array"
+              value={createDraft.displayArrayMapping ? "yes" : "no"}
+              onChange={(event) => updateCreateDraft({ displayArrayMapping: event.target.value === "yes" })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="create-data-type-filter" label="Data Type Filter" />
+            <select
+              id="create-data-type-filter"
+              value={createDraft.dataTypeFilter}
+              onChange={(event) => updateCreateDraft({ dataTypeFilter: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+            >
+              {dataTypeFilterOptions.map((option) => (
+                <option key={option || "none"} value={option}>
+                  {option || "-"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {createDraft.type.trim().toLowerCase() === "email" ? (
             <>
               <div>
-                <FieldLabel htmlFor="industry-field-email-duplicate-mode" label="Email Duplicate Rule" />
+                <FieldLabel htmlFor="create-email-duplicate-mode" label="Email Duplicate Rule" />
                 <select
-                  id="industry-field-email-duplicate-mode"
-                  value={form.emailDuplicateMode}
-                  onChange={(event) => handleChange("emailDuplicateMode", event.target.value as "days" | "forever")}
-                  disabled={!verticalId}
+                  id="create-email-duplicate-mode"
+                  value={createDraft.emailDuplicateMode}
+                  onChange={(event) =>
+                    updateCreateDraft({ emailDuplicateMode: event.target.value as "days" | "forever" })
+                  }
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
                 >
-                  <option value="days">Email must be unique within xx days</option>
-                  <option value="forever">Email must be unique forever</option>
+                  <option value="days">Unique within days</option>
+                  <option value="forever">Unique forever</option>
                 </select>
               </div>
 
-              {shouldShowDuplicateDays ? (
+              {createDraft.emailDuplicateMode === "days" ? (
                 <div>
-                  <FieldLabel htmlFor="industry-field-email-duplicate-days" label="Duplicate Window (days)" />
+                  <FieldLabel htmlFor="create-email-duplicate-days" label="Duplicate Window (days)" />
                   <Input
-                    id="industry-field-email-duplicate-days"
+                    id="create-email-duplicate-days"
                     type="number"
-                    min="1"
+                    min={1}
+                    value={createDraft.emailDuplicateDays}
+                    onChange={(event) => updateCreateDraft({ emailDuplicateDays: event.target.value })}
                     placeholder="30"
-                    value={form.emailDuplicateDays}
-                    onChange={(event) => handleChange("emailDuplicateDays", event.target.value)}
-                    disabled={!verticalId}
                   />
-                  <FormError error={errors.emailDuplicateDays} />
+                  <FormError error={createErrors.emailDuplicateDays} />
                 </div>
               ) : null}
             </>
-          ) : (
-            <div className="md:col-span-2">
-              <FieldLabel htmlFor="industry-field-ignore-values" label="Ignore Values" />
-              <div className="rounded-2xl border border-slate-300 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
-                {form.ignoreValues.length > 0 ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {form.ignoreValues.map((value) => (
-                      <span
-                        key={value}
-                        className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        {value}
-                        <button
-                          type="button"
-                          onClick={() => removeIgnoreValue(value)}
-                          className="text-slate-500 transition hover:text-slate-800 dark:text-slate-300 dark:hover:text-white"
-                        >
-                          x
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+          ) : null}
+        </div>
 
-                <div className="flex flex-col gap-3 md:flex-row">
-                  <Input
-                    id="industry-field-ignore-values"
-                    placeholder="Type a value and press Enter or comma"
-                    value={form.ignoreValueInput}
-                    onChange={(event) => handleChange("ignoreValueInput", event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === ",") {
-                        event.preventDefault();
-                        addIgnoreValue(form.ignoreValueInput);
-                      }
-                    }}
-                    disabled={!verticalId}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => addIgnoreValue(form.ignoreValueInput)}
-                    disabled={!verticalId}
-                    className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                  >
-                    Add Value
-                  </button>
-                </div>
+        <FormError error={createErrors.form} />
+      </Modal>
 
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Use multiple values to ignore placeholder or invalid inputs for non-email field types.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="md:col-span-2 flex items-center gap-3">
-            <PrimaryButton type="submit" disabled={!verticalId}>
-              {editingId ? "Update Field" : "Create Field"}
-            </PrimaryButton>
-            {editingId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        </form>
-      </PageSection>
+      <Modal
+        open={deleteConfirm !== null}
+        title={deleteConfirm?.mode === "bulk" ? "Delete Selected Fields" : "Delete Field"}
+        description={
+          deleteConfirm?.mode === "single"
+            ? `Delete field "${deleteConfirm.field.fieldName}" (${deleteConfirm.field.description})? This action cannot be undone.`
+            : deleteConfirm?.mode === "bulk"
+              ? `Delete ${deleteConfirm.ids.length} selected field(s)? This action cannot be undone.`
+              : undefined
+        }
+        onClose={closeDeleteConfirm}
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={closeDeleteConfirm}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleConfirmDelete()}
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </>
+        }
+      />
     </div>
   );
 }

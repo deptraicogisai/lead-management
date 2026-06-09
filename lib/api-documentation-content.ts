@@ -29,7 +29,15 @@ export type DocumentationErrorRow = {
   message: string;
 };
 
-export type CodeLanguage = "python" | "csharp" | "javascript" | "json";
+export type CodeLanguage = "python" | "csharp" | "javascript" | "php" | "java" | "json";
+
+export type DocumentationCodeSnippet = {
+  id: string;
+  title: string;
+  markdownLanguage: string;
+  language: CodeLanguage;
+  code: string;
+};
 
 export type CodeTokenStyleKey =
   | "default"
@@ -95,6 +103,24 @@ export const CODE_THEME_BY_LANGUAGE: Record<
     headerBg: "#F7DF1E",
     headerText: "#0F172A",
     bodyBg: "#FFFBEB",
+    bodyText: "#1E293B",
+    borderColor: "#E2E8F0",
+  },
+  php: {
+    headerClassName: "bg-[#777BB4] text-white",
+    bodyClassName: "bg-[#F5F6FF] text-slate-800",
+    headerBg: "#777BB4",
+    headerText: "#FFFFFF",
+    bodyBg: "#F5F6FF",
+    bodyText: "#1E293B",
+    borderColor: "#E2E8F0",
+  },
+  java: {
+    headerClassName: "bg-[#ED8B00] text-white",
+    bodyClassName: "bg-[#FFF7ED] text-slate-800",
+    headerBg: "#ED8B00",
+    headerText: "#FFFFFF",
+    bodyBg: "#FFF7ED",
     bodyText: "#1E293B",
     borderColor: "#E2E8F0",
   },
@@ -260,6 +286,118 @@ sendLead().catch((error) => {
 });`;
 }
 
+export function buildPhpSnippet(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
+  const payload = JSON.stringify(exampleRequest, null, 4);
+  const method = context.method.trim().toUpperCase();
+
+  return `<?php
+
+$url = "${context.endpointUrl}";
+$payload = <<<'JSON'
+${payload}
+JSON;
+
+$ch = curl_init($url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "${method}");
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "Content-Type: application/json",
+    "x-api-key: ${context.apiKey}",
+]);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+
+$response = curl_exec($ch);
+$statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+echo "Status: {$statusCode}" . PHP_EOL;
+echo $response;`;
+}
+
+export function buildJavaSnippet(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
+  const payloadLiteral = JSON.stringify(JSON.stringify(exampleRequest, null, 2));
+
+  return `import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class LeadSubmission {
+    public static void main(String[] args) throws Exception {
+        String url = "${context.endpointUrl}";
+        String payload = ${payloadLiteral};
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Content-Type", "application/json")
+            .header("x-api-key", "${context.apiKey}")
+            .method("${context.method.trim().toUpperCase()}", HttpRequest.BodyPublishers.ofString(payload))
+            .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        System.out.println("Status: " + response.statusCode());
+        System.out.println(response.body());
+    }
+}`;
+}
+
+export function buildDocumentationCodeSnippets(
+  context: DocumentationContext,
+  exampleRequest: Record<string, unknown>
+): DocumentationCodeSnippet[] {
+  return [
+    {
+      id: "python",
+      title: "Python (requests)",
+      markdownLanguage: "python",
+      language: "python",
+      code: buildPythonSnippet(context, exampleRequest),
+    },
+    {
+      id: "csharp",
+      title: "C# (HttpClient)",
+      markdownLanguage: "csharp",
+      language: "csharp",
+      code: buildCSharpSnippet(context, exampleRequest),
+    },
+    {
+      id: "javascript",
+      title: "JavaScript (fetch)",
+      markdownLanguage: "javascript",
+      language: "javascript",
+      code: buildJavaScriptSnippet(context, exampleRequest),
+    },
+    {
+      id: "php",
+      title: "PHP (cURL)",
+      markdownLanguage: "php",
+      language: "php",
+      code: buildPhpSnippet(context, exampleRequest),
+    },
+    {
+      id: "java",
+      title: "Java (HttpClient)",
+      markdownLanguage: "java",
+      language: "java",
+      code: buildJavaSnippet(context, exampleRequest),
+    },
+  ];
+}
+
+export function buildCodeSnippetsMarkdown(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
+  return buildDocumentationCodeSnippets(context, exampleRequest)
+    .map(
+      (snippet) => `### ${snippet.title}
+
+\`\`\`${snippet.markdownLanguage}
+${snippet.code}
+\`\`\``
+    )
+    .join("\n\n");
+}
+
 export function getCodeTokenClassName(styleKey?: CodeTokenStyleKey) {
   return styleKey ? CODE_TOKEN_STYLE_MAP[styleKey].className : undefined;
 }
@@ -305,6 +443,34 @@ export function tokenizeCode(code: string, language: Exclude<CodeLanguage, "json
       { pattern: /"[^"\n]*"|'[^'\n]*'|`[^`\n]*`/y, styleKey: "string" },
       { pattern: /\b(const|let|async|await|try|catch|return|true|false|function|if|else|throw|new)\b/y, styleKey: "keyword" },
       { pattern: /\b(fetch|response|payload|headers|console|JSON)\b/y, styleKey: "library" },
+      { pattern: /\b[A-Z][A-Za-z0-9_]*\b/y, styleKey: "className" },
+      { pattern: /\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()/y, styleKey: "callable" },
+      { pattern: /\b\d+\b/y, styleKey: "number" },
+    ],
+    php: [
+      { pattern: /#[^\n]*/y, styleKey: "comment" },
+      { pattern: /\/\/[^\n]*/y, styleKey: "comment" },
+      { pattern: /"[^"\n]*"|'[^'\n]*'/y, styleKey: "string" },
+      { pattern: /<<<'JSON'[\s\S]*?JSON;/y, styleKey: "string" },
+      {
+        pattern: /\b(function|echo|true|false|null|array|return|if|else|public|private|protected|class)\b/y,
+        styleKey: "keyword",
+      },
+      { pattern: /\b(curl_init|curl_setopt|curl_exec|curl_getinfo|curl_close|PHP_EOL)\b/y, styleKey: "library" },
+      { pattern: /\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()/y, styleKey: "callable" },
+      { pattern: /\b\d+\b/y, styleKey: "number" },
+    ],
+    java: [
+      { pattern: /\/\/[^\n]*/y, styleKey: "comment" },
+      { pattern: /"[^"\n]*"/y, styleKey: "string" },
+      {
+        pattern: /\b(import|public|static|void|class|throws|new|return|String|Exception)\b/y,
+        styleKey: "keyword",
+      },
+      {
+        pattern: /\b(HttpClient|HttpRequest|HttpResponse|URI|System|BodyPublishers|BodyHandlers)\b/y,
+        styleKey: "library",
+      },
       { pattern: /\b[A-Z][A-Za-z0-9_]*\b/y, styleKey: "className" },
       { pattern: /\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\()/y, styleKey: "callable" },
       { pattern: /\b\d+\b/y, styleKey: "number" },
@@ -380,10 +546,171 @@ export function buildOverviewParagraphs(verticalName: string) {
   ];
 }
 
-export function buildSuccessResponse() {
+export type DocumentationSectionHeading = {
+  number: string;
+  title: string;
+  label: string;
+};
+
+export type LeadResponseStatusDefinition = {
+  statusCode: number;
+  title: string;
+  description: string;
+  example: Record<string, unknown>;
+};
+
+export type DocumentationResponseStatusHeading = DocumentationSectionHeading & {
+  definition: LeadResponseStatusDefinition;
+};
+
+export type DocumentationOutline = {
+  overview: DocumentationSectionHeading;
+  endpointInformation: DocumentationSectionHeading;
+  requestBody: DocumentationSectionHeading;
+  fieldConditions: DocumentationSectionHeading | null;
+  exampleJsonRequest: DocumentationSectionHeading;
+  codeSnippets: DocumentationSectionHeading;
+  responseStatus: DocumentationSectionHeading;
+  responseStatusItems: DocumentationResponseStatusHeading[];
+  errorResponses: DocumentationSectionHeading;
+};
+
+function nextSectionHeading(counter: { value: number }, title: string): DocumentationSectionHeading {
+  counter.value += 1;
+  const number = String(counter.value);
+
   return {
-    status: "success",
+    number,
+    title,
+    label: `${number}. ${title}`,
   };
+}
+
+export function buildDocumentationOutline(hasFieldConditions: boolean): DocumentationOutline {
+  const counter = { value: 0 };
+
+  const overview = nextSectionHeading(counter, "Overview");
+  const endpointInformation = nextSectionHeading(counter, "Endpoint Information");
+  const requestBody = nextSectionHeading(counter, "Request Body");
+  const fieldConditions = hasFieldConditions ? nextSectionHeading(counter, "Field Conditions") : null;
+  const exampleJsonRequest = nextSectionHeading(counter, "Example JSON Request");
+  const codeSnippets = nextSectionHeading(counter, "Code Snippets");
+  const responseStatus = nextSectionHeading(counter, "Response Status");
+  const responseStatusItems: DocumentationResponseStatusHeading[] = LEAD_RESPONSE_STATUS_DEFINITIONS.map(
+    (definition, index) => {
+      const number = `${responseStatus.number}.${index + 1}`;
+
+      return {
+        number,
+        title: definition.title,
+        label: `${number} ${definition.title}`,
+        definition,
+      };
+    }
+  );
+  const errorResponses = nextSectionHeading(counter, "Error Responses");
+
+  return {
+    overview,
+    endpointInformation,
+    requestBody,
+    fieldConditions,
+    exampleJsonRequest,
+    codeSnippets,
+    responseStatus,
+    responseStatusItems,
+    errorResponses,
+  };
+}
+
+export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = [
+  {
+    statusCode: 1,
+    title: "Sold",
+    description: "The lead was accepted and sold successfully. The response includes a redirect URL for the consumer.",
+    example: {
+      status: 1,
+      status_text: "sold",
+      redirect_url: "https://leads.system.com/redirect?id=81649f87d4e596a711d449970392ed67",
+    },
+  },
+  {
+    statusCode: 2,
+    title: "Reject",
+    description: "The lead was rejected and will not be sold.",
+    example: {
+      status: 2,
+      status_text: "reject",
+    },
+  },
+  {
+    statusCode: 3,
+    title: "In Progress",
+    description: "The lead is still being processed.",
+    example: {
+      status: 3,
+      status_text: "In Progress",
+    },
+  },
+  {
+    statusCode: 4,
+    title: "Authorization Failed",
+    description: "The request failed authorization. The API key is missing or invalid.",
+    example: {
+      status: 4,
+      errors: [
+        {
+          "Authorization Failed": "",
+        },
+      ],
+    },
+  },
+];
+
+export function buildSoldLeadResponse() {
+  return LEAD_RESPONSE_STATUS_DEFINITIONS[0].example;
+}
+
+export function buildRejectLeadResponse() {
+  return LEAD_RESPONSE_STATUS_DEFINITIONS[1].example;
+}
+
+export function buildInProgressLeadResponse() {
+  return LEAD_RESPONSE_STATUS_DEFINITIONS[2].example;
+}
+
+export function buildAuthorizationFailedLeadResponse() {
+  return LEAD_RESPONSE_STATUS_DEFINITIONS[3].example;
+}
+
+export function buildSuccessResponse() {
+  return buildSoldLeadResponse();
+}
+
+export function buildLeadResponseStatusMarkdown(outline: DocumentationOutline) {
+  const summaryTable = [
+    "| Status | Name | Description |",
+    "| --- | --- | --- |",
+    ...LEAD_RESPONSE_STATUS_DEFINITIONS.map(
+      (definition) => `| \`${definition.statusCode}\` | ${definition.title} | ${definition.description} |`
+    ),
+  ].join("\n");
+
+  const examples = outline.responseStatusItems
+    .map(
+      (item) => `### ${item.label}
+
+${item.definition.description}
+
+\`\`\`json
+${JSON.stringify(item.definition.example, null, 2)}
+\`\`\``
+    )
+    .join("\n\n");
+
+  return `${summaryTable}
+
+${examples}`;
 }
 
 export function buildErrorRows(fields: DocumentationField[]): DocumentationErrorRow[] {
@@ -396,7 +723,7 @@ export function buildErrorRows(fields: DocumentationField[]): DocumentationError
     {
       status: "401 Unauthorized",
       scenario: "Missing or invalid API key",
-      message: "Authentication failed. API key is required or invalid.",
+      message: '{"status":4,"errors":[{"Authorization Failed":""}]}',
     },
     {
       status: "500 Internal Server Error",

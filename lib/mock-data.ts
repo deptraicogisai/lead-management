@@ -12,6 +12,12 @@ export type ApiFieldConfig = {
   fieldName: string;
   description: string;
   type: string;
+  displayArrayMapping: boolean;
+  dataTypeFilter?: string | null;
+  options: Array<{
+    label: string;
+    value: string;
+  }>;
   required: boolean;
   format?: string;
   emailDuplicateRule?: {

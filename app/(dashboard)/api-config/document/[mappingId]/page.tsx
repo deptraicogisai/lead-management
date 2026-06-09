@@ -3,19 +3,19 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   CODE_THEME_BY_LANGUAGE,
+  buildDocumentationOutline,
+  buildDocumentationCodeSnippets,
   buildErrorRows,
-  buildCSharpSnippet,
   buildExampleRequest,
-  buildJavaScriptSnippet,
   buildOverviewParagraphs,
-  buildPythonSnippet,
-  buildSuccessResponse,
   describeFieldCondition,
   getFieldsWithConditions,
   getCodeTokenClassName,
+  LEAD_RESPONSE_STATUS_DEFINITIONS,
   prettyType,
   tokenizeCode,
   tokenizeJson,
@@ -24,6 +24,7 @@ import {
   type DocumentationField,
 } from "@/lib/api-documentation-content";
 import { PageSection, Spinner } from "@/components/ui/state";
+import { cn } from "@/lib/utils";
 
 type DocumentContentResponse = {
   sellerId: string;
@@ -79,36 +80,57 @@ function FieldConditionDisplay({ field }: { field: DocumentationField }) {
   return <span className="text-slate-400">-</span>;
 }
 
-function CodeSnippet({
+function CollapsibleCodeSnippet({
   title,
   language,
   code,
+  defaultExpanded = false,
 }: {
   title: string;
   language: CodeLanguage;
   code: string;
+  defaultExpanded?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const theme = CODE_THEME_BY_LANGUAGE[language];
   const tokens = language === "json" ? tokenizeJson(code) : tokenizeCode(code, language);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200">
-      <div className={`px-4 py-2 text-sm font-semibold ${theme.headerClassName}`}>{title}</div>
-      <pre className={`overflow-auto p-4 text-xs leading-6 ${theme.bodyClassName}`}>
-        {tokens.map((token, index) => {
-          const content: ReactNode = token.text;
-          const className = getCodeTokenClassName(token.styleKey);
-          return className ? (
-            <span key={`${language}-${index}`} className={className}>
-              {content}
-            </span>
-          ) : (
-            <span key={`${language}-${index}`}>{content}</span>
-          );
-        })}
-      </pre>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+        className={cn("flex w-full items-center justify-between px-4 py-2.5 text-sm font-semibold transition", theme.headerClassName)}
+      >
+        <span>{title}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-200", expanded && "rotate-180")} />
+      </button>
+      {expanded ? (
+        <pre className={cn("overflow-auto border-t border-slate-200 p-4 text-xs leading-6 dark:border-slate-700", theme.bodyClassName)}>
+          {tokens.map((token, index) => {
+            const content: ReactNode = token.text;
+            const className = getCodeTokenClassName(token.styleKey);
+            return className ? (
+              <span key={`${language}-${index}`} className={className}>
+                {content}
+              </span>
+            ) : (
+              <span key={`${language}-${index}`}>{content}</span>
+            );
+          })}
+        </pre>
+      ) : null}
     </div>
   );
+}
+
+function DocumentSectionHeading({ label }: { label: string }) {
+  return <h2 className="text-xl font-semibold text-slate-900">{label}</h2>;
+}
+
+function DocumentSubsectionHeading({ label }: { label: string }) {
+  return <h3 className="font-medium text-slate-900">{label}</h3>;
 }
 
 export default function ApiDocumentPreviewPage() {
@@ -121,6 +143,8 @@ export default function ApiDocumentPreviewPage() {
   const [documentContent, setDocumentContent] = useState<DocumentContentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(mappingId));
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const downloadUrl = mappingId ? `/api/vertical-mappings/${encodeURIComponent(mappingId)}/document?download=1` : "";
   const backUrl = `/api-config?sellerId=${encodeURIComponent(sellerId)}&sellerName=${encodeURIComponent(sellerName ?? "")}`;
@@ -161,12 +185,47 @@ export default function ApiDocumentPreviewPage() {
     [documentContent]
   );
 
-  const pythonSnippet = documentContent ? buildPythonSnippet(documentContent, exampleRequest) : "";
-  const csharpSnippet = documentContent ? buildCSharpSnippet(documentContent, exampleRequest) : "";
-  const javascriptSnippet = documentContent ? buildJavaScriptSnippet(documentContent, exampleRequest) : "";
-  const successResponse = buildSuccessResponse();
+  const codeSnippets = useMemo(
+    () => (documentContent ? buildDocumentationCodeSnippets(documentContent, exampleRequest) : []),
+    [documentContent, exampleRequest]
+  );
   const errorRows: DocumentationErrorRow[] = documentContent ? buildErrorRows(documentContent.fields) : [];
   const conditionedFields = documentContent ? getFieldsWithConditions(documentContent.fields) : [];
+  const outline = useMemo(
+    () => buildDocumentationOutline(conditionedFields.length > 0),
+    [conditionedFields.length]
+  );
+
+  const handleDownload = async () => {
+    if (!downloadUrl) return;
+
+    setIsDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(payload?.message ?? "Failed to download API documentation.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const fileNameMatch = disposition.match(/filename="([^"]+)"/);
+      anchor.href = objectUrl;
+      anchor.download = fileNameMatch?.[1] ?? "api-documentation.pdf";
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (downloadFailure) {
+      setDownloadError(
+        downloadFailure instanceof Error ? downloadFailure.message : "Failed to download API documentation."
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -179,12 +238,14 @@ export default function ApiDocumentPreviewPage() {
         title="API Documentation"
         actions={
           <div className="flex items-center gap-3">
-            <a
-              href={downloadUrl}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            <button
+              type="button"
+              onClick={() => void handleDownload()}
+              disabled={!mappingId || isDownloading}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
-              Download
-            </a>
+              {isDownloading ? "Downloading..." : "Download"}
+            </button>
             <Link
               href={backUrl}
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
@@ -194,6 +255,11 @@ export default function ApiDocumentPreviewPage() {
           </div>
         }
       >
+        {downloadError ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {downloadError}
+          </div>
+        ) : null}
         {!mappingId ? (
           <div className="rounded-xl border border-dashed border-red-300 bg-red-50 p-10 text-center text-red-700">
             Missing mapping id.
@@ -209,14 +275,14 @@ export default function ApiDocumentPreviewPage() {
         ) : documentContent ? (
           <div className="space-y-8 text-sm text-slate-700">
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Overview</h2>
+              <DocumentSectionHeading label={outline.overview.label} />
               {overviewParagraphs.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Endpoint Information</h2>
+              <DocumentSectionHeading label={outline.endpointInformation.label} />
               <div className="grid gap-2">
                 <div>
                   <span className="font-medium text-slate-900">HTTP Method:</span> {documentContent.method}
@@ -237,7 +303,7 @@ export default function ApiDocumentPreviewPage() {
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Request Body</h2>
+              <DocumentSectionHeading label={outline.requestBody.label} />
               <div className="overflow-hidden rounded-2xl border border-slate-200">
                 <table className="w-full border-separate border-spacing-0 text-sm">
                   <thead className="bg-slate-50">
@@ -266,9 +332,9 @@ export default function ApiDocumentPreviewPage() {
               </div>
             </section>
 
-            {conditionedFields.length > 0 ? (
+            {outline.fieldConditions ? (
               <section className="space-y-3">
-                <h2 className="text-xl font-semibold text-slate-900">Field Conditions</h2>
+                <DocumentSectionHeading label={outline.fieldConditions.label} />
                 <div className="space-y-2">
                   {conditionedFields.map((field) => (
                     <div key={field.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -284,29 +350,74 @@ export default function ApiDocumentPreviewPage() {
             ) : null}
 
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Example JSON Request</h2>
-              <CodeSnippet title="JSON" language="json" code={JSON.stringify(exampleRequest, null, 2)} />
+              <DocumentSectionHeading label={outline.exampleJsonRequest.label} />
+              <CollapsibleCodeSnippet
+                title="JSON"
+                language="json"
+                code={JSON.stringify(exampleRequest, null, 2)}
+              />
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Code Snippets</h2>
-              <div className="space-y-4">
-                <CodeSnippet title="Python" language="python" code={pythonSnippet} />
-                <CodeSnippet title="C#" language="csharp" code={csharpSnippet} />
-                <CodeSnippet title="JavaScript" language="javascript" code={javascriptSnippet} />
+              <DocumentSectionHeading label={outline.codeSnippets.label} />
+              <p className="text-slate-600">Click a language to expand or collapse the sample request code.</p>
+              <div className="space-y-2">
+                {codeSnippets.map((snippet) => (
+                  <CollapsibleCodeSnippet
+                    key={snippet.id}
+                    title={snippet.title}
+                    language={snippet.language}
+                    code={snippet.code}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <DocumentSectionHeading label={outline.responseStatus.label} />
+              <p className="text-slate-600">
+                The API returns a JSON body with a numeric <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">status</code>{" "}
+                field indicating the lead processing result.
+              </p>
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <table className="w-full border-separate border-spacing-0 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Status</th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Name</th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {LEAD_RESPONSE_STATUS_DEFINITIONS.map((definition, index) => (
+                      <tr key={definition.statusCode} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="border-b border-slate-100 px-4 py-3 font-mono text-xs">{definition.statusCode}</td>
+                        <td className="border-b border-slate-100 px-4 py-3 font-medium text-slate-900">{definition.title}</td>
+                        <td className="border-b border-slate-100 px-4 py-3">{definition.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2">
+                {outline.responseStatusItems.map((item) => (
+                  <div key={item.number} className="space-y-2">
+                    <DocumentSubsectionHeading label={item.label} />
+                    <p className="text-slate-600">{item.definition.description}</p>
+                    <CollapsibleCodeSnippet
+                      title={`${item.label} — JSON Response`}
+                      language="json"
+                      code={JSON.stringify(item.definition.example, null, 2)}
+                    />
+                  </div>
+                ))}
               </div>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Example Response</h2>
-              <div>
-                <h3 className="mb-2 font-medium text-slate-900">Success Response</h3>
-                <CodeSnippet title="JSON" language="json" code={JSON.stringify(successResponse, null, 2)} />
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <h2 className="text-xl font-semibold text-slate-900">Error Responses</h2>
+              <DocumentSectionHeading label={outline.errorResponses.label} />
               <div className="overflow-hidden rounded-2xl border border-slate-200">
                 <table className="w-full border-separate border-spacing-0 text-sm">
                   <thead className="bg-slate-50">

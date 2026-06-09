@@ -8,6 +8,14 @@ const emailDuplicateRuleSchema = new Schema(
   { _id: false }
 );
 
+const verticalFieldOptionSchema = new Schema(
+  {
+    label: { type: String, required: true, trim: true },
+    value: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
 const industryFieldSchema = new Schema(
   {
     fieldName: { type: String, required: true, trim: true },
@@ -17,6 +25,9 @@ const industryFieldSchema = new Schema(
     format: { type: String, required: false, trim: true },
     emailDuplicateRule: { type: emailDuplicateRuleSchema, required: false, default: undefined },
     ignoreValues: { type: [String], default: [] },
+    displayArrayMapping: { type: Boolean, required: true, default: false },
+    dataTypeFilter: { type: String, required: false, trim: true, default: null },
+    options: { type: [verticalFieldOptionSchema], default: [] },
   }
 );
 
@@ -56,20 +67,33 @@ export async function ensureVerticalCollectionMigrated() {
         .toArray();
 
       for (const vertical of verticals) {
-        const fields = Array.isArray(vertical.fields)
-          ? vertical.fields.map((field) => ({
-              _id: new mongoose.Types.ObjectId(),
-              fieldName: field.fieldName,
-              description: field.description,
-              type: field.type,
-              required: field.required,
-              format: field.format,
-              emailDuplicateRule: field.emailDuplicateRule,
-              ignoreValues: Array.isArray(field.ignoreValues) ? field.ignoreValues : [],
-            }))
-          : [];
+        const fields = Array.isArray(vertical.fields) ? vertical.fields : [];
+        const needsFieldUpdate = fields.some(
+          (field) =>
+            !field._id ||
+            field.displayArrayMapping === undefined ||
+            !Array.isArray(field.options)
+        );
 
-        await verticalCollection.updateOne({ _id: vertical._id }, { $set: { fields } });
+        if (!needsFieldUpdate) {
+          continue;
+        }
+
+        const nextFields = fields.map((field) => ({
+          _id: field._id ?? new mongoose.Types.ObjectId(),
+          fieldName: field.fieldName,
+          description: field.description,
+          type: field.type,
+          required: Boolean(field.required),
+          format: field.format,
+          emailDuplicateRule: field.emailDuplicateRule,
+          ignoreValues: Array.isArray(field.ignoreValues) ? field.ignoreValues : [],
+          displayArrayMapping: Boolean(field.displayArrayMapping),
+          dataTypeFilter: field.dataTypeFilter ?? null,
+          options: Array.isArray(field.options) ? field.options : [],
+        }));
+
+        await verticalCollection.updateOne({ _id: vertical._id }, { $set: { fields: nextFields } });
       }
     })().catch((error) => {
       migrationPromise = null;

@@ -13,10 +13,15 @@ const pageTitles: Record<string, string> = {
   "/verticals/fields": "Vertical Fields",
   "/vertical-mappings": "Vertical Mapping",
   "/buyers": "Buyers",
-  "/leads": "Leads",
-  "/logs": "Logs",
-  "/distributions": "Distributions",
+  "/campaigns": "Campaigns",
+  "/ping-tree-settings": "Ping Tree Settings",
+  "/present-lists": "Present & Do Not Present Lists",
+  "/integration-builder": "Integration Builder",
   "/api-config": "API Configuration",
+  "/reports/publisher/performance-summary": "Publisher Performance Summary",
+  "/reports/publisher/lead-details": "Publisher Lead Details",
+  "/reports/buyer/performance-summary": "Buyer Performance Summary",
+  "/reports/buyer/lead-details": "Buyer Lead Details",
 };
 
 type HeaderProps = {
@@ -30,7 +35,11 @@ export function Header({ session }: HeaderProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const title = pathname.startsWith("/api-config/") && pathname.endsWith("/field-configuration")
     ? "Field Configuration"
-    : pageTitles[pathname] ?? "Dashboard";
+    : pathname.startsWith("/campaigns/")
+      ? "Campaign Setup"
+      : pathname.startsWith("/present-lists/")
+        ? "Present List Detail"
+        : pageTitles[pathname] ?? "Dashboard";
   const loginTime = useMemo(() => {
     return new Intl.DateTimeFormat("en", {
       dateStyle: "medium",

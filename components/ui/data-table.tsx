@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 
 export type Column<T> = {
   key: keyof T | string;
-  label: string;
+  label: ReactNode;
   render?: (row: T) => ReactNode;
 };
 
@@ -37,8 +37,8 @@ export function DataTable<T extends { id: string }>({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="max-h-[420px] overflow-auto">
-        <table className="w-full border-separate border-spacing-0 text-sm">
+      <div className="max-h-[420px] overflow-auto overflow-x-auto">
+        <table className="min-w-max w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
             <tr>
               {isSelectable ? (

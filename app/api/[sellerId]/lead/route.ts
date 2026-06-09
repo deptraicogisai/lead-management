@@ -502,7 +502,7 @@ export async function POST(req: Request, context: Params) {
     }
 
     const validationStatus = reasons.length === 0 ? "success" : "fail";
-    await SellerLeadModel.create({
+    const createdLead = await SellerLeadModel.create({
       sellerRef: seller._id,
       verticalRef: vertical?._id,
       mappingRef: matchedMapping._id,
@@ -533,83 +533,11 @@ export async function POST(req: Request, context: Params) {
       return NextResponse.json(responsePayload, { status: 400 });
     }
 
-    const buyers = vertical?._id
-      ? await BuyerModel.find({
-          verticalRef: vertical._id,
-          status: "Active",
-        }).lean() as BuyerDoc[]
-      : [];
-
-    const distributionResults = await Promise.all(
-      buyers.map(async (buyer) => {
-        const buyerPayload = buildBuyerPayload(payload, buyer);
-
-        try {
-          const response = await fetch(buyer.postLeadUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(buyerPayload),
-          });
-          const responseText = await response.text();
-          const buyerResult = parseBuyerResult(response.ok, response.status, responseText);
-          const error = buyerResult.deliveryStatus === "fail" ? buyerResult.message || formatBuyerError(responseText) : null;
-
-          await BuyerRequestLogModel.create({
-            requestType: "buyer-delivery",
-            sellerRef: seller._id,
-            verticalRef: vertical?._id,
-            buyerRef: buyer._id?.toString(),
-            buyerCompany: buyer.company,
-            targetName: buyer.company,
-            postLeadUrl: buyer.postLeadUrl,
-            requestPayload: buyerPayload,
-            responseBody: responseText,
-            errorMessage: error ?? "",
-            deliveryStatus: buyerResult.deliveryStatus,
-            httpStatus: response.status,
-          });
-
-          return {
-            buyerId: buyer._id?.toString() ?? "",
-            buyerCompany: buyer.company,
-            deliveryStatus: buyerResult.deliveryStatus,
-            httpStatus: response.status,
-            buyerResponse: buyerResult.message,
-            error,
-          };
-        } catch {
-          await BuyerRequestLogModel.create({
-            requestType: "buyer-delivery",
-            sellerRef: seller._id,
-            verticalRef: vertical?._id,
-            buyerRef: buyer._id?.toString(),
-            buyerCompany: buyer.company,
-            targetName: buyer.company,
-            postLeadUrl: buyer.postLeadUrl,
-            requestPayload: buyerPayload,
-            responseBody: "",
-            errorMessage: "Unable to reach buyer post lead URL.",
-            deliveryStatus: "fail",
-            httpStatus: 0,
-          });
-
-          return {
-            buyerId: buyer._id?.toString() ?? "",
-            buyerCompany: buyer.company,
-            deliveryStatus: "fail",
-            httpStatus: 0,
-            error: "Unable to reach buyer post lead URL.",
-          };
-        }
-      })
-    );
-
+    const leadId = createdLead._id?.toString() ?? "";
     const responsePayload = {
-      status: "success",
-      distributedBuyerCount: distributionResults.filter((result) => result.deliveryStatus === "success").length,
-      distributions: distributionResults,
+      status: 1,
+      status_text: "sold",
+      redirect_url: `${new URL(req.url).origin}/reports/publisher/lead-details?leadId=${encodeURIComponent(leadId)}`,
     };
 
     await createSellerIntakeLog({

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 type ModalProps = {
   open: boolean;
-  title: string;
+  title: ReactNode;
   description?: string;
   children?: ReactNode;
   actions?: ReactNode;

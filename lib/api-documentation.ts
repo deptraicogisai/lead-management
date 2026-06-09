@@ -1,15 +1,19 @@
 import PDFDocument from "pdfkit";
 import {
   CODE_THEME_BY_LANGUAGE,
+  buildCodeSnippetsMarkdown,
+  buildDocumentationCodeSnippets,
   buildErrorRows,
   buildOverviewParagraphs,
-  buildSuccessResponse,
+  buildDocumentationOutline,
+  buildLeadResponseStatusMarkdown,
   describeFieldCondition,
   getFieldsWithConditions,
   getCodeTokenPdfColor,
   tokenizeCode,
   tokenizeJson,
   type CodeLanguage,
+  type CodeToken,
   type DocumentationErrorRow,
 } from "@/lib/api-documentation-content";
 
@@ -58,16 +62,6 @@ export function prettyType(type: string) {
   return normalized || "string";
 }
 
-function toCSharpHttpMethod(method: string) {
-  const normalized = method.trim().toUpperCase();
-  if (normalized === "POST") return "Post";
-  if (normalized === "GET") return "Get";
-  if (normalized === "PUT") return "Put";
-  if (normalized === "DELETE") return "Delete";
-  if (normalized === "PATCH") return "Patch";
-  return "Post";
-}
-
 function buildExampleValue(field: DocumentationField): unknown {
   if (field.fieldName in SAMPLE_REQUEST_OVERRIDES) {
     return SAMPLE_REQUEST_OVERRIDES[field.fieldName];
@@ -111,94 +105,18 @@ function buildRequestFieldTable(fields: DocumentationField[]) {
   return [...header, ...rows].join("\n");
 }
 
-export function buildPythonSnippet(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
-  return `import requests
-
-url = "${context.endpointUrl}"
-headers = {
-    "Content-Type": "application/json",
-    "x-api-key": "${context.apiKey}"
-}
-payload = ${JSON.stringify(exampleRequest, null, 4)}
-
-response = requests.request("${context.method}", url, headers=headers, json=payload, timeout=30)
-
-print("Status:", response.status_code)
-try:
-    print(response.json())
-except ValueError:
-    print(response.text)`;
-}
-
-export function buildCSharpSnippet(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
-  const jsonBody = JSON.stringify(exampleRequest, null, 2).replace(/"/g, '\\"');
-
-  return `using System;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
-
-class Program
-{
-    static async Task Main()
-    {
-        using var client = new HttpClient();
-        using var request = new HttpRequestMessage(HttpMethod.${toCSharpHttpMethod(context.method)}, "${context.endpointUrl}");
-        request.Headers.Add("Accept", "application/json");
-        request.Headers.Add("x-api-key", "${context.apiKey}");
-        request.Content = new StringContent("${jsonBody}", Encoding.UTF8, "application/json");
-
-        using var response = await client.SendAsync(request);
-        var responseBody = await response.Content.ReadAsStringAsync();
-
-        Console.WriteLine($"Status: {(int)response.StatusCode}");
-        Console.WriteLine(responseBody);
-    }
-}`;
-}
-
-export function buildJavaScriptSnippet(context: DocumentationContext, exampleRequest: Record<string, unknown>) {
-  return `const url = "${context.endpointUrl}";
-const payload = ${JSON.stringify(exampleRequest, null, 2)};
-
-async function sendLead() {
-  const response = await fetch(url, {
-    method: "${context.method}",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": "${context.apiKey}",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await response.text();
-
-  console.log("Status:", response.status);
-  try {
-    console.log(JSON.parse(text));
-  } catch {
-    console.log(text);
-  }
-}
-
-sendLead().catch((error) => {
-  console.error("Request failed:", error);
-});`;
-}
-
 export function buildApiDocumentationMarkdown(context: DocumentationContext, fields: DocumentationField[]) {
   const exampleRequest = buildExampleRequest(fields);
-  const successResponse = {
-    status: "success",
-  };
+  const conditionedFields = getFieldsWithConditions(fields);
+  const outline = buildDocumentationOutline(conditionedFields.length > 0);
   const errorResponse = {
     status: "error",
     reasons: [{ message: `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.` }],
   };
-  const conditionedFields = getFieldsWithConditions(fields);
+  const leadResponseStatusSection = buildLeadResponseStatusMarkdown(outline);
   const fieldConditionsSection =
-    conditionedFields.length > 0
-      ? `## Field Conditions
+    outline.fieldConditions
+      ? `## ${outline.fieldConditions.label}
 
 ${conditionedFields
   .map((field) => `- \`${field.fieldName}\`: ${describeFieldCondition(field)}`)
@@ -210,58 +128,42 @@ ${conditionedFields
     .map((field) => `- Field condition for \`${field.fieldName}\`: ${describeFieldCondition(field)}.`)
     .join("\n");
 
-  return `## Overview
+  return `## ${outline.overview.label}
 
 The ${context.verticalName} lead ingestion endpoint accepts HTTP POST requests and validates the incoming JSON payload before the lead is stored for downstream processing.
 
 In a real-world workflow, this endpoint is used by partner systems, landing pages, or lead providers to submit lead data into the Lead Management platform in a predictable and validated format. After each submission, the server stores the lead in the \`leads\` collection and makes it available in the \`Lead Menu\` for operational review.
 
-## Endpoint Information
+## ${outline.endpointInformation.label}
 
 - **HTTP Method:** \`POST\`
 - **Endpoint URL:** \`${context.endpointUrl}\`
 - **API Key:** \`${context.apiKey}\`
 - **Content-Type:** \`application/json\`
 
-## Request Body
+## ${outline.requestBody.label}
 
 ${buildRequestFieldTable(fields)}
 
-${fieldConditionsSection}## Example JSON Request
+${fieldConditionsSection}## ${outline.exampleJsonRequest.label}
 
 \`\`\`json
 ${JSON.stringify(exampleRequest, null, 2)}
 \`\`\`
 
-## Code Snippets
+## ${outline.codeSnippets.label}
 
-### Python (requests)
+${buildCodeSnippetsMarkdown(context, exampleRequest)}
 
-\`\`\`python
-${buildPythonSnippet(context, exampleRequest)}
-\`\`\`
+## ${outline.responseStatus.label}
 
-### C# (HttpClient)
+The API returns a JSON body with a numeric \`status\` field indicating the lead processing result.
 
-\`\`\`csharp
-${buildCSharpSnippet(context, exampleRequest)}
-\`\`\`
+${leadResponseStatusSection}
 
-### JavaScript (fetch)
+## Validation Error Response
 
-\`\`\`javascript
-${buildJavaScriptSnippet(context, exampleRequest)}
-\`\`\`
-
-## Example Response
-
-### Success Response
-
-\`\`\`json
-${JSON.stringify(successResponse, null, 2)}
-\`\`\`
-
-### Error Response
+When request validation fails before lead processing, the API may return an error payload similar to:
 
 \`\`\`json
 ${JSON.stringify(errorResponse, null, 2)}
@@ -291,8 +193,9 @@ ${conditionNotes ? `${conditionNotes}
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, height: number) {
-  const bottomMargin = doc.page.margins.bottom;
-  if (doc.y + height > doc.page.height - bottomMargin) {
+  const pageBottom = doc.page.height - doc.page.margins.bottom;
+
+  while (doc.y + height > pageBottom) {
     doc.addPage();
   }
 }
@@ -329,121 +232,174 @@ function writeBullet(doc: PDFKit.PDFDocument, text: string) {
   resetTextCursor(doc);
 }
 
-function getCodeTokens(code: string, language: CodeLanguage) {
-  return language === "json" ? tokenizeJson(code) : tokenizeCode(code, language);
+function writeSubheading(doc: PDFKit.PDFDocument, text: string) {
+  ensureSpace(doc, 24);
+  resetTextCursor(doc);
+  doc.font(FONT_BOLD).fontSize(12).fillColor("#0F172A").text(text);
+  doc.moveDown(0.2);
+  resetTextCursor(doc);
 }
 
-function measureHighlightedCodeHeight(
-  doc: PDFKit.PDFDocument,
-  code: string,
-  language: CodeLanguage,
-  maxWidth: number,
-  fontSize: number,
-  lineGap: number
-) {
-  doc.font(FONT_MONO).fontSize(fontSize);
-  const tokens = getCodeTokens(code, language);
-  const lineHeight = doc.currentLineHeight() + lineGap;
-  const startX = 0;
-  let x = startX;
-  let y = 0;
+function getCodeLines(code: string) {
+  return code.replace(/\r\n/g, "\n").split("\n");
+}
 
-  for (const token of tokens) {
-    for (const char of token.text) {
-      if (char === "\n") {
-        x = startX;
-        y += lineHeight;
-        continue;
-      }
-
-      const width = doc.widthOfString(char);
-      if (x > startX && x + width > maxWidth) {
-        x = startX;
-        y += lineHeight;
-      }
-
-      x += width;
-    }
+function getLineTokens(line: string, language: CodeLanguage): CodeToken[] {
+  if (language === "json") {
+    return tokenizeJson(line);
   }
 
-  return y + doc.currentLineHeight();
+  return tokenizeCode(line, language);
 }
 
-function drawHighlightedCode(
+function measureCodeLineHeight(
   doc: PDFKit.PDFDocument,
-  code: string,
-  language: CodeLanguage,
-  startX: number,
-  startY: number,
+  line: string,
   maxWidth: number,
-  defaultColor: string,
   fontSize: number,
   lineGap: number
 ) {
   doc.font(FONT_MONO).fontSize(fontSize);
-  const tokens = getCodeTokens(code, language);
-  const lineHeight = doc.currentLineHeight() + lineGap;
-  const lineStartX = startX;
-  let x = lineStartX;
-  let y = startY;
+  if (!line) {
+    return doc.currentLineHeight() + lineGap;
+  }
+
+  return doc.heightOfString(line, { width: maxWidth, lineGap }) + lineGap;
+}
+
+function drawSyntaxHighlightedLine(
+  doc: PDFKit.PDFDocument,
+  line: string,
+  language: CodeLanguage,
+  x: number,
+  y: number,
+  maxWidth: number,
+  defaultColor: string,
+  fontSize: number
+) {
+  doc.font(FONT_MONO).fontSize(fontSize);
+
+  if (!line.trim()) {
+    doc.fillColor(defaultColor).text(" ", x, y, { lineBreak: false });
+    return;
+  }
+
+  const tokens = getLineTokens(line, language);
+  let cursorX = x;
+  const rightEdge = x + maxWidth;
 
   for (const token of tokens) {
     const color = getCodeTokenPdfColor(token.styleKey) ?? defaultColor;
+    doc.fillColor(color);
 
     for (const char of token.text) {
       if (char === "\n") {
-        x = lineStartX;
-        y += lineHeight;
         continue;
       }
 
-      const width = doc.widthOfString(char);
-      if (x > lineStartX && x + width > lineStartX + maxWidth) {
-        x = lineStartX;
-        y += lineHeight;
+      const charWidth = doc.widthOfString(char);
+      if (cursorX + charWidth > rightEdge) {
+        return;
       }
 
-      doc.fillColor(color).text(char, x, y, { lineBreak: false });
-      x += width;
+      doc.text(char, cursorX, y, { lineBreak: false });
+      cursorX += charWidth;
     }
   }
 }
 
 function writeTintedCodeBlock(doc: PDFKit.PDFDocument, title: string, code: string, language: CodeLanguage) {
-  const padding = 10;
-  const fontSize = 9;
-  const lineGap = 2;
-  const blockWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const theme = CODE_THEME_BY_LANGUAGE[language];
-  const textHeight = measureHighlightedCodeHeight(doc, code, language, blockWidth - padding * 2, fontSize, lineGap);
-  const headerHeight = 26;
-  const totalHeight = headerHeight + textHeight + padding * 2;
-
-  ensureSpace(doc, totalHeight + 4);
-
+  const padding = 10;
+  const headerHeight = 24;
+  const fontSize = 8;
+  const lineGap = 1;
+  const blockWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const contentWidth = blockWidth - padding * 2;
   const startX = doc.page.margins.left;
-  const startY = doc.y;
-  doc.roundedRect(startX, startY, blockWidth, totalHeight, 16).fillAndStroke(theme.bodyBg, theme.borderColor);
-  doc.save();
-  doc.roundedRect(startX, startY, blockWidth, headerHeight, 16).clip();
-  doc.rect(startX, startY, blockWidth, headerHeight).fill(theme.headerBg);
-  doc.restore();
-  doc.fillColor(theme.headerText).font(FONT_BOLD).fontSize(10).text(title, startX + padding, startY + 8, {
-    width: blockWidth - padding * 2,
-  });
-  drawHighlightedCode(
-    doc,
-    code,
-    language,
-    startX + padding,
-    startY + headerHeight + padding,
-    blockWidth - padding * 2,
-    theme.bodyText,
-    fontSize,
-    lineGap
-  );
-  doc.y = startY + totalHeight + 5;
-  resetTextCursor(doc);
+  const lines = getCodeLines(code);
+  const pageBottom = () => doc.page.height - doc.page.margins.bottom;
+
+  doc.font(FONT_MONO).fontSize(fontSize);
+
+  let lineIndex = 0;
+  let showHeader = true;
+
+  while (lineIndex < lines.length) {
+    const blockTitle = showHeader ? title : `${title} (continued)`;
+    const headerSpace = showHeader ? headerHeight : 0;
+
+    ensureSpace(doc, headerSpace + padding * 2 + doc.currentLineHeight() + lineGap);
+
+    const blockTop = doc.y;
+    let cursorY = blockTop;
+
+    doc.save();
+    doc.rect(startX, cursorY, blockWidth, headerHeight).fill(theme.headerBg);
+    doc.restore();
+
+    doc
+      .fillColor(theme.headerText)
+      .font(FONT_BOLD)
+      .fontSize(9.5)
+      .text(blockTitle, startX + padding, cursorY + 7, { width: contentWidth });
+
+    cursorY += headerHeight;
+    showHeader = false;
+
+    const bodyTop = cursorY + padding;
+    const availableHeight = pageBottom() - bodyTop - padding;
+    const lineHeights: number[] = [];
+    let usedHeight = 0;
+
+    while (lineIndex + lineHeights.length < lines.length) {
+      const nextLine = lines[lineIndex + lineHeights.length];
+      const nextLineHeight = measureCodeLineHeight(doc, nextLine, contentWidth, fontSize, lineGap);
+
+      if (lineHeights.length > 0 && usedHeight + nextLineHeight > availableHeight) {
+        break;
+      }
+
+      if (lineHeights.length === 0 && nextLineHeight > availableHeight) {
+        lineHeights.push(nextLineHeight);
+        usedHeight += nextLineHeight;
+        break;
+      }
+
+      lineHeights.push(nextLineHeight);
+      usedHeight += nextLineHeight;
+    }
+
+    const bodyHeight = usedHeight + padding * 2;
+
+    doc.save();
+    doc.rect(startX, cursorY, blockWidth, bodyHeight).fill(theme.bodyBg);
+    doc.rect(startX, blockTop, blockWidth, headerHeight + bodyHeight).lineWidth(1).stroke(theme.borderColor);
+    doc.restore();
+
+    let lineY = bodyTop;
+    lineHeights.forEach((lineHeight, index) => {
+      const line = lines[lineIndex + index];
+      const fitsInline = doc.heightOfString(line || " ", { width: contentWidth, lineGap }) <= lineHeight + 0.5;
+
+      if (fitsInline && line.length <= 110) {
+        drawSyntaxHighlightedLine(doc, line, language, startX + padding, lineY, contentWidth, theme.bodyText, fontSize);
+      } else {
+        doc.fillColor(theme.bodyText).font(FONT_MONO).fontSize(fontSize).text(line || " ", startX + padding, lineY, {
+          width: contentWidth,
+          lineGap,
+          lineBreak: true,
+        });
+      }
+
+      lineY += lineHeight;
+    });
+
+    lineIndex += lineHeights.length;
+    doc.y = cursorY + bodyHeight + 10;
+    doc.x = startX;
+    resetTextCursor(doc);
+  }
 }
 
 function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationField[]) {
@@ -500,13 +456,16 @@ function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationFie
   };
 
   let cursorY = doc.y;
-  const headerHeight = getRowHeight(headers, true);
-  const rowsHeight = rows.reduce((total, row) => total + getRowHeight(row), 0);
-  ensureSpace(doc, headerHeight + rowsHeight + 8);
+  ensureSpace(doc, getRowHeight(headers, true));
 
+  cursorY = doc.y;
   cursorY += drawRow(headers, cursorY, true);
+
   rows.forEach((row, index) => {
     const rowHeight = getRowHeight(row);
+    ensureSpace(doc, rowHeight);
+    cursorY = doc.y;
+
     let currentX = startX;
 
     row.forEach((value, cellIndex) => {
@@ -526,7 +485,8 @@ function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationFie
       currentX += columnWidths[cellIndex];
     });
 
-    cursorY += rowHeight;
+    doc.y = cursorY + rowHeight;
+    cursorY = doc.y;
   });
 
   doc.y = cursorY + 5;
@@ -538,6 +498,7 @@ function writeErrorResponsesTable(doc: PDFKit.PDFDocument, rows: DocumentationEr
   const startX = doc.page.margins.left;
   const columnWidths = [110, 180, tableWidth - 110 - 180];
   const headers = ["HTTP Status", "Scenario", "Example Message"];
+  const tableRows = rows.map((row) => [row.status, row.scenario, row.message]);
 
   const getRowHeight = (values: string[], isHeader = false) => {
     const paddingY = isHeader ? 8 : 7;
@@ -554,12 +515,6 @@ function writeErrorResponsesTable(doc: PDFKit.PDFDocument, rows: DocumentationEr
 
     return contentHeight + paddingY * 2;
   };
-
-  let cursorY = doc.y;
-  const headerHeight = getRowHeight(headers, true);
-  const tableRows = rows.map((row) => [row.status, row.scenario, row.message]);
-  const rowsHeight = tableRows.reduce((total, row) => total + getRowHeight(row), 0);
-  ensureSpace(doc, headerHeight + rowsHeight + 8);
 
   const drawRow = (values: string[], y: number, isHeader = false, index = 0) => {
     const rowHeight = getRowHeight(values, isHeader);
@@ -585,9 +540,18 @@ function writeErrorResponsesTable(doc: PDFKit.PDFDocument, rows: DocumentationEr
     return rowHeight;
   };
 
+  let cursorY = doc.y;
+  ensureSpace(doc, getRowHeight(headers, true));
+
+  cursorY = doc.y;
   cursorY += drawRow(headers, cursorY, true);
+
   tableRows.forEach((row, index) => {
+    const rowHeight = getRowHeight(row);
+    ensureSpace(doc, rowHeight);
+    cursorY = doc.y;
     cursorY += drawRow(row, cursorY, false, index);
+    doc.y = cursorY;
   });
 
   doc.y = cursorY + 5;
@@ -599,10 +563,10 @@ export async function generateApiDocumentationPdfBuffer(
   fields: DocumentationField[]
 ) {
   const exampleRequest = buildExampleRequest(fields);
-  const successResponse = buildSuccessResponse();
   const errorRows = buildErrorRows(fields);
   const overviewParagraphs = buildOverviewParagraphs(context.verticalName);
   const conditionedFields = getFieldsWithConditions(fields);
+  const outline = buildDocumentationOutline(conditionedFields.length > 0);
 
   const doc = new PDFDocument({
     size: "A4",
@@ -629,42 +593,58 @@ export async function generateApiDocumentationPdfBuffer(
     .font(FONT_REGULAR)
     .fontSize(10.5)
     .text(`Seller: ${context.sellerName ?? context.sellerId}  |  Vertical: ${context.verticalName}`, 52, 76);
-  doc.moveDown(2.2);
-  resetTextCursor(doc);
+  doc.y = 128;
+  doc.x = doc.page.margins.left;
 
-  writeSectionHeading(doc, "Overview");
+  writeSectionHeading(doc, outline.overview.label);
   overviewParagraphs.forEach((paragraph) => writeParagraph(doc, paragraph));
 
-  writeSectionHeading(doc, "Endpoint Information");
+  writeSectionHeading(doc, outline.endpointInformation.label);
   writeBullet(doc, `HTTP Method: ${context.method}`);
   writeBullet(doc, `Base URL: ${context.baseUrl ?? "-"}`);
   writeBullet(doc, `Endpoint URL: ${context.endpointUrl}`);
   writeBullet(doc, `API Key: ${context.apiKey}`);
 
-  writeSectionHeading(doc, "Request Body");
+  writeSectionHeading(doc, outline.requestBody.label);
   writeRequestBodyTable(doc, fields);
 
-  if (conditionedFields.length > 0) {
-    writeSectionHeading(doc, "Field Conditions");
+  if (outline.fieldConditions) {
+    writeSectionHeading(doc, outline.fieldConditions.label);
     conditionedFields.forEach((field) => {
       writeBullet(doc, `${field.fieldName}: ${describeFieldCondition(field)}`);
     });
   }
 
-  writeSectionHeading(doc, "Example JSON Request");
-  writeTintedCodeBlock(doc, "JSON", JSON.stringify(exampleRequest, null, 2), "json");
+  writeSectionHeading(doc, outline.exampleJsonRequest.label);
+  writeTintedCodeBlock(doc, "JSON — Example Request", JSON.stringify(exampleRequest, null, 2), "json");
 
-  writeSectionHeading(doc, "Code Snippets");
-  writeTintedCodeBlock(doc, "Python", buildPythonSnippet(context, exampleRequest), "python");
-  writeTintedCodeBlock(doc, "C#", buildCSharpSnippet(context, exampleRequest), "csharp");
-  writeTintedCodeBlock(doc, "JavaScript", buildJavaScriptSnippet(context, exampleRequest), "javascript");
+  writeSectionHeading(doc, outline.codeSnippets.label);
+  buildDocumentationCodeSnippets(context, exampleRequest).forEach((snippet) => {
+    writeTintedCodeBlock(doc, snippet.title, snippet.code, snippet.language);
+  });
 
-  writeSectionHeading(doc, "Example Response");
-  doc.font(FONT_BOLD).fontSize(12).fillColor("#0F172A").text("Success Response");
-  doc.moveDown(0.1);
-  writeTintedCodeBlock(doc, "JSON", JSON.stringify(successResponse, null, 2), "json");
+  writeSectionHeading(doc, outline.responseStatus.label);
+  writeParagraph(
+    doc,
+    "The API returns a JSON body with a numeric status field indicating the lead processing result."
+  );
+  writeBullet(doc, "1 — Sold: lead sold successfully; includes redirect_url.");
+  writeBullet(doc, "2 — Reject: lead rejected.");
+  writeBullet(doc, "3 — In Progress: lead is still being processed.");
+  writeBullet(doc, "4 — Authorization Failed: API key or authorization credentials are missing or invalid.");
 
-  writeSectionHeading(doc, "Error Responses");
+  outline.responseStatusItems.forEach((item) => {
+    writeSubheading(doc, item.label);
+    writeParagraph(doc, item.definition.description);
+    writeTintedCodeBlock(
+      doc,
+      `${item.label} — JSON Response`,
+      JSON.stringify(item.definition.example, null, 2),
+      "json"
+    );
+  });
+
+  writeSectionHeading(doc, outline.errorResponses.label);
   writeErrorResponsesTable(doc, errorRows);
 
   doc.end();

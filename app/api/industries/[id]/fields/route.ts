@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
+import { parseVerticalFieldImport } from "@/lib/vertical-field";
+import { findVerticalById, findVerticalByIdLean, isValidVerticalId } from "@/lib/vertical-db";
+import { toVerticalFieldResponse } from "@/lib/vertical-field-api";
+import { importVerticalFields as persistImportedVerticalFields } from "@/lib/vertical-field-import";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -10,44 +14,18 @@ type VerticalFieldPayload = {
   type?: string;
   required?: boolean;
   format?: string;
+  displayArrayMapping?: boolean;
+  dataTypeFilter?: string | null;
+  options?: Array<{
+    label?: string;
+    value?: string;
+  }>;
   emailDuplicateRule?: {
     mode?: "days" | "forever";
     days?: number;
   };
   ignoreValues?: string[];
 };
-
-function toFieldResponse(doc: {
-  _id?: { toString(): string };
-  fieldName: string;
-  description: string;
-  type: string;
-  required: boolean;
-  format?: string | null;
-  emailDuplicateRule?: {
-    mode?: "days" | "forever" | null;
-    days?: number | null;
-  } | null;
-  ignoreValues?: string[] | null;
-}) {
-  return {
-    id: doc._id?.toString() ?? "",
-    fieldName: doc.fieldName,
-    description: doc.description,
-    type: doc.type,
-    required: doc.required,
-    format: doc.format,
-    emailDuplicateRule: doc.emailDuplicateRule?.mode
-      ? {
-          mode: doc.emailDuplicateRule.mode,
-          ...(doc.emailDuplicateRule.mode === "days" && typeof doc.emailDuplicateRule.days === "number"
-            ? { days: doc.emailDuplicateRule.days }
-            : {}),
-        }
-      : undefined,
-    ignoreValues: Array.isArray(doc.ignoreValues) ? doc.ignoreValues : [],
-  };
-}
 
 function sanitizeIgnoreValues(ignoreValues?: string[]) {
   const seen = new Set<string>();
@@ -115,59 +93,103 @@ function normalizeFieldConfig(body: VerticalFieldPayload) {
   };
 }
 
+function isImportPayload(payload: unknown): payload is unknown[] | { fields: unknown[] } {
+  return (
+    Array.isArray(payload) ||
+    (Boolean(payload) &&
+      typeof payload === "object" &&
+      Array.isArray((payload as { fields?: unknown }).fields))
+  );
+}
+
+async function importVerticalFields(id: string, payload: unknown) {
+  if (!isValidVerticalId(id)) {
+    return NextResponse.json({ message: "Invalid vertical id." }, { status: 400 });
+  }
+
+  const parsed = parseVerticalFieldImport(payload);
+  if ("error" in parsed) {
+    return NextResponse.json({ message: parsed.error }, { status: 400 });
+  }
+
+  return persistImportedVerticalFields(id, parsed.fields);
+}
+
 export async function GET(_: Request, context: Params) {
   try {
     const { id } = await context.params;
+
+    if (!isValidVerticalId(id)) {
+      return NextResponse.json({ message: "Invalid vertical id." }, { status: 400 });
+    }
+
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
-    const vertical = await VerticalModel.findById(id).lean();
+    const vertical = await findVerticalByIdLean(id);
 
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
     }
 
-    return NextResponse.json((vertical.fields ?? []).map((field) => toFieldResponse(field)));
-  } catch {
-    return NextResponse.json({ message: "Failed to fetch vertical fields." }, { status: 500 });
+    return NextResponse.json((vertical.fields ?? []).map((field) => toVerticalFieldResponse(field)));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to fetch vertical fields.";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request, context: Params) {
   try {
     const { id } = await context.params;
-    const body = (await req.json()) as VerticalFieldPayload;
+    const body = (await req.json()) as unknown;
 
-    if (!body.fieldName?.trim() || !body.description?.trim() || !body.type?.trim()) {
+    await connectToDatabase();
+    await ensureVerticalCollectionMigrated();
+
+    if (isImportPayload(body)) {
+      return importVerticalFields(id, body);
+    }
+
+    const fieldBody = body as VerticalFieldPayload;
+
+    if (!fieldBody.fieldName?.trim() || !fieldBody.description?.trim() || !fieldBody.type?.trim()) {
       return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
     }
 
-    const normalizedConfig = normalizeFieldConfig(body);
+    const normalizedConfig = normalizeFieldConfig(fieldBody);
     if ("error" in normalizedConfig) {
       return NextResponse.json({ message: normalizedConfig.error }, { status: 400 });
     }
 
-    await connectToDatabase();
-    await ensureVerticalCollectionMigrated();
-    const vertical = await VerticalModel.findById(id);
+    const vertical = await findVerticalById(id);
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
     }
 
     const field = {
-      fieldName: body.fieldName.trim(),
-      description: body.description.trim(),
-      type: body.type.trim(),
-      required: Boolean(body.required),
+      fieldName: fieldBody.fieldName.trim(),
+      description: fieldBody.description.trim(),
+      type: fieldBody.type.trim(),
+      required: Boolean(fieldBody.required),
       format: normalizedConfig.value.format,
       emailDuplicateRule: normalizedConfig.value.emailDuplicateRule,
       ignoreValues: normalizedConfig.value.ignoreValues,
+      displayArrayMapping: Boolean(fieldBody.displayArrayMapping),
+      dataTypeFilter: fieldBody.dataTypeFilter?.trim() || null,
+      options: Array.isArray(fieldBody.options)
+        ? fieldBody.options.map((option) => ({
+            label: option.label?.trim() ?? "",
+            value: option.value?.trim() ?? "",
+          }))
+        : [],
     };
 
     vertical.fields.push(field);
     await vertical.save();
 
-    return NextResponse.json(toFieldResponse(field), { status: 201 });
-  } catch {
-    return NextResponse.json({ message: "Failed to create vertical field." }, { status: 500 });
+    return NextResponse.json(toVerticalFieldResponse(field), { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save vertical fields.";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
