@@ -9,12 +9,12 @@ export type IntegrationBuilderResponseMapping = {
 };
 
 export const DEFAULT_RESPONSE_MAPPING_FIELDS: IntegrationBuilderResponseMappingField[] = [
-  { key: "Sold::Sign", value: '{{ response.message == "Approved" }}' },
-  { key: "Sold::Price", value: "{{ response.result.price }}" },
-  { key: "Sold::RedirectUrl", value: "{{ response.result.redirect_url }}" },
-  { key: "Reject::Sign", value: '{{ response.message == "Declined" }}' },
+  { key: "Sold::Sign", value: "" },
+  { key: "Sold::Price", value: "" },
+  { key: "Sold::RedirectUrl", value: "" },
+  { key: "Reject::Sign", value: "" },
   { key: "Reject::Reason", value: "" },
-  { key: "Error::Reason", value: "Invalid response from buyer" },
+  { key: "Error::Reason", value: "" },
 ];
 
 export function normalizeResponseMapping(

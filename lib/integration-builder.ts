@@ -82,17 +82,51 @@ type IntegrationBuilderDoc = {
   updatedAt?: Date | string;
 };
 
+export const DEFAULT_CONFIG_FIELDS: IntegrationBuilderConfigField[] = [
+  { variableName: "url", label: "URL", type: "string", required: true },
+  { variableName: "timeout", label: "Post timeout", type: "string", required: false },
+];
+
 function normalizeConfigFields(
   configFields?: IntegrationBuilderConfigField[] | null
 ): IntegrationBuilderConfigField[] {
-  if (!Array.isArray(configFields)) return [];
+  const savedFields = Array.isArray(configFields) ? configFields : [];
+  const savedByVariable = new Map(
+    savedFields
+      .map((field) => ({
+        variableName: field.variableName?.trim() ?? "",
+        label: field.label?.trim() ?? "",
+        type: field.type?.trim() || "string",
+        required: Boolean(field.required),
+      }))
+      .filter((field) => field.variableName)
+      .map((field) => [field.variableName, field] as const)
+  );
 
-  return configFields.map((field) => ({
-    variableName: field.variableName?.trim() ?? "",
-    label: field.label?.trim() ?? "",
-    type: field.type?.trim() || "string",
-    required: Boolean(field.required),
-  }));
+  if (savedByVariable.size === 0) {
+    return DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field }));
+  }
+
+  const defaultVariables = new Set(DEFAULT_CONFIG_FIELDS.map((field) => field.variableName));
+  return [
+    ...DEFAULT_CONFIG_FIELDS.map((field) => {
+      const saved = savedByVariable.get(field.variableName);
+      return {
+        variableName: field.variableName,
+        label: saved?.label || field.label,
+        type: saved?.type || field.type,
+        required: saved ? saved.required : field.required,
+      };
+    }),
+    ...savedFields
+      .map((field) => ({
+        variableName: field.variableName?.trim() ?? "",
+        label: field.label?.trim() ?? "",
+        type: field.type?.trim() || "string",
+        required: Boolean(field.required),
+      }))
+      .filter((field) => field.variableName && !defaultVariables.has(field.variableName)),
+  ];
 }
 
 function normalizeRequestMapping(

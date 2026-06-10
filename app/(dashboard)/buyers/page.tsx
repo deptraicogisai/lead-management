@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleHelp, Plus, Settings2, UserRound } from "lucide-react";
+import { CircleHelp, Plus } from "lucide-react";
 import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
-import { ClearButton, ComingSoonButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
+import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Input } from "@/components/ui/form-controls";
@@ -14,10 +14,8 @@ import { PageSection } from "@/components/ui/state";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
-  BUYER_LABEL_OPTIONS,
   BUYER_MANAGER_OPTIONS,
   formatBuyerCreated,
-  getManagerLabel,
   type BuyerCreatePayload,
   type BuyerListRecord,
 } from "@/lib/buyer";
@@ -51,16 +49,12 @@ export default function BuyersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [labelFilter, setLabelFilter] = useState("All");
   const [agentFilter, setAgentFilter] = useState("All");
-  const [prepaidFilter, setPrepaidFilter] = useState("All");
   const [dateFrom, setDateFrom] = useState("2000-01-01");
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
 
   const [appliedFilters, setAppliedFilters] = useState({
-    labelFilter: "All",
     agentFilter: "All",
-    prepaidFilter: "All",
     dateFrom: "2000-01-01",
     dateTo: new Date().toISOString().slice(0, 10),
   });
@@ -93,15 +87,8 @@ export default function BuyersPage() {
     const toDate = parseDateInput(appliedFilters.dateTo);
 
     return buyerRows.filter((row) => {
-      const matchesLabel = appliedFilters.labelFilter === "All" ? true : row.label === appliedFilters.labelFilter;
       const matchesAgent =
         appliedFilters.agentFilter === "All" ? true : row.personalManagerId === appliedFilters.agentFilter;
-      const matchesPrepaid =
-        appliedFilters.prepaidFilter === "All"
-          ? true
-          : appliedFilters.prepaidFilter === "Yes"
-            ? row.prepaid
-            : !row.prepaid;
 
       const createdAt = row.createdAt ? new Date(row.createdAt) : null;
       const matchesDateFrom = !fromDate || !createdAt ? true : createdAt >= fromDate;
@@ -114,15 +101,13 @@ export default function BuyersPage() {
           row.integrations.some((item) => item.toLowerCase().includes(search))
         : true;
 
-      return matchesLabel && matchesAgent && matchesPrepaid && matchesDateFrom && matchesDateTo && matchesTableFilter;
+      return matchesAgent && matchesDateFrom && matchesDateTo && matchesTableFilter;
     });
   }, [buyerRows, appliedFilters, tableFilter]);
 
   const handleSearch = () => {
     setAppliedFilters({
-      labelFilter,
       agentFilter,
-      prepaidFilter,
       dateFrom,
       dateTo,
     });
@@ -131,16 +116,12 @@ export default function BuyersPage() {
 
   const clearFilters = () => {
     const today = new Date().toISOString().slice(0, 10);
-    setLabelFilter("All");
     setAgentFilter("All");
-    setPrepaidFilter("All");
     setDateFrom("2000-01-01");
     setDateTo(today);
     setTableFilter("");
     setAppliedFilters({
-      labelFilter: "All",
       agentFilter: "All",
-      prepaidFilter: "All",
       dateFrom: "2000-01-01",
       dateTo: today,
     });
@@ -203,58 +184,9 @@ export default function BuyersPage() {
       ),
     },
     {
-      key: "label",
-      label: "Label",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Settings2 size={14} className="text-blue-600 dark:text-blue-300" />
-          {row.label !== "-" ? (
-            <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-              {row.label}
-            </span>
-          ) : (
-            <span>-</span>
-          )}
-        </div>
-      ),
-    },
-    {
       key: "createdAt",
       label: "Created",
       render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
-    },
-    {
-      key: "lastTrafficLabel",
-      label: "Last Traffic",
-      render: (row) => <span className="text-xs">{row.lastTrafficLabel}</span>,
-    },
-    {
-      key: "buyerType",
-      label: "Type",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Settings2 size={14} className="text-blue-600 dark:text-blue-300" />
-          <span>{row.buyerType}</span>
-        </div>
-      ),
-    },
-    {
-      key: "accounting",
-      label: "Accounting Set",
-      render: () => <ComingSoonButton icon={Settings2}>Set Invoice Setting</ComingSoonButton>,
-    },
-    {
-      key: "manager",
-      label: "Manager",
-      render: (row) =>
-        row.personalManagerName ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-            <UserRound size={14} className="text-slate-500" />
-            {getManagerLabel(row.personalManagerId, row.personalManagerName)}
-          </span>
-        ) : (
-          <ComingSoonButton icon={UserRound}>Set Buyer Agent</ComingSoonButton>
-        ),
     },
     {
       key: "status",
@@ -270,20 +202,6 @@ export default function BuyersPage() {
         </div>
       ),
     },
-    {
-      key: "questionnaireStatus",
-      label: "Questionnaire",
-      render: (row) => <StatusBadge status={row.questionnaireStatus} variant="outline" />,
-    },
-    {
-      key: "quality",
-      label: "Quality",
-      render: (row) => (
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white dark:bg-emerald-500">
-          {row.quality}
-        </span>
-      ),
-    },
   ];
 
   const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
@@ -294,23 +212,7 @@ export default function BuyersPage() {
       <PageSection title="Buyer List">
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Label</label>
-                <select
-                  value={labelFilter}
-                  onChange={(event) => setLabelFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
-                >
-                  <option value="All">All</option>
-                  {BUYER_LABEL_OPTIONS.filter((label) => label !== "-").map((label) => (
-                    <option key={label} value={label}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Agent</label>
                 <select
@@ -324,19 +226,6 @@ export default function BuyersPage() {
                       [{manager.id}] {manager.name}
                     </option>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Prepaid</label>
-                <select
-                  value={prepaidFilter}
-                  onChange={(event) => setPrepaidFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
-                >
-                  <option value="All">All</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
                 </select>
               </div>
 

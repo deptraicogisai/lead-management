@@ -1,26 +1,21 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  BarChart3,
   CircleHelp,
   ExternalLink,
   Globe,
   Info,
   List,
   Megaphone,
-  Newspaper,
   Plug,
   X,
 } from "lucide-react";
-import { BackLink, ComingSoonButton } from "@/components/ui/action-buttons";
+import { BackLink } from "@/components/ui/action-buttons";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import {
-  BUYER_LABEL_OPTIONS,
-  BUYER_MANAGER_OPTIONS,
-  BUYER_TYPE_OPTIONS,
   normalizeBuyerStatus,
   type BuyerListRecord,
   type BuyerUpdatePayload,
@@ -31,12 +26,6 @@ import { cn } from "@/lib/utils";
 const buyerTabs = [
   { id: "global", label: "Global", icon: Globe },
   { id: "integrations", label: "Integrations", icon: Plug },
-] as const;
-
-const leftHeaderActions = [
-  { label: "Summary Report", icon: BarChart3 },
-  { label: "Summary by Campaign", icon: Megaphone },
-  { label: "Summary by Publisher", icon: Newspaper },
 ] as const;
 
 const rightHeaderActions = [
@@ -75,12 +64,13 @@ type BuyerDetailProps = {
 
 export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const router = useRouter();
-  const [activeTabId, setActiveTabId] = useState<(typeof buyerTabs)[number]["id"]>("global");
+  const searchParams = useSearchParams();
+  const [activeTabId, setActiveTabId] = useState<(typeof buyerTabs)[number]["id"]>(() => {
+    const tab = searchParams.get("tab");
+    return tab === "integrations" ? "integrations" : "global";
+  });
   const [name, setName] = useState(buyer.name);
   const [status, setStatus] = useState<"Active" | "Inactive">(normalizeBuyerStatus(buyer.status));
-  const [personalManagerId, setPersonalManagerId] = useState(buyer.personalManagerId);
-  const [label, setLabel] = useState(buyer.label);
-  const [buyerType, setBuyerType] = useState(buyer.buyerType);
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
@@ -99,9 +89,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   useEffect(() => {
     setName(buyer.name);
     setStatus(normalizeBuyerStatus(buyer.status));
-    setPersonalManagerId(buyer.personalManagerId);
-    setLabel(buyer.label);
-    setBuyerType(buyer.buyerType);
     setSelectedIntegrationIds(buyer.integrationIds);
   }, [buyer]);
 
@@ -167,9 +154,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     const payload: BuyerUpdatePayload = {
       name: name.trim(),
       status,
-      personalManagerId,
-      label,
-      buyerType,
+      personalManagerId: buyer.personalManagerId,
+      label: buyer.label,
+      buyerType: buyer.buyerType,
     };
 
     setIsSaving(true);
@@ -299,44 +286,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               <option value="Inactive">Inactive</option>
             </select>
           )}
-          {renderDetailRow(
-            "Personal manager",
-            <select
-              id="buyer-personal-manager"
-              value={personalManagerId}
-              onChange={(event) => setPersonalManagerId(event.target.value)}
-              className={selectClassName}
-            >
-              <option value="">-</option>
-              {BUYER_MANAGER_OPTIONS.map((manager) => (
-                <option key={manager.id} value={manager.id}>
-                  [{manager.id}] {manager.name}
-                </option>
-              ))}
-            </select>,
-            true
-          )}
-          {renderDetailRow(
-            "Label",
-            <select id="buyer-label" value={label} onChange={(event) => setLabel(event.target.value)} className={selectClassName}>
-              {BUYER_LABEL_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          )}
-          {renderDetailRow(
-            "Type",
-            <select id="buyer-type" value={buyerType} onChange={(event) => setBuyerType(event.target.value)} className={selectClassName}>
-              {BUYER_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          )}
-
           <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
             <div aria-hidden />
             <div className="space-y-2">
@@ -469,15 +418,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           Buyer Detail - [{buyer.displayId}] {buyer.name}
         </h3>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            {leftHeaderActions.map((action) => (
-              <ComingSoonButton key={action.label} icon={action.icon} className="rounded-lg px-4 py-2 text-sm">
-                {action.label}
-              </ComingSoonButton>
-            ))}
-          </div>
-
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           <div className="flex flex-wrap gap-2">
             {rightHeaderActions.map((action) => {
               const Icon = action.icon;

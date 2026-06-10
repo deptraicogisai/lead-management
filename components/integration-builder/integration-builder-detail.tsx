@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ExternalLink,
   FileJson2,
-  FlaskConical,
   House,
   Info,
   Minus,
@@ -148,18 +147,6 @@ const builderTabs = [
       "Map response fields and status keys.",
       "Normalize third-party response structures.",
       "Support future conditional routing from response values.",
-    ],
-  },
-  {
-    id: "testing",
-    label: "Testing",
-    icon: FlaskConical,
-    title: "Testing",
-    description: "Execute requests and validate request-response behavior before promoting the integration flow.",
-    bullets: [
-      "Send sample payloads for validation.",
-      "Inspect response and mapped status values.",
-      "Confirm the builder is ready before go-live.",
     ],
   },
 ] as const;

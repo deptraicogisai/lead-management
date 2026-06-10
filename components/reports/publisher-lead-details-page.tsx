@@ -245,6 +245,11 @@ export function PublisherLeadDetailsPage() {
         label: <SortableHeader label="Product" />,
         render: (row) => <span className="whitespace-nowrap">{row.productLabel}</span>,
       },
+      {
+        key: "publisherLabel",
+        label: <SortableHeader label="Publisher" />,
+        render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
+      },
     ];
 
     const dynamicFieldColumns: Column<PublisherLeadDetailsRow>[] = fieldColumns.map((field) => ({
@@ -418,13 +423,6 @@ export function PublisherLeadDetailsPage() {
                       </div>
                     ) : null}
                   </div>
-
-                  <button
-                    type="button"
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Export to Cloud PBX
-                  </button>
 
                   {selectedIds.length > 0 ? (
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">

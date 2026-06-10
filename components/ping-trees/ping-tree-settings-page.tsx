@@ -8,15 +8,14 @@ import {
   ChevronUp,
   Crosshair,
   Filter,
-  HelpCircle,
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/form-controls";
+import { LoadingOverlay } from "@/components/ui/loading-indicator";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
 import {
   PING_TREE_CAMPAIGN_TYPE_TABS,
-  PING_TREE_STRATEGY_OPTIONS,
   type PingTreeCampaignCard,
   type PingTreeCampaignType,
   type PingTreeRecord,
@@ -374,6 +373,7 @@ export function PingTreeSettingsPage() {
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorPosition | null>(null);
   const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTabRefreshing, setIsTabRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -386,6 +386,7 @@ export function PingTreeSettingsPage() {
   const activeListRef = useRef<HTMLDivElement | null>(null);
   const inactiveColumnRef = useRef<HTMLDivElement | null>(null);
   const inactiveListRef = useRef<HTMLDivElement | null>(null);
+  const isFirstTreeLoadRef = useRef(true);
 
   useEffect(() => {
     pingTreeListRef.current = pingTreeList;
@@ -455,7 +456,11 @@ export function PingTreeSettingsPage() {
   const loadTree = useCallback(
     async (treeId: string, options?: { withSpinner?: boolean }) => {
       const withSpinner = options?.withSpinner ?? true;
-      if (withSpinner) setIsLoading(true);
+      if (withSpinner) {
+        setIsLoading(true);
+      } else {
+        setIsTabRefreshing(true);
+      }
 
       try {
         const response = await fetch(`/api/ping-trees/${encodeURIComponent(treeId)}`);
@@ -467,7 +472,11 @@ export function PingTreeSettingsPage() {
         };
         applyTreeData(data);
       } finally {
-        if (withSpinner) setIsLoading(false);
+        if (withSpinner) {
+          setIsLoading(false);
+        } else {
+          setIsTabRefreshing(false);
+        }
       }
     },
     [applyTreeData]
@@ -486,7 +495,9 @@ export function PingTreeSettingsPage() {
     const matchedTree = trees.find((item) => item.campaignType === activeTab);
     if (!matchedTree?.id) return;
 
-    void loadTree(matchedTree.id);
+    const withSpinner = isFirstTreeLoadRef.current;
+    isFirstTreeLoadRef.current = false;
+    void loadTree(matchedTree.id, { withSpinner });
   }, [activeTab, loadTree, trees]);
 
   const handleTabChange = (tab: PingTreeCampaignType) => {
@@ -501,11 +512,6 @@ export function PingTreeSettingsPage() {
     setPointerPosition(null);
     dropTargetKeyRef.current = "";
     dropTargetRef.current = null;
-    setTree(null);
-    setPingTreeList([]);
-    setNotInPingTree([]);
-    setPriorities({});
-    setIsLoading(true);
     setActiveTab(tab);
   };
 
@@ -790,17 +796,6 @@ export function PingTreeSettingsPage() {
     };
   }, [dragSession]);
 
-  if (isLoading || !tree) {
-    return (
-      <PageSection title="Ping Tree Settings">
-        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-          <Spinner />
-          <span>Loading ping tree...</span>
-        </div>
-      </PageSection>
-    );
-  }
-
   const isDragging = Boolean(dragSession);
   const draggedCard =
     dragSession &&
@@ -808,17 +803,17 @@ export function PingTreeSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/50">
+      <div className="inline-flex gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800/60">
         {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => handleTabChange(tab)}
             className={cn(
-              "flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
+              "rounded-lg px-5 py-2 text-sm font-semibold transition-colors duration-150",
               activeTab === tab
-                ? "bg-white text-emerald-800 shadow-sm dark:bg-slate-900 dark:text-emerald-300"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600 dark:text-white"
+                : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-slate-100"
             )}
           >
             {tab}
@@ -826,28 +821,19 @@ export function PingTreeSettingsPage() {
         ))}
       </div>
 
+      {isLoading && !tree ? (
+        <PageSection title={`${activeTab} Ping Tree`}>
+          <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+            <Spinner />
+            <span>Loading ping tree...</span>
+          </div>
+        </PageSection>
+      ) : tree ? (
       <PageSection title={`${activeTab} Ping Tree`}>
+        <div className="relative">
+          {isTabRefreshing ? <LoadingOverlay /> : null}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor="ping-tree-strategy" className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Strategy
-              </label>
-              <select
-                id="ping-tree-strategy"
-                value={tree.strategy}
-                disabled
-                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                {PING_TREE_STRATEGY_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <HelpCircle size={16} className="text-sky-500" aria-hidden />
-            </div>
-
             {isDragging ? (
               <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
                 <ArrowDown size={14} className="rotate-180" />
@@ -1012,7 +998,9 @@ export function PingTreeSettingsPage() {
             </div>
           </div>
         </div>
+        </div>
       </PageSection>
+      ) : null}
 
       {dragSession && pointerPosition && draggedCard ? (
         <div

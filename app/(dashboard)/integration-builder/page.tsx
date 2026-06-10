@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleHelp, Copy, Download, Filter, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { CircleHelp, Copy, Download, Filter, Plus, Trash2 } from "lucide-react";
 import { ClearButton, ComingSoonButton, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
@@ -413,9 +413,6 @@ export default function IntegrationBuilderPage() {
                   <Plus size={15} />
                   <span>Add New Record</span>
                 </button>
-                <ComingSoonButton icon={SlidersHorizontal} className="rounded-xl px-3 py-2 text-sm">
-                  Show Columns
-                </ComingSoonButton>
                 {selectedIds.length > 0 ? (
                   <button
                     type="button"

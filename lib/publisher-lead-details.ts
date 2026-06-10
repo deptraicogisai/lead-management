@@ -243,8 +243,8 @@ export function mapLeadDocToPublisherRow(input: {
   userAgent?: string;
   validationErrors?: string[];
   payload: Record<string, unknown>;
-  sellerName: string;
-  sellerIndex: number;
+  publisherName: string;
+  publisherIndex: number;
   verticalName: string;
   verticalIndex: number;
   mappingLabel?: string;
@@ -262,9 +262,9 @@ export function mapLeadDocToPublisherRow(input: {
     createdAt: input.createdAt,
     statusLabel: input.validationStatus === "success" ? "Sold" : "Reject",
     tier: 0,
-    publisherLabel: input.sellerIndex
-      ? `[${input.sellerIndex}] ${input.sellerName}`
-      : input.sellerName,
+    publisherLabel: input.publisherIndex
+      ? `[${input.publisherIndex}] ${input.publisherName}`
+      : input.publisherName,
     redirectLabel: input.mappingLabel || "—",
     publisherPayout: readPayloadMoney(payload, ["price", "payout", "publisher_payout", "amount"]),
     adm: readPayloadMoney(payload, ["adm", "admin_fee"]),

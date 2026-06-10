@@ -177,19 +177,19 @@ export default function SellersPage() {
             onClick={handleCreate}
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
           >
-            Create Seller
+            Create Publisher
           </button>
         }
       >
         <ListTableContainer
           isInitialLoad={isInitialLoad}
           isRefreshing={isRefreshing}
-          loadingMessage="Loading sellers..."
+          loadingMessage="Loading publishers..."
         >
           <DataTable<Seller>
             columns={columns}
             rows={sellerRows}
-            emptyMessage="No sellers yet. Create your first seller to get started."
+            emptyMessage="No publishers yet. Create your first publisher to get started."
           />
         </ListTableContainer>
       </PageSection>
@@ -208,7 +208,7 @@ export default function SellersPage() {
 
       <Modal
         open={isFormOpen}
-        title={editingSeller ? `Edit Seller - ${editingSeller.name}` : "Create Seller"}
+        title={editingSeller ? `Edit Publisher - ${editingSeller.name}` : "Create Publisher"}
         onClose={closeFormModal}
         panelClassName="max-w-2xl"
       >
@@ -232,8 +232,8 @@ export default function SellersPage() {
 
       <Modal
         open={deleteTarget !== null}
-        title="Delete Seller"
-        description={deleteTarget ? `Delete seller "${deleteTarget.name}"?` : undefined}
+        title="Delete Publisher"
+        description={deleteTarget ? `Delete publisher "${deleteTarget.name}"?` : undefined}
         onClose={() => setDeleteTarget(null)}
         actions={
           <>

@@ -34,7 +34,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
     event.preventDefault();
     const newErrors: Record<string, string> = {};
 
-    if (!form.name.trim()) newErrors.name = "Seller name is required.";
+    if (!form.name.trim()) newErrors.name = "Publisher name is required.";
     if (!form.email.includes("@")) newErrors.email = "A valid email is required.";
     if (!form.region.trim()) newErrors.region = "Region is required.";
 
@@ -55,7 +55,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
-        <FieldLabel htmlFor="seller-name" label="Seller Name" />
+        <FieldLabel htmlFor="seller-name" label="Publisher Name" />
         <Input
           id="seller-name"
           value={form.name}
@@ -66,7 +66,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
       </div>
 
       <div>
-        <FieldLabel htmlFor="seller-email" label="Seller Email" />
+        <FieldLabel htmlFor="seller-email" label="Publisher Email" />
         <Input
           id="seller-email"
           type="email"
@@ -78,7 +78,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
       </div>
 
       <div>
-        <FieldLabel htmlFor="seller-region" label="Seller Region" />
+        <FieldLabel htmlFor="seller-region" label="Publisher Region" />
         <Input
           id="seller-region"
           value={form.region}
@@ -89,7 +89,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
       </div>
 
       <div>
-        <FieldLabel htmlFor="seller-status" label="Seller Status" />
+        <FieldLabel htmlFor="seller-status" label="Publisher Status" />
         <select
           id="seller-status"
           value={form.status}
@@ -102,7 +102,7 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
       </div>
 
       <div className="flex items-center gap-3">
-        <PrimaryButton type="submit">{isEditing ? "Update Seller" : "Create Seller"}</PrimaryButton>
+        <PrimaryButton type="submit">{isEditing ? "Update Publisher" : "Create Publisher"}</PrimaryButton>
         {isEditing && onCancelEdit ? (
           <button
             type="button"
