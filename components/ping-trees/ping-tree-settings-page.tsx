@@ -12,10 +12,13 @@ import {
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/form-controls";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
 import {
+  PING_TREE_CAMPAIGN_TYPE_TABS,
   PING_TREE_STRATEGY_OPTIONS,
   type PingTreeCampaignCard,
+  type PingTreeCampaignType,
   type PingTreeRecord,
 } from "@/lib/ping-tree";
 import { cn } from "@/lib/utils";
@@ -120,24 +123,6 @@ function ColumnStatsBar({ disabled, active, total }: { disabled: number; active:
       <span className="mx-3">Active: {active}</span>
       <span>Total: {total}</span>
     </div>
-  );
-}
-
-function StatusBadge({ status, compact = false }: { status: string; compact?: boolean }) {
-  const isActive = status === "Active";
-
-  return (
-    <span
-      className={cn(
-        "inline-block rounded px-2 py-0.5 font-semibold",
-        compact ? "text-[10px]" : "text-xs",
-        isActive
-          ? "bg-emerald-600 text-white"
-          : "bg-rose-500 text-white"
-      )}
-    >
-      {status}
-    </span>
   );
 }
 
@@ -259,7 +244,7 @@ function ActiveCampaignCard({
       <div className="flex items-start gap-3 p-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start gap-2">
-            <StatusBadge status={card.status} />
+            <StatusBadge status={card.status} variant="solid" />
             <p className="text-sm leading-snug text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
           </div>
         </div>
@@ -339,7 +324,7 @@ function InactiveCampaignCard({
       <div className="flex items-start justify-between gap-2 p-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={card.status} compact />
+            <StatusBadge status={card.status} variant="solid" compact />
             <p className="truncate text-xs text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
           </div>
         </div>
@@ -376,6 +361,8 @@ function InactiveCampaignCard({
 }
 
 export function PingTreeSettingsPage() {
+  const [activeTab, setActiveTab] = useState<PingTreeCampaignType>("Redirect");
+  const [trees, setTrees] = useState<PingTreeRecord[]>([]);
   const [tree, setTree] = useState<PingTreeRecord | null>(null);
   const [pingTreeList, setPingTreeList] = useState<PingTreeCampaignCard[]>([]);
   const [notInPingTree, setNotInPingTree] = useState<PingTreeCampaignCard[]>([]);
@@ -490,12 +477,37 @@ export function PingTreeSettingsPage() {
     void (async () => {
       const response = await fetch("/api/ping-trees");
       if (!response.ok) return;
-      const trees = (await response.json()) as PingTreeRecord[];
-      if (trees[0]?.id) {
-        await loadTree(trees[0].id);
-      }
+      const fetchedTrees = (await response.json()) as PingTreeRecord[];
+      setTrees(fetchedTrees);
     })();
-  }, [loadTree]);
+  }, []);
+
+  useEffect(() => {
+    const matchedTree = trees.find((item) => item.campaignType === activeTab);
+    if (!matchedTree?.id) return;
+
+    void loadTree(matchedTree.id);
+  }, [activeTab, loadTree, trees]);
+
+  const handleTabChange = (tab: PingTreeCampaignType) => {
+    if (tab === activeTab) return;
+
+    setActiveSearch("");
+    setInactiveFilter("");
+    setMessage("");
+    setDragSession(null);
+    setDropTarget(null);
+    setDropIndicator(null);
+    setPointerPosition(null);
+    dropTargetKeyRef.current = "";
+    dropTargetRef.current = null;
+    setTree(null);
+    setPingTreeList([]);
+    setNotInPingTree([]);
+    setPriorities({});
+    setIsLoading(true);
+    setActiveTab(tab);
+  };
 
   const saveTree = useCallback(
     async (nextActiveIds: string[], nextInactiveIds: string[], nextPriorities: Record<string, number>) => {
@@ -796,7 +808,25 @@ export function PingTreeSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageSection title={`${tree.name} Ping Tree edit`}>
+      <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/50">
+        {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => handleTabChange(tab)}
+            className={cn(
+              "flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
+              activeTab === tab
+                ? "bg-white text-emerald-800 shadow-sm dark:bg-slate-900 dark:text-emerald-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <PageSection title={`${activeTab} Ping Tree`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">

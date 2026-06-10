@@ -2,19 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  CircleHelp,
-  Download,
-  Settings2,
-  UserRound,
-} from "lucide-react";
+import { CircleHelp, Plus, Settings2, UserRound } from "lucide-react";
 import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
+import { ClearButton, ComingSoonButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Input } from "@/components/ui/form-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
+import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   BUYER_LABEL_OPTIONS,
   BUYER_MANAGER_OPTIONS,
@@ -23,6 +21,7 @@ import {
   type BuyerCreatePayload,
   type BuyerListRecord,
 } from "@/lib/buyer";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
 type BuyerListResponse = {
@@ -41,7 +40,7 @@ function parseDateInput(value: string) {
 
 export default function BuyersPage() {
   const [buyerRows, setBuyerRows] = useState<BuyerListRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isSaving, setIsSaving] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -68,7 +67,7 @@ export default function BuyersPage() {
 
   useEffect(() => {
     const fetchBuyers = async () => {
-      setIsLoading(true);
+      beginLoad();
       try {
         const params = new URLSearchParams({
           page: String(page),
@@ -82,7 +81,7 @@ export default function BuyersPage() {
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     };
 
@@ -182,19 +181,27 @@ export default function BuyersPage() {
       label: (
         <span className="inline-flex items-center gap-1.5">
           <span>ID</span>
-          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500">
+          <span
+            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500"
+            title="Buyer record identifier"
+          >
             <CircleHelp size={10} strokeWidth={2.5} />
           </span>
-          <ChevronDown size={14} className="text-slate-500" aria-hidden />
         </span>
       ),
       render: (row) => (
-        <Link href={`/buyers/${encodeURIComponent(row.id)}`} className="inline-flex transition hover:opacity-80">
-          <IdBadge id={row.displayId} />
+        <Link href={`/buyers/${encodeURIComponent(row.id)}`} className="group inline-flex">
+          <IdBadge id={row.displayId} interactive />
         </Link>
       ),
     },
-    { key: "name", label: "Name" },
+    {
+      key: "name",
+      label: "Name",
+      render: (row) => (
+        <DetailNameLink href={`/buyers/${encodeURIComponent(row.id)}`}>{row.name}</DetailNameLink>
+      ),
+    },
     {
       key: "label",
       label: "Label",
@@ -234,53 +241,25 @@ export default function BuyersPage() {
     {
       key: "accounting",
       label: "Accounting Set",
-      render: () => (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-        >
-          <Settings2 size={12} />
-          <span>Set Invoice Setting</span>
-        </button>
-      ),
+      render: () => <ComingSoonButton icon={Settings2}>Set Invoice Setting</ComingSoonButton>,
     },
     {
       key: "manager",
       label: "Manager",
       render: (row) =>
         row.personalManagerName ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-          >
-            <UserRound size={12} />
-            <span>{getManagerLabel(row.personalManagerId, row.personalManagerName)}</span>
-          </button>
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+            <UserRound size={14} className="text-slate-500" />
+            {getManagerLabel(row.personalManagerId, row.personalManagerName)}
+          </span>
         ) : (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-800 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-          >
-            <UserRound size={12} />
-            <span>Set Buyer Agent</span>
-          </button>
+          <ComingSoonButton icon={UserRound}>Set Buyer Agent</ComingSoonButton>
         ),
     },
     {
       key: "status",
       label: "Status",
-      render: (row) => (
-        <span
-          className={cn(
-            "rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-            row.status === "Active"
-              ? "border-emerald-600 bg-white text-emerald-700 dark:border-emerald-500 dark:bg-transparent dark:text-emerald-300"
-              : "border-red-500 bg-white text-red-600 dark:border-red-500 dark:bg-transparent dark:text-red-300"
-          )}
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.status} variant="outline" />,
     },
     {
       key: "integrations",
@@ -294,11 +273,7 @@ export default function BuyersPage() {
     {
       key: "questionnaireStatus",
       label: "Questionnaire",
-      render: (row) => (
-        <span className="rounded-full border border-red-400 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:border-red-500 dark:text-red-300">
-          {row.questionnaireStatus}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.questionnaireStatus} variant="outline" />,
     },
     {
       key: "quality",
@@ -376,20 +351,8 @@ export default function BuyersPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={handleSearch}
-                className="rounded-xl border border-emerald-700 bg-emerald-800 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                Clear all
-              </button>
+              <SearchButton onClick={handleSearch} />
+              <ClearButton onClick={clearFilters} />
             </div>
           </div>
 
@@ -435,33 +398,28 @@ export default function BuyersPage() {
                     placeholder=""
                   />
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                >
-                  <Download size={15} />
-                  <span>Export</span>
-                  <ChevronDown size={14} />
-                </button>
+                <ExportButton disabled />
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(true)}
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
                 >
+                  <Plus size={15} />
                   Add New Buyer
                 </button>
-                <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white dark:border-emerald-500 dark:bg-emerald-600">
-                  {selectedIds.length} selected
-                  <ChevronDown size={14} />
-                </div>
+                {selectedIds.length > 0 ? (
+                  <span className="inline-flex items-center rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {selectedIds.length} selected
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            {isLoading ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                Loading buyers...
-              </div>
-            ) : (
+            <ListTableContainer
+              isInitialLoad={isInitialLoad}
+              isRefreshing={isRefreshing}
+              loadingMessage="Loading buyers..."
+            >
               <DataTable<BuyerListRecord>
                 columns={columns}
                 rows={filteredRows}
@@ -470,7 +428,7 @@ export default function BuyersPage() {
                 onToggleRow={toggleRow}
                 onToggleAllRows={toggleAllRows}
               />
-            )}
+            </ListTableContainer>
           </div>
 
           <PaginationControls
@@ -478,6 +436,7 @@ export default function BuyersPage() {
             totalPages={totalPages}
             totalItems={totalItems}
             pageSize={pageSize}
+            pageSizeOptions={[15, 50]}
             onPageSizeChange={(value) => {
               setPageSize(value);
               setPage(1);

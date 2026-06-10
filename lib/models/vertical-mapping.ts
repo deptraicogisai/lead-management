@@ -17,6 +17,14 @@ const emailDuplicateRuleSchema = new Schema(
   { _id: false }
 );
 
+const mappingFieldOptionSchema = new Schema(
+  {
+    label: { type: String, required: true, trim: true },
+    value: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
 const mappingFieldSchema = new Schema({
   sourceVerticalFieldId: { type: String, required: false, trim: true },
   fieldName: { type: String, required: true, trim: true },
@@ -26,37 +34,63 @@ const mappingFieldSchema = new Schema({
   format: { type: String, required: false, trim: true },
   emailDuplicateRule: { type: emailDuplicateRuleSchema, required: false, default: undefined },
   ignoreValues: { type: [String], default: [] },
+  displayArrayMapping: { type: Boolean, required: true, default: false },
+  dataTypeFilter: { type: String, required: false, trim: true, default: null },
+  options: { type: [mappingFieldOptionSchema], default: [] },
 });
 
 const verticalMappingSchema = new Schema(
   {
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: false, index: true },
     sellerRef: { type: Schema.Types.ObjectId, ref: "Seller", required: false, index: true },
+    apiName: { type: String, trim: true, default: "" },
+    status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     fields: { type: [mappingFieldSchema], default: [] },
     apiRequest: { type: apiRequestSchema, required: false },
   },
   { timestamps: true }
 );
 
+verticalMappingSchema.index({ verticalRef: 1, sellerRef: 1 });
 verticalMappingSchema.index(
-  { verticalRef: 1, sellerRef: 1 },
+  { "apiRequest.apiKey": 1 },
   {
     unique: true,
     partialFilterExpression: {
-      verticalRef: { $exists: true },
-      sellerRef: { $exists: true },
+      "apiRequest.apiKey": { $type: "string" },
     },
   }
 );
 
 let referenceMigrationPromise: Promise<void> | null = null;
 
+async function dropLegacySellerVerticalUniqueIndexes(db: NonNullable<typeof mongoose.connection.db>) {
+  const indexes = await db.collection("verticalmappings").indexes();
+
+  for (const index of indexes) {
+    const keys = index.key as Record<string, number>;
+    const isSellerVerticalIndex = keys.verticalRef === 1 && keys.sellerRef === 1;
+
+    if (index.unique && isSellerVerticalIndex && index.name) {
+      try {
+        await db.collection("verticalmappings").dropIndex(index.name);
+      } catch {
+        // Index may already be removed.
+      }
+    }
+  }
+}
+
 export async function ensureVerticalMappingReferencesMigrated() {
+  const db = mongoose.connection.db;
+  if (!db) {
+    return;
+  }
+
+  await dropLegacySellerVerticalUniqueIndexes(db);
+
   if (!referenceMigrationPromise) {
     referenceMigrationPromise = (async () => {
-      const db = mongoose.connection.db;
-      if (!db) return;
-
       const mappings = await db
         .collection("verticalmappings")
         .find(
@@ -95,6 +129,22 @@ export async function ensureVerticalMappingReferencesMigrated() {
           );
         }
       }
+
+      const mappingsMissingApiKey = await VerticalMappingModel.find({
+        sellerRef: { $exists: true, $ne: null },
+        $or: [
+          { apiRequest: { $exists: false } },
+          { "apiRequest.apiKey": { $exists: false } },
+          { "apiRequest.apiKey": "" },
+        ],
+      });
+
+      for (const mapping of mappingsMissingApiKey) {
+        const { ensureMappingApiRequest } = await import("@/lib/mapping-api-request");
+        await ensureMappingApiRequest(mapping);
+      }
+
+      await VerticalMappingModel.syncIndexes();
     })().catch((error) => {
       referenceMigrationPromise = null;
       throw error;

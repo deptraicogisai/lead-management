@@ -1,13 +1,27 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Filter, LayoutGrid, Pencil, Plus, Shield, Trash2 } from "lucide-react";
+import {
+  Ban,
+  Calendar,
+  Copy,
+  Filter,
+  LayoutGrid,
+  Pencil,
+  Plug,
+  Plus,
+  Settings,
+  Shield,
+  Trash2,
+  Zap,
+} from "lucide-react";
+import { BackLink, IconActionButton } from "@/components/ui/action-buttons";
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
 import {
   CAMPAIGN_STATUS_OPTIONS,
@@ -16,7 +30,9 @@ import {
   DUPLICATE_PERIOD_OPTIONS,
   SCHEDULE_DAY_OPTIONS,
   TIMEZONE_OPTIONS,
+  findScheduleRuleOverlap,
   getMaxRangeOptions,
+  getScheduleRuleOverlapMessage,
   isGeneralFilterRangeValid,
   validateGeneralFilters,
   type CampaignRecord,
@@ -230,6 +246,17 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const handleSaveScheduleRule = async (rule: Omit<CampaignScheduleRule, "id">) => {
     if (!campaign) return;
 
+    if (rule.days.length === 0) {
+      showNotice("Invalid Schedule", "Please select at least one day.", "error");
+      return;
+    }
+
+    const overlap = findScheduleRuleOverlap(rule, campaign.scheduleRules, editingScheduleRule?.id ?? null);
+    if (overlap) {
+      showNotice("Schedule Overlap", getScheduleRuleOverlapMessage(rule, overlap), "error");
+      return;
+    }
+
     if (editingScheduleRule) {
       const nextRules = campaign.scheduleRules.map((item) =>
         item.id === editingScheduleRule.id ? { ...rule, id: editingScheduleRule.id } : item
@@ -249,12 +276,12 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     }
   };
 
-  const tabs: Array<{ id: CampaignTab; label: string }> = [
-    { id: "general", label: "General" },
-    { id: "duplicates", label: "Duplicates" },
-    { id: "filters", label: "Filters" },
-    { id: "schedule", label: "Schedule" },
-    { id: "integration", label: "Integration" },
+  const tabs: Array<{ id: CampaignTab; label: string; icon: typeof Settings }> = [
+    { id: "general", label: "General", icon: Settings },
+    { id: "duplicates", label: "Duplicates", icon: Copy },
+    { id: "filters", label: "Filters", icon: Filter },
+    { id: "schedule", label: "Schedule", icon: Calendar },
+    { id: "integration", label: "Integration", icon: Plug },
   ];
 
   if (isLoading || !campaign) {
@@ -270,29 +297,35 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
   return (
     <div className="space-y-6">
+      <BackLink href="/campaigns" label="Back to Campaigns" />
+
       <PageSection title={`${campaign.name} Campaign Setup`}>
         <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm font-medium transition",
-                activeTab === tab.id
-                  ? "bg-emerald-800 text-white"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  activeTab === tab.id
+                    ? "bg-emerald-800 text-white"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                )}
+              >
+                <Icon size={15} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {activeTab === "general" ? (
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">Campaign: {campaign.status}</span>
+              <StatusBadge status={campaign.status} className="px-3 py-1" />
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{campaign.productLabel}</span>
             </div>
 
@@ -356,12 +389,14 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               >
                 {isSaving ? "Saving..." : "Save Global Settings"}
               </PrimaryButton>
-              <button type="button" onClick={() => setDeleteConfirmOpen(true)} className="rounded-xl border border-orange-300 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50">
+              <IconActionButton
+                icon={Trash2}
+                variant="danger"
+                onClick={() => setDeleteConfirmOpen(true)}
+                className="rounded-xl px-4 py-2"
+              >
                 Delete Campaign
-              </button>
-              <Link href="/campaigns" className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100">
-                Back to Campaigns
-              </Link>
+              </IconActionButton>
             </div>
           </div>
         ) : null}
@@ -645,38 +680,30 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                         <td className="px-4 py-3 text-slate-400">-</td>
                         <td className="px-4 py-3 text-slate-400">-</td>
                         <td className="px-4 py-3">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
-                              rule.active
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                            )}
-                          >
-                            {rule.active ? "Active" : "Inactive"}
-                          </span>
+                          <StatusBadge status={rule.active ? "Active" : "Inactive"} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
+                            <IconActionButton
+                              icon={Pencil}
                               onClick={() => openEditScheduleRuleModal(rule)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                              className="rounded-lg px-2 py-1 text-xs"
+                              aria-label="Edit schedule rule"
                             >
-                              <Pencil size={12} />
                               Edit
-                            </button>
-                            <button
-                              type="button"
+                            </IconActionButton>
+                            <IconActionButton
+                              icon={Trash2}
+                              variant="danger"
                               onClick={() => {
                                 const nextRules = campaign.scheduleRules.filter((item) => item.id !== rule.id);
                                 void saveSection("schedule", { scheduleRules: nextRules }, "Schedule rule deleted successfully.");
                               }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600"
+                              className="rounded-lg px-2 py-1 text-xs"
+                              aria-label="Delete schedule rule"
                             >
-                              <Trash2 size={12} />
                               Delete
-                            </button>
+                            </IconActionButton>
                           </div>
                         </td>
                       </tr>
@@ -695,42 +722,31 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         {activeTab === "integration" ? (
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setIntegrationSubTab("integration-settings")}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-medium",
-                  integrationSubTab === "integration-settings"
-                    ? "bg-emerald-800 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                )}
-              >
-                Integration Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => setIntegrationSubTab("pause-settings")}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-medium",
-                  integrationSubTab === "pause-settings"
-                    ? "bg-emerald-800 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                )}
-              >
-                Campaign Pause Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => setIntegrationSubTab("trigger-silent")}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-medium",
-                  integrationSubTab === "trigger-silent"
-                    ? "bg-emerald-800 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                )}
-              >
-                Trigger Silent Campaigns
-              </button>
+              {(
+                [
+                  { id: "integration-settings" as const, label: "Integration Settings", icon: Plug },
+                  { id: "pause-settings" as const, label: "Campaign Pause Settings", icon: Calendar },
+                  { id: "trigger-silent" as const, label: "Trigger Silent Campaigns", icon: Zap },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setIntegrationSubTab(tab.id)}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium",
+                      integrationSubTab === tab.id
+                        ? "bg-emerald-800 text-white"
+                        : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    )}
+                  >
+                    <Icon size={15} />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
 
             {integrationSubTab === "integration-settings" ? (

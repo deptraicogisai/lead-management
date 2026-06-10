@@ -17,6 +17,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { TwigTemplateInput } from "@/components/integration-builder/twig-template-input";
+import { BackLink, ComingSoonButton } from "@/components/ui/action-buttons";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
@@ -963,13 +964,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
           </span>
         </div>
 
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-        >
-          <span>Logs</span>
-          <ExternalLink size={15} />
-        </button>
+        <ComingSoonButton icon={ExternalLink} className="rounded-xl px-4 py-2 text-sm">
+          Logs
+        </ComingSoonButton>
       </div>
 
       <div className="px-6 py-8">
@@ -1702,6 +1699,8 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   return (
     <div className="space-y-6">
+      <BackLink href="/integration-builder" label="Back to Integration Builder" />
+
       <PageSection title="Builder">
         <div className="space-y-5">
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">

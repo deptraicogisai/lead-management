@@ -224,6 +224,66 @@ export function defaultScheduleRule(): Omit<CampaignScheduleRule, "id"> {
   };
 }
 
+type ScheduleRuleTimeLike = Pick<
+  CampaignScheduleRule,
+  "startHour" | "startMinute" | "endHour" | "endMinute" | "days"
+>;
+
+function scheduleRuleTimeToMinutes(hour: string, minute: string) {
+  return Number(hour) * 60 + Number(minute);
+}
+
+function scheduleTimeRangesOverlap(ruleA: ScheduleRuleTimeLike, ruleB: ScheduleRuleTimeLike) {
+  const sharedDays = ruleA.days.filter((day) => ruleB.days.includes(day));
+  if (sharedDays.length === 0) return false;
+
+  const startA = scheduleRuleTimeToMinutes(ruleA.startHour, ruleA.startMinute);
+  const endA = scheduleRuleTimeToMinutes(ruleA.endHour, ruleA.endMinute);
+  const startB = scheduleRuleTimeToMinutes(ruleB.startHour, ruleB.startMinute);
+  const endB = scheduleRuleTimeToMinutes(ruleB.endHour, ruleB.endMinute);
+
+  return startA <= endB && startB <= endA;
+}
+
+export function findScheduleRuleOverlap(
+  candidate: Omit<CampaignScheduleRule, "id"> & { id?: string },
+  existingRules: CampaignScheduleRule[],
+  excludeRuleId?: string | null
+) {
+  for (const rule of existingRules) {
+    if (excludeRuleId && rule.id === excludeRuleId) continue;
+    if (scheduleTimeRangesOverlap(candidate, rule)) {
+      return rule;
+    }
+  }
+
+  return null;
+}
+
+export function getScheduleRuleOverlapMessage(
+  candidate: Omit<CampaignScheduleRule, "id">,
+  overlapping: CampaignScheduleRule
+) {
+  const sharedDays = candidate.days.filter((day) => overlapping.days.includes(day));
+  return `This schedule overlaps with an existing rule (${overlapping.action}, ${sharedDays.join(", ")}, ${overlapping.startHour}:${overlapping.startMinute} - ${overlapping.endHour}:${overlapping.endMinute}). Please adjust the days or time range.`;
+}
+
+export function validateScheduleRulesNoOverlap(rules: CampaignScheduleRule[]) {
+  for (let index = 0; index < rules.length; index += 1) {
+    const rule = rules[index];
+    const overlap = findScheduleRuleOverlap(
+      rule,
+      rules.filter((_, otherIndex) => otherIndex !== index)
+    );
+
+    if (overlap) {
+      return getScheduleRuleOverlapMessage(rule, overlap);
+    }
+  }
+
+  return null;
+}
+
 type CampaignDoc = {
   _id?: { toString(): string };
   displayId: number;

@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, CircleHelp, Download, Filter, Plus, Settings2 } from "lucide-react";
+import { CircleHelp, Copy, Download, Filter, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ClearButton, ComingSoonButton, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PageSection } from "@/components/ui/state";
+import { useListLoadState } from "@/lib/use-list-load-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
 
@@ -33,7 +37,7 @@ function formatDateTime(value: string) {
 export default function IntegrationBuilderPage() {
   const [records, setRecords] = useState<IntegrationBuilderRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isLoadingVerticals, setIsLoadingVerticals] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -50,10 +54,15 @@ export default function IntegrationBuilderPage() {
   });
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({});
   const [reloadKey, setReloadKey] = useState(0);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    { mode: "single"; record: IntegrationBuilderRecord } | { mode: "bulk"; ids: string[] } | null
+  >(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     const fetchRecords = async () => {
-      setIsLoading(true);
+      beginLoad();
       setLoadError("");
 
       try {
@@ -70,12 +79,12 @@ export default function IntegrationBuilderPage() {
         setLoadError("Failed to load integration builder records.");
         setRecords([]);
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     };
 
     void fetchRecords();
-  }, [reloadKey]);
+  }, [beginLoad, endLoad, reloadKey]);
 
   useEffect(() => {
     const fetchVerticals = async () => {
@@ -121,10 +130,13 @@ export default function IntegrationBuilderPage() {
           >
             <CircleHelp size={10} strokeWidth={2.5} />
           </span>
-          <ChevronDown size={14} className="text-slate-500 dark:text-slate-400" aria-hidden />
         </span>
       ),
-      render: (row) => <IdBadge id={row.displayId} />,
+      render: (row) => (
+        <Link href={`/integration-builder/${encodeURIComponent(row.id)}`} className="group inline-flex">
+          <IdBadge id={row.displayId} interactive />
+        </Link>
+      ),
     },
     {
       key: "name",
@@ -141,20 +153,7 @@ export default function IntegrationBuilderPage() {
     {
       key: "status",
       label: "Status",
-      render: (row) => (
-        <span
-          className={cn(
-            "rounded-full px-2 py-1 text-xs font-semibold",
-            row.status === "Active"
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-              : row.status === "Paused"
-                ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-          )}
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.status} />,
     },
     { key: "postingType", label: "Posting Type" },
     {
@@ -183,17 +182,19 @@ export default function IntegrationBuilderPage() {
           >
             Configure
           </Link>
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
+          <ComingSoonButton icon={Copy} className="rounded-lg px-3 py-1.5">
             Clone
-          </button>
+          </ComingSoonButton>
+          <ComingSoonButton icon={Download} className="rounded-lg border-blue-200 px-3 py-1.5 text-blue-700 dark:border-blue-500/40 dark:text-blue-200">
+            Export
+          </ComingSoonButton>
           <button
             type="button"
-            className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
+            onClick={() => setDeleteConfirm({ mode: "single", record: row })}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
           >
-            Export
+            <Trash2 size={13} />
+            <span>Remove</span>
           </button>
         </div>
       ),
@@ -233,6 +234,56 @@ export default function IntegrationBuilderPage() {
   const handleCloseAddModal = () => {
     setIsAddModalOpen(false);
     resetAddForm();
+  };
+
+  const deleteRecordsByIds = async (idsToDelete: string[]) => {
+    if (idsToDelete.length === 0) return { deletedCount: 0, errorMessage: "" };
+
+    let deletedCount = 0;
+    let errorMessage = "";
+
+    for (const id of idsToDelete) {
+      const response = await fetch(`/api/integration-builder/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        errorMessage = result?.message ?? "Failed to remove integration builder record.";
+        break;
+      }
+
+      deletedCount += 1;
+    }
+
+    return { deletedCount, errorMessage };
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm) return;
+
+    setIsDeleting(true);
+    setDeleteError("");
+
+    const idsToDelete =
+      deleteConfirm.mode === "single" ? [deleteConfirm.record.id] : deleteConfirm.ids;
+    const { deletedCount, errorMessage } = await deleteRecordsByIds(idsToDelete);
+    const removedIds = idsToDelete.slice(0, deletedCount);
+
+    if (removedIds.length > 0) {
+      setRecords((current) => current.filter((record) => !removedIds.includes(record.id)));
+      setSelectedIds((current) => current.filter((id) => !removedIds.includes(id)));
+    }
+
+    if (errorMessage) {
+      setDeleteError(errorMessage);
+      setIsDeleting(false);
+      return;
+    }
+
+    setDeleteConfirm(null);
+    setIsDeleting(false);
   };
 
   const handleAddRecord = async () => {
@@ -335,17 +386,8 @@ export default function IntegrationBuilderPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <PrimaryButton type="button" className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500">
-                Search
-              </PrimaryButton>
-
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                Clear all
-              </button>
+              <SearchButton />
+              <ClearButton onClick={clearFilters} />
             </div>
           </div>
 
@@ -362,13 +404,7 @@ export default function IntegrationBuilderPage() {
                   <Filter size={14} />
                   <span>Filter</span>
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <Download size={15} />
-                  <span>Export</span>
-                </button>
+                <ExportButton disabled />
                 <button
                   type="button"
                   onClick={handleOpenAddModal}
@@ -377,26 +413,34 @@ export default function IntegrationBuilderPage() {
                   <Plus size={15} />
                   <span>Add New Record</span>
                 </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                >
-                  <Settings2 size={15} />
-                  <span>Show Columns</span>
-                </button>
-                <div className="rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white dark:border-emerald-500 dark:bg-emerald-600">
-                  {selectedIds.length} selected
-                </div>
+                <ComingSoonButton icon={SlidersHorizontal} className="rounded-xl px-3 py-2 text-sm">
+                  Show Columns
+                </ComingSoonButton>
+                {selectedIds.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+                  >
+                    <Trash2 size={15} />
+                    <span>Remove ({selectedIds.length})</span>
+                  </button>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                    0 selected
+                  </div>
+                )}
               </div>
             </div>
 
             {loadError ? <p className="mb-4 text-sm text-red-600 dark:text-red-300">{loadError}</p> : null}
+            {deleteError ? <p className="mb-4 text-sm text-red-600 dark:text-red-300">{deleteError}</p> : null}
 
-            {isLoading ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                Loading integration builder records...
-              </div>
-            ) : (
+            <ListTableContainer
+              isInitialLoad={isInitialLoad}
+              isRefreshing={isRefreshing}
+              loadingMessage="Loading integration builder records..."
+            >
               <DataTable<IntegrationBuilderRecord>
                 columns={columns}
                 rows={rows}
@@ -405,7 +449,7 @@ export default function IntegrationBuilderPage() {
                 onToggleRow={toggleRow}
                 onToggleAllRows={toggleAllRows}
               />
-            )}
+            </ListTableContainer>
           </div>
         </div>
       </PageSection>
@@ -469,6 +513,47 @@ export default function IntegrationBuilderPage() {
           <FormError error={addFormErrors.form} />
         </div>
       </Modal>
+
+      <Modal
+        open={deleteConfirm !== null}
+        title={deleteConfirm?.mode === "bulk" ? "Remove Selected Records" : "Remove Integration"}
+        description={
+          deleteConfirm?.mode === "single"
+            ? `Remove integration "${deleteConfirm.record.name}"? This action cannot be undone.`
+            : deleteConfirm?.mode === "bulk"
+              ? `Remove ${deleteConfirm.ids.length} selected integration record(s)? This action cannot be undone.`
+              : undefined
+        }
+        onClose={() => {
+          if (!isDeleting) {
+            setDeleteConfirm(null);
+            setDeleteError("");
+          }
+        }}
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => {
+                setDeleteConfirm(null);
+                setDeleteError("");
+              }}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleConfirmDelete()}
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 dark:bg-red-500 dark:hover:bg-red-400"
+            >
+              {isDeleting ? "Removing..." : "Remove"}
+            </button>
+          </>
+        }
+      />
     </div>
   );
 }

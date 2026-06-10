@@ -54,7 +54,8 @@ export async function GET(_: Request, context: Params) {
     }
 
     const lookup = await buildCampaignLookupContext();
-    const campaigns = await CampaignModel.find().sort({ displayId: -1 }).lean();
+    const treeCampaignType = tree.campaignType === "Silent" ? "Silent" : "Redirect";
+    const campaigns = await CampaignModel.find({ campaignType: treeCampaignType }).sort({ displayId: -1 }).lean();
     const records = campaigns.map((campaign) => toCampaignRecord(campaign, lookup));
 
     const activeIds = new Set(tree.activeCampaignIds ?? []);

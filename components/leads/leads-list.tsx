@@ -5,8 +5,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { PrimaryButton } from "@/components/ui/form-controls";
 import { ListControls } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { useListLoadState } from "@/lib/use-list-load-state";
 
 type LeadRow = {
   id: string;
@@ -67,8 +70,7 @@ type LeadsListProps = {
 
 export function LeadsList({ title = "Leads List" }: LeadsListProps) {
   const [rows, setRows] = useState<LeadRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedRawData, setSelectedRawData] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -111,17 +113,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
     {
       key: "status",
       label: "Status",
-      render: (row) => (
-        <span
-          className={
-            row.status === "Accept"
-              ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-              : "rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-200"
-          }
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "postedAt",
@@ -160,12 +152,8 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
   const visibleRowIds = useMemo(() => rows.map((row) => row.id), [rows]);
 
   const fetchLeads = useCallback(
-    async (options?: { preserveLoadingState?: boolean }) => {
-      if (options?.preserveLoadingState) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
+    async () => {
+      beginLoad();
 
       try {
         const params = new URLSearchParams({
@@ -194,11 +182,10 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
         setTotalPages(data.totalPages);
         setSelectedIds((current) => current.filter((id) => data.items.some((row) => row.id === id)));
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        endLoad();
       }
     },
-    [page, pageSize, search]
+    [beginLoad, endLoad, page, pageSize, search]
   );
 
   useEffect(() => {
@@ -253,7 +240,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
       if (isDeleteAll) {
         setPage(1);
       }
-      await fetchLeads({ preserveLoadingState: true });
+      await fetchLeads();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Failed to delete leads.");
     } finally {
@@ -262,7 +249,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
   };
 
   const handleRefresh = async () => {
-    await fetchLeads({ preserveLoadingState: true });
+    await fetchLeads();
   };
 
   return (
@@ -280,7 +267,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
             <button
               type="button"
               onClick={() => void handleRefresh()}
-              disabled={isLoading || isRefreshing || isDeleting}
+              disabled={isInitialLoad || isRefreshing || isDeleting}
               className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
@@ -288,7 +275,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
             <button
               type="button"
               onClick={() => void handleDelete("selected")}
-              disabled={selectedIds.length === 0 || isLoading || isRefreshing || isDeleting}
+              disabled={selectedIds.length === 0 || isInitialLoad || isRefreshing || isDeleting}
               className="rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
             >
               Delete Selected ({selectedIds.length})
@@ -296,7 +283,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
             <PrimaryButton
               type="button"
               onClick={() => void handleDelete("all")}
-              disabled={totalItems === 0 || isLoading || isRefreshing || isDeleting}
+              disabled={totalItems === 0 || isInitialLoad || isRefreshing || isDeleting}
               className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400"
             >
               {isDeleting ? "Deleting..." : "Delete All"}
@@ -304,14 +291,20 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
           </>
         }
       />
-      <DataTable<LeadRow>
-        columns={columns}
-        rows={rows}
-        emptyMessage={isLoading ? "Loading leads..." : "No leads available yet."}
-        selectedRowIds={selectedIds}
-        onToggleRow={toggleRowSelection}
-        onToggleAllRows={toggleAllVisibleRows}
-      />
+      <ListTableContainer
+        isInitialLoad={isInitialLoad}
+        isRefreshing={isRefreshing}
+        loadingMessage="Loading leads..."
+      >
+        <DataTable<LeadRow>
+          columns={columns}
+          rows={rows}
+          emptyMessage="No leads available yet."
+          selectedRowIds={selectedIds}
+          onToggleRow={toggleRowSelection}
+          onToggleAllRows={toggleAllVisibleRows}
+        />
+      </ListTableContainer>
       <PaginationControls
         page={page}
         totalPages={totalPages}

@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { SpinnerIcon } from "@/components/ui/loading-indicator";
 
 export function PageSection({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -17,5 +20,5 @@ export function SkeletonCard() {
 }
 
 export function Spinner() {
-  return <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600 dark:border-slate-700 dark:border-t-blue-400" />;
+  return <SpinnerIcon size="md" />;
 }

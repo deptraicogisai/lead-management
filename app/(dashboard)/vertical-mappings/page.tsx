@@ -6,7 +6,9 @@ import { FieldLabel, FormError, PrimaryButton } from "@/components/ui/form-contr
 import { ListControls } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PageSection } from "@/components/ui/state";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import type { Seller, Vertical, VerticalMapping } from "@/lib/mock-data";
 
 type VerticalMappingListResponse = {
@@ -35,7 +37,7 @@ export default function VerticalMappingsPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [modalMessage, setModalMessage] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VerticalMapping | null>(null);
   const [page, setPage] = useState(1);
@@ -47,7 +49,7 @@ export default function VerticalMappingsPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      setIsLoading(true);
+      beginLoad();
       try {
         const mappingParams = new URLSearchParams({
           page: String(page),
@@ -77,7 +79,7 @@ export default function VerticalMappingsPage() {
           setTotalPages(mappingData.totalPages);
         }
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     };
 
@@ -236,11 +238,17 @@ export default function VerticalMappingsPage() {
           </button>
         }
       >
-        <DataTable<VerticalMapping>
-          columns={columns}
-          rows={mappings}
-          emptyMessage={isLoading ? "Loading mappings..." : "No mappings yet. Create your first vertical mapping to get started."}
-        />
+        <ListTableContainer
+          isInitialLoad={isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading mappings..."
+        >
+          <DataTable<VerticalMapping>
+            columns={columns}
+            rows={mappings}
+            emptyMessage="No mappings yet. Create your first vertical mapping to get started."
+          />
+        </ListTableContainer>
       </PageSection>
 
       <PaginationControls

@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { VerticalMappingModel } from "@/lib/models/vertical-mapping";
 
 export type MappingApiRequest = {
   apiKey: string;
@@ -11,6 +12,35 @@ type MappingWithApiRequest = {
   apiRequest?: Partial<MappingApiRequest> | null;
   save(): Promise<unknown>;
 };
+
+const MAX_API_KEY_ATTEMPTS = 8;
+
+function buildApiKey() {
+  return randomBytes(16).toString("hex").toUpperCase();
+}
+
+export function buildMappingApiRequest(sellerRef: string, apiKey = buildApiKey()): MappingApiRequest {
+  return {
+    apiKey,
+    url: `/api/${sellerRef}/lead`,
+    method: "POST",
+  };
+}
+
+export async function generateUniqueMappingApiRequest(sellerRef: string): Promise<MappingApiRequest> {
+  for (let attempt = 0; attempt < MAX_API_KEY_ATTEMPTS; attempt += 1) {
+    const apiRequest = buildMappingApiRequest(sellerRef);
+    const existing = await VerticalMappingModel.findOne({ "apiRequest.apiKey": apiRequest.apiKey })
+      .select({ _id: 1 })
+      .lean();
+
+    if (!existing) {
+      return apiRequest;
+    }
+  }
+
+  throw new Error("UNIQUE_API_KEY_FAILED");
+}
 
 function isCompleteApiRequest(apiRequest: Partial<MappingApiRequest> | null | undefined): apiRequest is MappingApiRequest {
   return Boolean(apiRequest?.apiKey && apiRequest.url && apiRequest.method);
@@ -26,14 +56,22 @@ export async function ensureMappingApiRequest(mapping: MappingWithApiRequest) {
     return null;
   }
 
-  const apiRequest: MappingApiRequest = {
-    apiKey: randomBytes(16).toString("hex").toUpperCase(),
-    url: `/api/${sellerRef}/lead`,
-    method: "POST",
-  };
+  for (let attempt = 0; attempt < MAX_API_KEY_ATTEMPTS; attempt += 1) {
+    const apiRequest = await generateUniqueMappingApiRequest(sellerRef);
+    mapping.apiRequest = apiRequest;
 
-  mapping.apiRequest = apiRequest;
-  await mapping.save();
+    try {
+      await mapping.save();
+      return apiRequest;
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === "object" && error !== null && "code" in error && (error as { code?: number }).code === 11000;
 
-  return apiRequest;
+      if (!isDuplicateKey || attempt === MAX_API_KEY_ATTEMPTS - 1) {
+        throw error;
+      }
+    }
+  }
+
+  return null;
 }

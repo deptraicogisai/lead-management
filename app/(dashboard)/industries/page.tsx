@@ -7,7 +7,9 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ListControls } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PageSection } from "@/components/ui/state";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import type { Vertical } from "@/lib/mock-data";
 
 type VerticalListResponse = {
@@ -22,7 +24,7 @@ export default function IndustriesPage() {
   const [verticalRows, setVerticalRows] = useState<Vertical[]>([]);
   const [editingVerticalId, setEditingVerticalId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [deleteTarget, setDeleteTarget] = useState<Vertical | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -35,7 +37,7 @@ export default function IndustriesPage() {
 
   useEffect(() => {
     const fetchIndustries = async () => {
-      setIsLoading(true);
+      beginLoad();
       try {
         const params = new URLSearchParams({
           page: String(page),
@@ -49,7 +51,7 @@ export default function IndustriesPage() {
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     };
 
@@ -172,11 +174,17 @@ export default function IndustriesPage() {
           </button>
         }
       >
-        <DataTable<Vertical>
-          columns={columns}
-          rows={verticalRows}
-          emptyMessage={isLoading ? "Loading verticals..." : "No verticals yet. Create your first vertical to get started."}
-        />
+        <ListTableContainer
+          isInitialLoad={isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading verticals..."
+        >
+          <DataTable<Vertical>
+            columns={columns}
+            rows={verticalRows}
+            emptyMessage="No verticals yet. Create your first vertical to get started."
+          />
+        </ListTableContainer>
       </PageSection>
 
       <PaginationControls

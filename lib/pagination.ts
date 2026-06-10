@@ -1,3 +1,11 @@
+export const PAGE_SIZE_OPTIONS = [10, 15, 50, 100, 500] as const;
+export const REPORT_PAGE_SIZE_OPTIONS = [15, 50, 100, 500, 1000] as const;
+
+export function resolvePageSizeOptions(pageSize: number, options: readonly number[]) {
+  const merged = new Set([...options, pageSize]);
+  return Array.from(merged).sort((left, right) => left - right);
+}
+
 export type PaginatedResponse<T> = {
   items: T[];
   page: number;

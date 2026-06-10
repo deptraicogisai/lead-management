@@ -2,6 +2,8 @@ import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
+import { BuyerModel } from "@/lib/models/buyer";
+import { CampaignModel } from "@/lib/models/campaign";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
   buildVerticalIndexMap,
@@ -274,5 +276,49 @@ export async function PATCH(req: Request, context: Params) {
     );
   } catch {
     return NextResponse.json({ message: "Failed to update integration builder record." }, { status: 500 });
+  }
+}
+
+export async function DELETE(_: Request, context: Params) {
+  try {
+    const { id } = await context.params;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid integration builder id." }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    await ensureVerticalCollectionMigrated();
+
+    const objectId = new Types.ObjectId(id);
+    const record = await IntegrationBuilderModel.findById(objectId).lean();
+    if (!record) {
+      return NextResponse.json({ message: "Integration builder record not found." }, { status: 404 });
+    }
+
+    const [linkedCampaign, linkedBuyer] = await Promise.all([
+      CampaignModel.findOne({ integrationRef: objectId }).select({ name: 1 }).lean(),
+      BuyerModel.findOne({ integrationRefs: objectId }).select({ company: 1 }).lean(),
+    ]);
+
+    if (linkedCampaign) {
+      return NextResponse.json(
+        { message: `Cannot remove this integration because it is used by campaign "${linkedCampaign.name}".` },
+        { status: 409 }
+      );
+    }
+
+    if (linkedBuyer) {
+      return NextResponse.json(
+        { message: `Cannot remove this integration because it is used by buyer "${linkedBuyer.company}".` },
+        { status: 409 }
+      );
+    }
+
+    await IntegrationBuilderModel.findByIdAndDelete(objectId);
+
+    return NextResponse.json({ message: "Integration builder record removed." });
+  } catch {
+    return NextResponse.json({ message: "Failed to remove integration builder record." }, { status: 500 });
   }
 }

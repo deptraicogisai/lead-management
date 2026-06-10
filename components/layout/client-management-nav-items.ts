@@ -1,4 +1,4 @@
-import { Ban, LayoutList, Rocket, Shuffle } from "lucide-react";
+import { Ban, LayoutList, Rocket, Shuffle, Users } from "lucide-react";
 
 export type ClientManagementNavItem = {
   href: string;
@@ -13,7 +13,10 @@ export type ClientManagementNavSection = {
 
 export const clientManagementSections: ClientManagementNavSection[] = [
   {
-    items: [{ href: "/buyers", label: "Buyer List", icon: LayoutList }],
+    items: [
+      { href: "/buyers", label: "Buyer List", icon: LayoutList },
+      { href: "/sellers", label: "Publisher List", icon: Users },
+    ],
   },
   {
     title: "Setup",

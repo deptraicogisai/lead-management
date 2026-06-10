@@ -5,8 +5,11 @@ import { ChevronDown, Eye } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { PageSection, Spinner } from "@/components/ui/state";
+import { PageSection } from "@/components/ui/state";
+import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   defaultPublisherLeadDetailsFilters,
   formatPayloadFieldValue,
@@ -15,6 +18,7 @@ import {
   type PublisherLeadDetailsRow,
   type PublisherLeadFieldColumn,
 } from "@/lib/publisher-lead-details";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
 type FilterOption = {
@@ -35,11 +39,6 @@ type PublisherLeadDetailsResponse = {
   };
 };
 
-type ReportTab = "lead-details" | "post-details" | "lead-body";
-
-const PAGE_SIZE_OPTIONS = [15, 50, 100, 500, 1000] as const;
-
-const METHOD_OPTIONS = ["All", "GET", "POST"];
 const STATUS_OPTIONS = ["All", "Sold", "Reject"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 
@@ -53,19 +52,6 @@ function SortableHeader({ label }: { label: string }) {
       {label}
       <span className="text-[10px] leading-none text-slate-400">▲▼</span>
     </span>
-  );
-}
-
-function QualityDots({ dots }: { dots: boolean[] }) {
-  return (
-    <div className="flex items-center gap-1">
-      {dots.map((active, index) => (
-        <span
-          key={index}
-          className={cn("h-2.5 w-2.5 rounded-full", active ? "bg-emerald-500" : "bg-orange-400")}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -102,7 +88,6 @@ function FilterSelect({
 }
 
 export function PublisherLeadDetailsPage() {
-  const [activeTab, setActiveTab] = useState<ReportTab>("lead-details");
   const [draftFilters, setDraftFilters] = useState<PublisherLeadDetailsFilters>(() => buildDefaultFilters());
   const [appliedFilters, setAppliedFilters] = useState<PublisherLeadDetailsFilters>(() => buildDefaultFilters());
   const [rows, setRows] = useState<PublisherLeadDetailsRow[]>([]);
@@ -113,7 +98,7 @@ export function PublisherLeadDetailsPage() {
   const [pageSize, setPageSize] = useState<number>(100);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewLead, setViewLead] = useState<PublisherLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -135,9 +120,6 @@ export function PublisherLeadDetailsPage() {
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.status !== "All") params.set("status", filters.status);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
-      if (filters.publisherChannel.trim()) params.set("publisherChannel", filters.publisherChannel.trim());
-      if (filters.publisherSource.trim()) params.set("publisherSource", filters.publisherSource.trim());
-      if (filters.publisherTags.trim()) params.set("publisherTags", filters.publisherTags.trim());
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
 
       return params.toString();
@@ -147,7 +129,7 @@ export function PublisherLeadDetailsPage() {
 
   const loadRows = useCallback(
     async (filters: PublisherLeadDetailsFilters, nextPage: number, nextPageSize: number) => {
-      setIsLoading(true);
+      beginLoad();
 
       try {
         const response = await fetch(`/api/reports/publisher/lead-details?${buildQuery(filters, nextPage, nextPageSize)}`);
@@ -156,13 +138,24 @@ export function PublisherLeadDetailsPage() {
         }
 
         const data = (await response.json()) as PublisherLeadDetailsResponse;
+        const loadedProducts = data.filters.products;
+
+        if (loadedProducts.length > 0 && !filters.productId) {
+          const firstProductId = loadedProducts[0].id;
+          const nextFilters = { ...filters, productId: firstProductId };
+          setProducts(loadedProducts);
+          setPublishers(data.filters.publishers);
+          setDraftFilters(nextFilters);
+          setAppliedFilters(nextFilters);
+          endLoad();
+          return;
+        }
+
         setRows(data.items);
         setFieldColumns(data.fieldColumns ?? []);
-        setPage(data.page);
-        setPageSize(data.pageSize);
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
-        setProducts(data.filters.products);
+        setProducts(loadedProducts);
         setPublishers(data.filters.publishers);
         setSelectedIds((current) => current.filter((id) => data.items.some((row) => row.id === id)));
       } catch {
@@ -170,10 +163,10 @@ export function PublisherLeadDetailsPage() {
         setTotalItems(0);
         setTotalPages(1);
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     },
-    [buildQuery]
+    [buildQuery, beginLoad, endLoad]
   );
 
   useEffect(() => {
@@ -187,8 +180,10 @@ export function PublisherLeadDetailsPage() {
 
   const handleClearAll = () => {
     const defaults = buildDefaultFilters();
-    setDraftFilters(defaults);
-    setAppliedFilters(defaults);
+    const firstProductId = products[0]?.id ?? "";
+    const nextFilters = { ...defaults, productId: firstProductId };
+    setDraftFilters(nextFilters);
+    setAppliedFilters(nextFilters);
     setPage(1);
   };
 
@@ -222,11 +217,6 @@ export function PublisherLeadDetailsPage() {
         ),
       },
       {
-        key: "qualityDots",
-        label: <SortableHeader label="Quality" />,
-        render: (row) => <QualityDots dots={row.qualityDots} />,
-      },
-      {
         key: "postedAt",
         label: <SortableHeader label="Date" />,
         render: (row) => (
@@ -238,18 +228,7 @@ export function PublisherLeadDetailsPage() {
       {
         key: "statusLabel",
         label: <SortableHeader label="Status" />,
-        render: (row) => (
-          <span
-            className={cn(
-              "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
-              row.statusLabel === "Sold"
-                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-                : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-200"
-            )}
-          >
-            {row.statusLabel}
-          </span>
-        ),
+        render: (row) => <StatusBadge status={row.statusLabel} />,
       },
       {
         key: "tier",
@@ -257,49 +236,14 @@ export function PublisherLeadDetailsPage() {
         render: (row) => row.tier,
       },
       {
-        key: "publisherLabel",
-        label: <SortableHeader label="Publisher" />,
-        render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
-      },
-      {
         key: "redirectLabel",
         label: <SortableHeader label="Redirect" />,
         render: (row) => <span className="whitespace-nowrap text-xs">{row.redirectLabel}</span>,
       },
       {
-        key: "publisherPayout",
-        label: <SortableHeader label="Publisher" />,
-        render: (row) => <span className="whitespace-nowrap">{row.publisherPayout}</span>,
-      },
-      {
-        key: "adm",
-        label: <SortableHeader label="ADM" />,
-        render: (row) => row.adm,
-      },
-      {
-        key: "ttl",
-        label: <SortableHeader label="TTL" />,
-        render: (row) => row.ttl,
-      },
-      {
-        key: "ref",
-        label: <SortableHeader label="REF" />,
-        render: (row) => row.ref,
-      },
-      {
-        key: "agn",
-        label: <SortableHeader label="AGN" />,
-        render: (row) => row.agn,
-      },
-      {
         key: "productLabel",
         label: <SortableHeader label="Product" />,
         render: (row) => <span className="whitespace-nowrap">{row.productLabel}</span>,
-      },
-      {
-        key: "channelLabel",
-        label: <SortableHeader label="Channel" />,
-        render: (row) => <span className="whitespace-nowrap">{row.channelLabel}</span>,
       },
     ];
 
@@ -314,38 +258,10 @@ export function PublisherLeadDetailsPage() {
     return [...systemColumns, ...dynamicFieldColumns];
   }, [fieldColumns]);
 
-  const tabItems: { id: ReportTab; label: string }[] = [
-    { id: "lead-details", label: "Lead Details" },
-    { id: "post-details", label: "Post Details" },
-    { id: "lead-body", label: "Lead Body" },
-  ];
-
   return (
     <PageSection title="Publisher Reports — Lead Details">
       <div className="space-y-4">
-        <div className="border-b border-slate-200 dark:border-slate-700">
-          <div className="flex flex-wrap gap-1">
-            {tabItems.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "border-b-2 px-4 py-2.5 text-sm font-medium transition",
-                  activeTab === tab.id
-                    ? "border-emerald-600 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300"
-                    : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {activeTab === "lead-details" ? (
-          <>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <FieldLabel htmlFor="lead-id" label="Lead ID" />
@@ -380,18 +296,7 @@ export function PublisherLeadDetailsPage() {
                   label="Product"
                   value={draftFilters.productId}
                   onChange={(value) => updateDraft({ productId: value })}
-                  options={[
-                    { value: "", label: "All" },
-                    ...products.map((product) => ({ value: product.id, label: product.label })),
-                  ]}
-                />
-
-                <FilterSelect
-                  id="method"
-                  label="Method"
-                  value={draftFilters.method}
-                  onChange={(value) => updateDraft({ method: value })}
-                  options={METHOD_OPTIONS.map((option) => ({ value: option, label: option }))}
+                  options={products.map((product) => ({ value: product.id, label: product.label }))}
                 />
 
                 <FilterSelect
@@ -412,36 +317,6 @@ export function PublisherLeadDetailsPage() {
                     ...publishers.map((publisher) => ({ value: publisher.id, label: publisher.label })),
                   ]}
                 />
-
-                <div>
-                  <FieldLabel htmlFor="publisher-channel" label="Publisher Channel" />
-                  <Input
-                    id="publisher-channel"
-                    value={draftFilters.publisherChannel}
-                    onChange={(event) => updateDraft({ publisherChannel: event.target.value })}
-                    placeholder="All"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor="publisher-source" label="Publisher Source" />
-                  <Input
-                    id="publisher-source"
-                    value={draftFilters.publisherSource}
-                    onChange={(event) => updateDraft({ publisherSource: event.target.value })}
-                    placeholder="All"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor="publisher-tags" label="Publisher Tags" />
-                  <Input
-                    id="publisher-tags"
-                    value={draftFilters.publisherTags}
-                    onChange={(event) => updateDraft({ publisherTags: event.target.value })}
-                    placeholder="All"
-                  />
-                </div>
 
                 <FilterSelect
                   id="redirect-status"
@@ -478,7 +353,7 @@ export function PublisherLeadDetailsPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <div className="flex flex-wrap items-center gap-1">
-                  {PAGE_SIZE_OPTIONS.map((size) => (
+                  {REPORT_PAGE_SIZE_OPTIONS.map((size) => (
                     <button
                       key={size}
                       type="button"
@@ -559,42 +434,32 @@ export function PublisherLeadDetailsPage() {
                 </div>
               </div>
 
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-slate-500 dark:text-slate-300">
-                  <Spinner />
-                  Loading lead details...
-                </div>
-              ) : (
-                <>
-                  <DataTable
-                    columns={columns}
-                    rows={rows}
-                    emptyMessage="No leads found for the selected filters."
-                    selectedRowIds={selectedIds}
-                    onToggleRow={toggleRowSelection}
-                    onToggleAllRows={toggleAllRows}
-                  />
+              <ListTableContainer
+                isInitialLoad={isInitialLoad}
+                isRefreshing={isRefreshing}
+                loadingMessage="Loading lead details..."
+              >
+                <DataTable
+                  columns={columns}
+                  rows={rows}
+                  emptyMessage="No leads found for the selected filters."
+                  selectedRowIds={selectedIds}
+                  onToggleRow={toggleRowSelection}
+                  onToggleAllRows={toggleAllRows}
+                />
 
-                  <div className="mt-4">
-                    <PaginationControls
-                      page={page}
-                      totalPages={totalPages}
-                      totalItems={totalItems}
-                      pageSize={pageSize}
-                      onPageChange={setPage}
-                    />
-                  </div>
-                </>
-              )}
+                <div className="mt-4">
+                  <PaginationControls
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    pageSize={pageSize}
+                    pageSizeOptions={[...REPORT_PAGE_SIZE_OPTIONS]}
+                    onPageChange={setPage}
+                  />
+                </div>
+              </ListTableContainer>
             </div>
-          </>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-            {activeTab === "post-details"
-              ? "Select a lead from Lead Details to view post details."
-              : "Select a lead from Lead Details to view lead body."}
-          </div>
-        )}
       </div>
 
       <Modal
@@ -624,7 +489,9 @@ export function PublisherLeadDetailsPage() {
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</dt>
-                <dd className="mt-1">{viewLead.statusLabel}</dd>
+                <dd className="mt-1">
+                  <StatusBadge status={viewLead.statusLabel} />
+                </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Publisher</dt>

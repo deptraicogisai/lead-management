@@ -125,7 +125,7 @@ export function PrimaryButton({ children, ...props }: ButtonHTMLAttributes<HTMLB
     <button
       {...restProps}
       className={cn(
-        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:translate-y-0 disabled:hover:shadow-sm dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-400",
+        "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:translate-y-0 disabled:hover:shadow-sm dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-400",
         className
       )}
     >
@@ -151,7 +151,7 @@ export function ToggleSwitch({ checked, onChange, disabled, id }: ToggleSwitchPr
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-8 w-[4.25rem] shrink-0 items-center rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60",
+        "relative inline-flex h-8 w-[4.25rem] shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60",
         checked
           ? "border-emerald-700 bg-emerald-800 dark:border-emerald-500 dark:bg-emerald-700"
           : "border-slate-300 bg-slate-200 dark:border-slate-600 dark:bg-slate-700"

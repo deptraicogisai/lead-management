@@ -1,4 +1,8 @@
+import type { CampaignType } from "@/lib/campaign";
+
 export type PingTreeStrategy = "Priority";
+export type PingTreeCampaignType = CampaignType;
+export const PING_TREE_CAMPAIGN_TYPE_TABS: PingTreeCampaignType[] = ["Redirect", "Silent"];
 
 export type PingTreeCampaignCard = {
   id: string;
@@ -15,6 +19,7 @@ export type PingTreeRecord = {
   id: string;
   displayId: number;
   name: string;
+  campaignType: PingTreeCampaignType;
   strategy: PingTreeStrategy;
   activeCampaignIds: string[];
   createdAt: string;
@@ -27,6 +32,7 @@ type PingTreeDoc = {
   _id?: { toString(): string };
   displayId: number;
   name: string;
+  campaignType?: PingTreeCampaignType | null;
   strategy: PingTreeStrategy;
   activeCampaignIds?: string[];
   campaignPriorities?: Record<string, number> | Map<string, number>;
@@ -39,6 +45,7 @@ export function toPingTreeRecord(doc: PingTreeDoc): PingTreeRecord {
     id: doc._id?.toString() ?? "",
     displayId: doc.displayId,
     name: doc.name,
+    campaignType: doc.campaignType === "Silent" ? "Silent" : "Redirect",
     strategy: doc.strategy,
     activeCampaignIds: doc.activeCampaignIds ?? [],
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",

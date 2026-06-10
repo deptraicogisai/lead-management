@@ -2,7 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CircleHelp, ExternalLink, Globe, Info, X } from "lucide-react";
+import Link from "next/link";
+import {
+  BarChart3,
+  CircleHelp,
+  ExternalLink,
+  Globe,
+  Info,
+  List,
+  Megaphone,
+  Newspaper,
+  Plug,
+  X,
+} from "lucide-react";
+import { BackLink, ComingSoonButton } from "@/components/ui/action-buttons";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import {
   BUYER_LABEL_OPTIONS,
@@ -16,15 +29,20 @@ import type { IntegrationOption } from "@/lib/buyer-integrations";
 import { cn } from "@/lib/utils";
 
 const buyerTabs = [
-  { id: "global", label: "Global" },
-  { id: "integrations", label: "Integrations" }
+  { id: "global", label: "Global", icon: Globe },
+  { id: "integrations", label: "Integrations", icon: Plug },
 ] as const;
 
-const leftHeaderActions = ["Summary Report", "Summary by Campaign", "Summary by Publisher"] as const;
-const rightHeaderActions = ["Lead Details", "Campaigns"] as const;
+const leftHeaderActions = [
+  { label: "Summary Report", icon: BarChart3 },
+  { label: "Summary by Campaign", icon: Megaphone },
+  { label: "Summary by Publisher", icon: Newspaper },
+] as const;
 
-const headerButtonClassName =
-  "whitespace-nowrap rounded-lg border border-emerald-800 bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-700 dark:hover:bg-emerald-600";
+const rightHeaderActions = [
+  { label: "Lead Details", icon: List, href: "/reports/buyer/lead-details" },
+  { label: "Campaigns", icon: Megaphone, href: "/campaigns" },
+] as const;
 
 const selectClassName =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
@@ -444,6 +462,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
   return (
     <div className="space-y-5">
+      <BackLink href="/buyers" label="Back to Buyers" />
+
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           Buyer Detail - [{buyer.displayId}] {buyer.name}
@@ -452,18 +472,26 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {leftHeaderActions.map((action) => (
-              <button key={action} type="button" className={headerButtonClassName}>
-                {action}
-              </button>
+              <ComingSoonButton key={action.label} icon={action.icon} className="rounded-lg px-4 py-2 text-sm">
+                {action.label}
+              </ComingSoonButton>
             ))}
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {rightHeaderActions.map((action) => (
-              <button key={action} type="button" className={headerButtonClassName}>
-                {action}
-              </button>
-            ))}
+            {rightHeaderActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  <Icon size={16} />
+                  {action.label}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -480,6 +508,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           <div className="flex min-w-max items-center gap-2">
             {buyerTabs.map((tab) => {
               const isActive = tab.id === activeTab.id;
+              const Icon = tab.icon;
 
               return (
                 <button
@@ -487,12 +516,13 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                   type="button"
                   onClick={() => setActiveTabId(tab.id)}
                   className={cn(
-                    "whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
+                    "inline-flex items-center gap-2 whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
                     isActive
                       ? "border-emerald-700 bg-emerald-800 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600"
                       : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                   )}
                 >
+                  <Icon size={16} />
                   {tab.label}
                 </button>
               );

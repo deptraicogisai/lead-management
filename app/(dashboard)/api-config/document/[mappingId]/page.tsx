@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
+import { CopyButton, CopyableValue } from "@/components/ui/copy-button";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   CODE_THEME_BY_LANGUAGE,
@@ -97,15 +98,18 @@ function CollapsibleCodeSnippet({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        className={cn("flex w-full items-center justify-between px-4 py-2.5 text-sm font-semibold transition", theme.headerClassName)}
-      >
-        <span>{title}</span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-200", expanded && "rotate-180")} />
-      </button>
+      <div className={cn("flex w-full items-center justify-between gap-3 px-4 py-2.5 text-sm font-semibold transition", theme.headerClassName)}>
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+        >
+          <span>{title}</span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-200", expanded && "rotate-180")} />
+        </button>
+        <CopyButton text={code} label={`Copy ${title}`} className="border-transparent bg-white/80 hover:bg-white dark:bg-slate-900/60 dark:hover:bg-slate-900" />
+      </div>
       {expanded ? (
         <pre className={cn("overflow-auto border-t border-slate-200 p-4 text-xs leading-6 dark:border-slate-700", theme.bodyClassName)}>
           {tokens.map((token, index) => {
@@ -287,17 +291,17 @@ export default function ApiDocumentPreviewPage() {
                 <div>
                   <span className="font-medium text-slate-900">HTTP Method:</span> {documentContent.method}
                 </div>
-                <div>
-                  <span className="font-medium text-slate-900">Base URL:</span>{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{documentContent.baseUrl}</code>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-slate-900">Base URL:</span>
+                  <CopyableValue value={documentContent.baseUrl} copyLabel="Copy base URL" />
                 </div>
-                <div>
-                  <span className="font-medium text-slate-900">Endpoint URL:</span>{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{documentContent.endpointUrl}</code>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-slate-900">Endpoint URL:</span>
+                  <CopyableValue value={documentContent.endpointUrl} copyLabel="Copy endpoint URL" />
                 </div>
-                <div>
-                  <span className="font-medium text-slate-900">API Key:</span>{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{documentContent.apiKey}</code>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-slate-900">API Key:</span>
+                  <CopyableValue value={documentContent.apiKey} copyLabel="Copy API key" />
                 </div>
               </div>
             </section>
@@ -433,7 +437,11 @@ export default function ApiDocumentPreviewPage() {
                         <td className="border-b border-slate-100 px-4 py-3 font-medium text-slate-900">{row.status}</td>
                         <td className="border-b border-slate-100 px-4 py-3">{row.scenario}</td>
                         <td className="border-b border-slate-100 px-4 py-3">
-                          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">{row.message}</code>
+                          <CopyableValue
+                            value={row.message}
+                            copyLabel="Copy example message"
+                            codeClassName="text-slate-700 dark:text-slate-200"
+                          />
                         </td>
                       </tr>
                     ))}

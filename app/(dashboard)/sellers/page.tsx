@@ -7,8 +7,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ListControls } from "@/components/ui/list-controls";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import type { Seller } from "@/lib/mock-data";
+import { useListLoadState } from "@/lib/use-list-load-state";
 
 type SellerListResponse = {
   items: Seller[];
@@ -22,7 +25,7 @@ export default function SellersPage() {
   const [sellerRows, setSellerRows] = useState<Seller[]>([]);
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [deleteTarget, setDeleteTarget] = useState<Seller | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -35,7 +38,7 @@ export default function SellersPage() {
 
   useEffect(() => {
     const fetchSellers = async () => {
-      setIsLoading(true);
+      beginLoad();
       try {
         const params = new URLSearchParams({
           page: String(page),
@@ -50,7 +53,7 @@ export default function SellersPage() {
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
       } finally {
-        setIsLoading(false);
+        endLoad();
       }
     };
 
@@ -120,7 +123,11 @@ export default function SellersPage() {
     { key: "name", label: "Name" },
     { key: "email", label: "Email" },
     { key: "region", label: "Region" },
-    { key: "status", label: "Status" },
+    {
+      key: "status",
+      label: "Status",
+      render: (row) => <StatusBadge status={row.status} />,
+    },
     {
       key: "actions",
       label: "Actions",
@@ -163,7 +170,7 @@ export default function SellersPage() {
       />
 
       <PageSection
-        title="Sellers List"
+        title="Publisher List"
         actions={
           <button
             type="button"
@@ -174,11 +181,17 @@ export default function SellersPage() {
           </button>
         }
       >
-        <DataTable<Seller>
-          columns={columns}
-          rows={sellerRows}
-          emptyMessage={isLoading ? "Loading sellers..." : "No sellers yet. Create your first seller to get started."}
-        />
+        <ListTableContainer
+          isInitialLoad={isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading sellers..."
+        >
+          <DataTable<Seller>
+            columns={columns}
+            rows={sellerRows}
+            emptyMessage="No sellers yet. Create your first seller to get started."
+          />
+        </ListTableContainer>
       </PageSection>
 
       <PaginationControls

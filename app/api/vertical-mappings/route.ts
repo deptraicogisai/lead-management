@@ -4,11 +4,14 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { getCustomMappingFields } from "@/lib/mapping-fields";
+import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 
 type VerticalMappingPayload = {
   verticalId?: string;
   sellerId?: string;
+  apiName?: string;
+  status?: "Active" | "Inactive";
 };
 
 type VerticalFieldDoc = {
@@ -46,6 +49,8 @@ function toMappingResponse(doc: {
     id: doc._id?.toString() ?? "",
     verticalId: doc.verticalId,
     sellerId: doc.sellerId,
+    apiName: (doc as { apiName?: string | null }).apiName ?? "",
+    status: (doc as { status?: string | null }).status === "Inactive" ? "Inactive" : "Active",
     apiRequest: doc.apiRequest,
     fields: getCustomMappingFields(fields, doc.verticalFields ?? []).map((field) => ({
       id: typeof field._id === "string" ? field._id : field._id?.toString() ?? "",
@@ -168,19 +173,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Seller not found." }, { status: 404 });
     }
 
-    const duplicate = await VerticalMappingModel.findOne({
-      verticalRef: vertical._id,
-      sellerRef: seller._id,
-    }).lean();
-
-    if (duplicate) {
-      return NextResponse.json({ message: "Duplicate vertical and seller mapping." }, { status: 409 });
-    }
+    const apiRequest = await generateUniqueMappingApiRequest(seller._id.toString());
 
     const mapping = await VerticalMappingModel.create({
       verticalRef: vertical._id,
       sellerRef: seller._id,
+      apiName: body.apiName?.trim() ?? "",
+      status: body.status === "Inactive" ? "Inactive" : "Active",
       fields: [],
+      apiRequest,
     });
 
     return NextResponse.json(
@@ -194,7 +195,7 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-      return NextResponse.json({ message: "Duplicate vertical and seller mapping." }, { status: 409 });
+      return NextResponse.json({ message: "Failed to generate a unique API key. Please try again." }, { status: 409 });
     }
 
     return NextResponse.json({ message: "Failed to create vertical mapping." }, { status: 500 });

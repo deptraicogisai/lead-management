@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import { buildCampaignLookupContext } from "@/lib/campaign-context";
 import {
   defaultScheduleRule,
+  findScheduleRuleOverlap,
+  getScheduleRuleOverlapMessage,
   toCampaignRecord,
+  validateScheduleRulesNoOverlap,
   type CampaignDuplicatesSettings,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
@@ -102,6 +105,11 @@ export async function PATCH(req: Request, context: Params) {
     }
 
     if (body.section === "schedule" && body.scheduleRules) {
+      const overlapMessage = validateScheduleRulesNoOverlap(body.scheduleRules);
+      if (overlapMessage) {
+        return NextResponse.json({ message: overlapMessage }, { status: 409 });
+      }
+
       campaign.set(
         "scheduleRules",
         body.scheduleRules.map((rule) => ({
@@ -189,6 +197,30 @@ export async function POST(req: Request, context: Params) {
 
     if (body.action === "add-schedule-rule") {
       const nextRule = body.rule ?? defaultScheduleRule();
+
+      if (nextRule.days.length === 0) {
+        return NextResponse.json({ message: "Please select at least one day." }, { status: 400 });
+      }
+
+      const existingRules = campaign.scheduleRules.map((rule) => ({
+        id: rule._id?.toString() ?? "",
+        active: Boolean(rule.active),
+        action: rule.action,
+        scheduleMethod: rule.scheduleMethod,
+        days: rule.days ?? [],
+        startHour: rule.startHour,
+        startMinute: rule.startMinute,
+        endHour: rule.endHour,
+        endMinute: rule.endMinute,
+        dailySoldLeadsLimit: rule.dailySoldLeadsLimit ?? null,
+        dailyPostLeadsLimit: rule.dailyPostLeadsLimit ?? null,
+      }));
+
+      const overlap = findScheduleRuleOverlap(nextRule, existingRules);
+      if (overlap) {
+        return NextResponse.json({ message: getScheduleRuleOverlapMessage(nextRule, overlap) }, { status: 409 });
+      }
+
       campaign.scheduleRules.push({
         active: nextRule.active,
         action: nextRule.action,

@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
+import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
+import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import { formatPresentListDateTime, PRESENT_LIST_TYPE_OPTIONS, type PresentListRecord } from "@/lib/present-list";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +29,7 @@ type PresentListResponse = {
 export function PresentListsPage() {
   const [rows, setRows] = useState<PresentListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
@@ -45,7 +49,7 @@ export function PresentListsPage() {
   }, []);
 
   const fetchLists = useCallback(async () => {
-    setIsLoading(true);
+    beginLoad();
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (appliedFilters.productId) params.set("productId", appliedFilters.productId);
@@ -59,9 +63,9 @@ export function PresentListsPage() {
       setTotalItems(data.totalItems);
       setTotalPages(data.totalPages);
     } finally {
-      setIsLoading(false);
+      endLoad();
     }
-  }, [appliedFilters, page, pageSize]);
+  }, [appliedFilters, beginLoad, endLoad, page, pageSize]);
 
   useEffect(() => {
     void fetchLists();
@@ -72,8 +76,8 @@ export function PresentListsPage() {
       key: "id",
       label: "ID",
       render: (row) => (
-        <Link href={`/present-lists/${row.id}`}>
-          <IdBadge id={row.displayId} />
+        <Link href={`/present-lists/${row.id}`} className="group inline-flex">
+          <IdBadge id={row.displayId} interactive />
         </Link>
       ),
     },
@@ -87,7 +91,11 @@ export function PresentListsPage() {
         </span>
       ),
     },
-    { key: "name", label: "List Name", render: (row) => row.name },
+    {
+      key: "name",
+      label: "List Name",
+      render: (row) => <DetailNameLink href={`/present-lists/${row.id}`}>{row.name}</DetailNameLink>,
+    },
     { key: "field", label: "Field Name", render: (row) => row.applyToField },
     { key: "size", label: "List Size", render: (row) => row.listSize },
     { key: "autoUpdate", label: "Auto-Update Frequency", render: (row) => row.autoUpdateFrequency },
@@ -133,12 +141,15 @@ export function PresentListsPage() {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap justify-between gap-3">
-            <button type="button" onClick={() => { setAppliedFilters(draftFilters); setPage(1); }} className="rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-              Search
-            </button>
-            <button type="button" onClick={() => { const cleared = { productId: "", listType: "All", name: "" }; setDraftFilters(cleared); setAppliedFilters(cleared); setPage(1); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100">
-              Clear all
-            </button>
+            <SearchButton onClick={() => { setAppliedFilters(draftFilters); setPage(1); }} />
+            <ClearButton
+              onClick={() => {
+                const cleared = { productId: "", listType: "All", name: "" };
+                setDraftFilters(cleared);
+                setAppliedFilters(cleared);
+                setPage(1);
+              }}
+            />
           </div>
         </div>
 
@@ -150,10 +161,27 @@ export function PresentListsPage() {
         </div>
 
         <div className="mt-4">
-          <DataTable columns={columns} rows={rows} emptyMessage={isLoading ? "Loading lists..." : "No lists found."} />
+          <ListTableContainer
+            isInitialLoad={isInitialLoad}
+            isRefreshing={isRefreshing}
+            loadingMessage="Loading lists..."
+          >
+            <DataTable columns={columns} rows={rows} emptyMessage="No lists found." />
+          </ListTableContainer>
         </div>
 
-        <PaginationControls page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} onPageChange={setPage} />
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          onPageChange={setPage}
+        />
       </PageSection>
 
       <PresentListCreateModal

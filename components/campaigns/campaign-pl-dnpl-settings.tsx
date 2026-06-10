@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Link2, X } from "lucide-react";
+import { ChevronDown, ExternalLink, Link2, X } from "lucide-react";
 import { Input } from "@/components/ui/form-controls";
 import type { PresentListRecord } from "@/lib/present-list";
 import { cn } from "@/lib/utils";
@@ -106,8 +106,10 @@ export function CampaignPlDnplSettings({
 
           <Link
             href={`/buyers/${encodeURIComponent(buyerId)}`}
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            title="View buyer PL/DNPL settings"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-blue-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-blue-300"
           >
+            <ExternalLink size={15} />
             View
           </Link>
         </div>

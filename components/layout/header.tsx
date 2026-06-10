@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronLeft, LogOut } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { AuthSession } from "@/lib/auth";
@@ -8,10 +9,9 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/sellers": "Sellers",
+  "/sellers": "Publisher List",
   "/verticals": "Vertical",
   "/verticals/fields": "Vertical Fields",
-  "/vertical-mappings": "Vertical Mapping",
   "/buyers": "Buyers",
   "/campaigns": "Campaigns",
   "/ping-tree-settings": "Ping Tree Settings",
@@ -33,6 +33,14 @@ export function Header({ session }: HeaderProps) {
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const backLink = useMemo(() => {
+    if (/^\/buyers\/[^/]+$/.test(pathname)) return { href: "/buyers", label: "Buyers" };
+    if (/^\/campaigns\/[^/]+$/.test(pathname)) return { href: "/campaigns", label: "Campaigns" };
+    if (/^\/present-lists\/[^/]+$/.test(pathname)) return { href: "/present-lists", label: "Present Lists" };
+    if (/^\/integration-builder\/[^/]+$/.test(pathname)) return { href: "/integration-builder", label: "Integration Builder" };
+    return null;
+  }, [pathname]);
+
   const title = pathname.startsWith("/api-config/") && pathname.endsWith("/field-configuration")
     ? "Field Configuration"
     : pathname.startsWith("/campaigns/")
@@ -62,7 +70,18 @@ export function Header({ session }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-10 mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h2>
+      <div className="flex min-w-0 items-center gap-3">
+        {backLink ? (
+          <Link
+            href={backLink.href}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-blue-300 dark:hover:bg-slate-800"
+          >
+            <ChevronLeft size={16} />
+            {backLink.label}
+          </Link>
+        ) : null}
+        <h2 className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h2>
+      </div>
 
       <div className="flex items-center gap-3">
         <ThemeToggle />

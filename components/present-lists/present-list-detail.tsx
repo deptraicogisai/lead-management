@@ -1,13 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { BackLink, ClearButton, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection, Spinner } from "@/components/ui/state";
+import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import { formatPresentListDateTime, type PresentListRecord, type PresentListValueRecord } from "@/lib/present-list";
 
 type PresentListDetailProps = {
@@ -23,7 +26,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [valuesText, setValuesText] = useState("");
   const [error, setError] = useState("");
@@ -31,7 +34,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
   const [deleteTarget, setDeleteTarget] = useState<PresentListValueRecord | null>(null);
 
   const loadList = useCallback(async () => {
-    setIsLoading(true);
+    beginLoad();
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (appliedSearch) params.set("search", appliedSearch);
@@ -48,9 +51,9 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
       setTotalItems(data.totalItems);
       setTotalPages(data.totalPages);
     } finally {
-      setIsLoading(false);
+      endLoad();
     }
-  }, [appliedSearch, listId, page, pageSize]);
+  }, [appliedSearch, beginLoad, endLoad, listId, page, pageSize]);
 
   useEffect(() => {
     void loadList();
@@ -91,15 +94,20 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
       key: "actions",
       label: "Actions",
       render: (row) => (
-        <button type="button" onClick={() => setDeleteTarget(row)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600">
-          <Trash2 size={12} />
+        <IconActionButton
+          icon={Trash2}
+          variant="danger"
+          onClick={() => setDeleteTarget(row)}
+          className="rounded-lg px-2 py-1 text-xs"
+          aria-label="Delete value"
+        >
           Delete
-        </button>
+        </IconActionButton>
       ),
     },
   ];
 
-  if (isLoading && !list) {
+  if (isInitialLoad && !list) {
     return (
       <PageSection title="Present List">
         <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
@@ -120,17 +128,15 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
 
   return (
     <div className="space-y-6">
+      <BackLink href="/present-lists" label="Back to lists" />
+
       <PageSection title={`${list.name} Global list`}>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
           <FieldLabel htmlFor="value-search" label="Search for a Value" />
           <Input id="value-search" value={search} onChange={(e) => setSearch(e.target.value)} />
           <div className="mt-3 flex gap-3">
-            <button type="button" onClick={() => { setAppliedSearch(search); setPage(1); }} className="rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-              Search
-            </button>
-            <button type="button" onClick={() => { setSearch(""); setAppliedSearch(""); setPage(1); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100">
-              Clear all
-            </button>
+            <SearchButton onClick={() => { setAppliedSearch(search); setPage(1); }} />
+            <ClearButton onClick={() => { setSearch(""); setAppliedSearch(""); setPage(1); }} />
           </div>
         </div>
 
@@ -143,19 +149,33 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
               <Plus size={16} />
               Add new value
             </button>
-            <Link href="/present-lists" className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100">
-              Back to lists
-            </Link>
           </div>
         </div>
 
         {message ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">{message}</p> : null}
 
         <div className="mt-4">
-          <DataTable columns={columns} rows={values} emptyMessage={isLoading ? "Loading values..." : "No values yet."} />
+          <ListTableContainer
+            isInitialLoad={isInitialLoad}
+            isRefreshing={isRefreshing}
+            loadingMessage="Loading values..."
+          >
+            <DataTable columns={columns} rows={values} emptyMessage="No values yet." />
+          </ListTableContainer>
         </div>
 
-        <PaginationControls page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} onPageChange={setPage} />
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          onPageChange={setPage}
+        />
       </PageSection>
 
       <Modal

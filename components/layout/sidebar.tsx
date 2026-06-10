@@ -8,8 +8,6 @@ import {
   ChevronDown,
   LayoutDashboard,
   LayoutList,
-  Link2,
-  Users,
 } from "lucide-react";
 import { clientManagementSections } from "@/components/layout/client-management-nav-items";
 import { reportSections } from "@/components/layout/report-nav-items";
@@ -17,9 +15,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/sellers", label: "Sellers", icon: Users },
   { href: "/verticals", label: "Vertical", icon: BriefcaseBusiness },
-  { href: "/vertical-mappings", label: "Vertical Mappings", icon: Link2 },
 ];
 
 function NavLink({
@@ -39,7 +35,7 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 pl-4 text-sm font-medium transition duration-200",
+        "group relative flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 pl-4 text-sm font-medium transition duration-200",
         isActive
           ? "bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-500/18 dark:text-blue-200"
           : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"

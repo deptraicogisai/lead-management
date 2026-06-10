@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
+import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   CAMPAIGN_STATUS_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
   formatCampaignDateTime,
   type CampaignListRecord,
 } from "@/lib/campaign";
-import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 type VerticalOption = { id: string; name: string; label: string };
 type BuyerOption = { id: string; label: string };
@@ -30,28 +33,11 @@ type CampaignListResponse = {
 
 const PAGE_SIZE_OPTIONS = [15, 50, 100, 500] as const;
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-1 text-xs font-medium",
-        status === "Active"
-          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-          : status === "Paused"
-            ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-            : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-      )}
-    >
-      {status}
-    </span>
-  );
-}
-
 export function CampaignsPage() {
   const [rows, setRows] = useState<CampaignListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
   const [buyerOptions, setBuyerOptions] = useState<BuyerOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
@@ -104,7 +90,7 @@ export function CampaignsPage() {
   }, []);
 
   const fetchCampaigns = useCallback(async () => {
-    setIsLoading(true);
+    beginLoad();
 
     try {
       const params = new URLSearchParams({
@@ -129,9 +115,9 @@ export function CampaignsPage() {
       setTotalItems(data.totalItems);
       setTotalPages(data.totalPages);
     } finally {
-      setIsLoading(false);
+      endLoad();
     }
-  }, [appliedFilters, page, pageSize]);
+  }, [appliedFilters, beginLoad, endLoad, page, pageSize]);
 
   useEffect(() => {
     void fetchCampaigns();
@@ -154,12 +140,16 @@ export function CampaignsPage() {
       key: "id",
       label: "ID",
       render: (row) => (
-        <Link href={`/campaigns/${row.id}`} className="inline-flex">
-          <IdBadge id={row.displayId} />
+        <Link href={`/campaigns/${row.id}`} className="group inline-flex">
+          <IdBadge id={row.displayId} interactive />
         </Link>
       ),
     },
-    { key: "name", label: "Name", render: (row) => <span className="font-medium">{row.name}</span> },
+    {
+      key: "name",
+      label: "Name",
+      render: (row) => <DetailNameLink href={`/campaigns/${row.id}`}>{row.name}</DetailNameLink>,
+    },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
     { key: "product", label: "Product", render: (row) => row.productLabel },
     {
@@ -254,35 +244,32 @@ export function CampaignsPage() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
+            <SearchButton
               onClick={() => {
                 setAppliedFilters(draftFilters);
                 setPage(1);
               }}
-              className="rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-            >
-              Search
-            </button>
-            <button
-              type="button"
+            />
+            <ClearButton
               onClick={() => {
                 const cleared = { id: "", name: "", status: "All", productId: "", buyerId: "", type: "All", dateFrom: "", dateTo: "" };
                 setDraftFilters(cleared);
                 setAppliedFilters(cleared);
                 setPage(1);
               }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100"
-            >
-              Clear all
-            </button>
+            />
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            Filter:
-            <Input value={tableSearch} onChange={(e) => setTableSearch(e.target.value)} className="max-w-xs" />
+          <div className="relative max-w-xs flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Filter campaigns..."
+              className="pl-9"
+            />
           </div>
           <button
             type="button"
@@ -295,7 +282,13 @@ export function CampaignsPage() {
         </div>
 
         <div className="mt-4">
-          <DataTable columns={columns} rows={filteredRows} emptyMessage={isLoading ? "Loading campaigns..." : "No campaigns found."} />
+          <ListTableContainer
+            isInitialLoad={isInitialLoad}
+            isRefreshing={isRefreshing}
+            loadingMessage="Loading campaigns..."
+          >
+            <DataTable columns={columns} rows={filteredRows} emptyMessage="No campaigns found." />
+          </ListTableContainer>
         </div>
 
         <PaginationControls
@@ -303,6 +296,7 @@ export function CampaignsPage() {
           totalPages={totalPages}
           totalItems={totalItems}
           pageSize={pageSize}
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
           onPageSizeChange={(value) => {
             setPageSize(value);
             setPage(1);
