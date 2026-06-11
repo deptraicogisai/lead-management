@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Calendar, Copy, Filter, List, Pencil, Plus, Trash2 } from "lucide-react";
+import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
 import { useParams, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
@@ -108,6 +109,8 @@ function buildFieldPayload(field: ApiField) {
   };
 }
 
+type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule";
+
 export function SellerFieldConfigurationPage() {
   const params = useParams<{ sellerId: string; mappingId: string }>();
   const searchParams = useSearchParams();
@@ -136,6 +139,7 @@ export function SellerFieldConfigurationPage() {
     { mode: "single"; field: ApiField } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState<FieldConfigurationTab>("fields");
 
   const fetchFields = async () => {
     if (!sellerId || !mappingId) return;
@@ -739,14 +743,16 @@ export function SellerFieldConfigurationPage() {
         title="Field Configuration List"
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <PrimaryButton
-              type="button"
-              disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
-              onClick={openCreateModal}
-            >
-              <Plus size={15} />
-              <span>Add Field</span>
-            </PrimaryButton>
+            {activeTab === "fields" ? (
+              <PrimaryButton
+                type="button"
+                disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
+                onClick={openCreateModal}
+              >
+                <Plus size={15} />
+                <span>Add Field</span>
+              </PrimaryButton>
+            ) : null}
             <Link
               href={`/api-config?sellerId=${encodeURIComponent(sellerId)}&sellerName=${encodeURIComponent(sellerName ?? "")}`}
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
@@ -756,6 +762,37 @@ export function SellerFieldConfigurationPage() {
           </div>
         }
       >
+        <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
+          {(
+            [
+              { id: "fields" as const, label: "Fields", icon: List },
+              { id: "duplicates" as const, label: "Duplicates", icon: Copy },
+              { id: "filters" as const, label: "Filters", icon: Filter },
+              { id: "schedule" as const, label: "Schedule", icon: Calendar },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  activeTab === tab.id
+                    ? "bg-emerald-800 text-white"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                )}
+              >
+                <Icon size={15} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "fields" ? (
+        <>
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
@@ -794,6 +831,21 @@ export function SellerFieldConfigurationPage() {
           onToggleRow={handleToggleRow}
           onToggleAllRows={handleToggleAllRows}
         />
+        </>
+        ) : sellerId && mappingId ? (
+          <MappingIntakeSettingsTabs
+            sellerId={sellerId}
+            mappingId={mappingId}
+            fields={fields.map((field) => ({
+              fieldName: field.fieldName,
+              description: field.description,
+              dataTypeFilter: field.dataTypeFilter,
+              options: field.options,
+            }))}
+            forcedTab={activeTab as Exclude<FieldConfigurationTab, "fields">}
+            hideTabBar
+          />
+        ) : null}
       </PageSection>
 
       <Modal

@@ -99,6 +99,7 @@ export const TIMEZONE_OPTIONS = [
   "Denver (MST/MDT)",
   "Los Angeles (PST/PDT)",
   "Phoenix (MST)",
+  "Hanoi (ICT)",
   "UTC",
 ] as const;
 

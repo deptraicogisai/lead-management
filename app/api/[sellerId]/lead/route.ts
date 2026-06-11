@@ -8,6 +8,14 @@ import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
+import type { MappingFieldDoc } from "@/lib/mapping-field-api";
+import {
+  buildDuplicateExistsQuery,
+  buildLeadRejectResponse,
+  validateMappingFieldConfiguration,
+  validateMappingIntakeSettings,
+} from "@/lib/mapping-lead-validation";
+import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
 
 type Params = { params: Promise<{ sellerId: string }> };
 
@@ -51,6 +59,36 @@ type SellerMapping = {
   verticalRef?: { toString(): string } | string;
   fields?: MappingApiField[];
   apiRequest?: MappingApiRequest | null;
+  timezone?: string | null;
+  duplicates?: {
+    duplicateMethod?: "Email" | "SSN + Email";
+    duplicateSold?: string;
+    duplicatePosted?: string;
+  } | null;
+  generalFilters?: Array<{
+    fieldId: string;
+    fieldName: string;
+    description: string;
+    dataTypeFilter: "Text" | "Range" | "Checkbox";
+    enabled?: boolean;
+    minValue?: string | null;
+    maxValue?: string | null;
+    selectedValues?: string[] | null;
+    textValue?: string | null;
+  }> | null;
+  scheduleRules?: Array<{
+    _id?: { toString(): string };
+    active?: boolean;
+    action?: "Post" | "Do not post";
+    scheduleMethod?: "Days";
+    days?: string[];
+    startHour?: string;
+    startMinute?: string;
+    endHour?: string;
+    endMinute?: string;
+    dailySoldLeadsLimit?: number | null;
+    dailyPostLeadsLimit?: number | null;
+  }> | null;
 };
 
 type BuyerMappingField = {
@@ -442,10 +480,7 @@ export async function POST(req: Request, context: Params) {
     );
 
     if (apiFields.length === 0) {
-      const responsePayload = {
-        status: "error" as const,
-        reasons: [{ message: "API mapping does not have any configured fields." }],
-      };
+      const responsePayload = buildLeadRejectResponse(["API mapping does not have any configured fields."]);
 
       await createSellerIntakeLog({
         sellerRef: seller._id,
@@ -461,45 +496,65 @@ export async function POST(req: Request, context: Params) {
       return NextResponse.json(responsePayload, { status: 400 });
     }
 
-    const reasons: string[] = [];
+    const mappingId = matchedMapping._id?.toString() ?? "";
+    const mappingFields = (matchedMapping.fields ?? []) as MappingFieldDoc[];
 
-    for (const field of apiFields) {
-      const value = payload[field.fieldName];
-      const label = field.description?.trim() || field.fieldName;
-      const normalizedType = field.type.trim().toLowerCase();
+    const fieldReasons = await validateMappingFieldConfiguration(
+      payload,
+      apiFields,
+      async (fieldName, value, rule) =>
+        violatesEmailDuplicateRule(mappingId, fieldName, value, rule ?? undefined)
+    );
 
-      if (field.required && isMissingRequired(value)) {
-        reasons.push(`${label} is required.`);
-        continue;
-      }
+    const intakeSettings = toMappingIntakeSettings(
+      matchedMapping as Parameters<typeof toMappingIntakeSettings>[0],
+      mappingFields
+    );
 
-      if (normalizedType !== "email" && isPresentValue(value) && isIgnoredFieldValue(value, field.ignoreValues)) {
-        reasons.push(`${label} contains an ignored value and is not allowed.`);
-        continue;
-      }
+    const intakeReasons = await validateMappingIntakeSettings({
+      mappingId,
+      payload,
+      settings: intakeSettings,
+      fields: mappingFields,
+      postedAt,
+      checkDuplicate: async (targetMappingId, duplicateKey, periodDays, validationStatus) => {
+        if (!duplicateKey || !Types.ObjectId.isValid(targetMappingId)) return false;
 
-      if (!isMissingRequired(value) && !isValidByType(field.type, value)) {
-        reasons.push(`${label} has invalid type. Expected ${field.type}.`);
-        continue;
-      }
+        const threshold = new Date(postedAt);
+        threshold.setDate(threshold.getDate() - periodDays);
 
-      if (!isMissingRequired(value) && !isValidByFormat(field.format || undefined, value)) {
-        reasons.push(`${label} has invalid format (${field.format}).`);
-        continue;
-      }
+        const identityQuery = buildDuplicateExistsQuery(payload, mappingFields, duplicateKey);
+        if (!identityQuery) return false;
 
-      if (
-        normalizedType === "email" &&
-        isPresentValue(value) &&
-        (await violatesEmailDuplicateRule(matchedMapping._id?.toString() ?? "", field.fieldName, value, field.emailDuplicateRule))
-      ) {
-        if (field.emailDuplicateRule?.mode === "days" && typeof field.emailDuplicateRule.days === "number") {
-          reasons.push(`${label} already exists within ${field.emailDuplicateRule.days} day(s).`);
-        } else {
-          reasons.push(`${label} already exists in the system.`);
+        const baseFilter: Record<string, unknown> = {
+          mappingRef: new Types.ObjectId(targetMappingId),
+          postedAt: { $gte: threshold },
+          ...identityQuery,
+        };
+
+        if (validationStatus) {
+          baseFilter.validationStatus = validationStatus;
         }
-      }
-    }
+
+        return Boolean(await SellerLeadModel.exists(baseFilter));
+      },
+      countLeads: async (targetMappingId, from, to, validationStatus) => {
+        if (!Types.ObjectId.isValid(targetMappingId)) return 0;
+
+        const filter: Record<string, unknown> = {
+          mappingRef: new Types.ObjectId(targetMappingId),
+          postedAt: { $gte: from, $lt: to },
+        };
+
+        if (validationStatus) {
+          filter.validationStatus = validationStatus;
+        }
+
+        return SellerLeadModel.countDocuments(filter);
+      },
+    });
+
+    const reasons = [...fieldReasons, ...intakeReasons];
 
     const validationStatus = reasons.length === 0 ? "success" : "fail";
     const createdLead = await SellerLeadModel.create({
@@ -514,10 +569,7 @@ export async function POST(req: Request, context: Params) {
     });
 
     if (validationStatus === "fail") {
-      const responsePayload = {
-        status: "error",
-        reasons: reasons.map((message) => ({ message })),
-      };
+      const responsePayload = buildLeadRejectResponse(reasons);
 
       await createSellerIntakeLog({
         sellerRef: seller._id,

@@ -25,6 +25,46 @@ const mappingFieldOptionSchema = new Schema(
   { _id: false }
 );
 
+const mappingGeneralFilterSchema = new Schema(
+  {
+    fieldId: { type: String, required: true, trim: true },
+    fieldName: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+    dataTypeFilter: { type: String, enum: ["Text", "Range", "Checkbox"], required: true },
+    enabled: { type: Boolean, default: false },
+    minValue: { type: String, trim: true },
+    maxValue: { type: String, trim: true },
+    selectedValues: { type: [String], default: [] },
+    textValue: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
+const mappingScheduleRuleSchema = new Schema(
+  {
+    active: { type: Boolean, default: true },
+    action: { type: String, enum: ["Post", "Do not post"], required: true, default: "Post" },
+    scheduleMethod: { type: String, enum: ["Days"], default: "Days" },
+    days: { type: [String], default: [] },
+    startHour: { type: String, default: "00", trim: true },
+    startMinute: { type: String, default: "00", trim: true },
+    endHour: { type: String, default: "23", trim: true },
+    endMinute: { type: String, default: "59", trim: true },
+    dailySoldLeadsLimit: { type: Number, default: null },
+    dailyPostLeadsLimit: { type: Number, default: null },
+  },
+  { _id: true }
+);
+
+const mappingDuplicatesSchema = new Schema(
+  {
+    duplicateMethod: { type: String, enum: ["Email", "SSN + Email"], default: "Email" },
+    duplicateSold: { type: String, default: "OFF", trim: true },
+    duplicatePosted: { type: String, default: "OFF", trim: true },
+  },
+  { _id: false }
+);
+
 const mappingFieldSchema = new Schema({
   sourceVerticalFieldId: { type: String, required: false, trim: true },
   fieldName: { type: String, required: true, trim: true },
@@ -47,6 +87,10 @@ const verticalMappingSchema = new Schema(
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
     fields: { type: [mappingFieldSchema], default: [] },
     apiRequest: { type: apiRequestSchema, required: false },
+    timezone: { type: String, trim: true, default: "New York (EST/EDT)" },
+    duplicates: { type: mappingDuplicatesSchema, default: () => ({}) },
+    generalFilters: { type: [mappingGeneralFilterSchema], default: [] },
+    scheduleRules: { type: [mappingScheduleRuleSchema], default: [] },
   },
   { timestamps: true }
 );

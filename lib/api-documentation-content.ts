@@ -641,6 +641,10 @@ export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = 
     example: {
       status: 2,
       status_text: "reject",
+      reasons: [
+        { message: "Email is required." },
+        { message: "State filter rejected. Allowed: AL. Received: TX." },
+      ],
     },
   },
   {
