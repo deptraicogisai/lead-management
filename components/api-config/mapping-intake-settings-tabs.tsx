@@ -5,17 +5,20 @@ import { Calendar, Copy, Filter, Pencil, Plus, Trash2 } from "lucide-react";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
 import { IconActionButton } from "@/components/ui/action-buttons";
+import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
+import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
-import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DUPLICATE_METHOD_OPTIONS,
   DUPLICATE_PERIOD_OPTIONS,
   TIMEZONE_OPTIONS,
   findScheduleRuleOverlap,
+  buildGeneralFilterEnabledPatch,
   getMaxRangeOptions,
   getScheduleRuleOverlapMessage,
   isGeneralFilterRangeValid,
+  normalizeGeneralFiltersForStorage,
   validateGeneralFilters,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
@@ -53,12 +56,6 @@ export function MappingIntakeSettingsTabs({
   const [duplicatesForm, setDuplicatesForm] = useState<MappingIntakeSettingsRecord["duplicates"] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [noticeModal, setNoticeModal] = useState<{
-    open: boolean;
-    title: string;
-    message: string;
-    variant: "success" | "error";
-  } | null>(null);
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
 
@@ -68,10 +65,6 @@ export function MappingIntakeSettingsTabs({
     () => new Map(fields.map((field) => [field.fieldName, field.options ?? []])),
     [fields]
   );
-
-  const showNotice = (title: string, message: string, variant: "success" | "error") => {
-    setNoticeModal({ open: true, title, message, variant });
-  };
 
   const loadSettings = useCallback(async () => {
     if (!sellerId || !mappingId) return;
@@ -113,17 +106,17 @@ export function MappingIntakeSettingsTabs({
 
       const result = (await response.json().catch(() => null)) as MappingIntakeSettingsRecord | { message?: string } | null;
       if (!response.ok) {
-        showNotice("Save Failed", (result as { message?: string } | null)?.message ?? "Failed to save.", "error");
+        toast.error((result as { message?: string } | null)?.message ?? "Failed to save.", "Save Failed");
         return false;
       }
 
       const next = result as MappingIntakeSettingsRecord;
       setSettings(next);
       setDuplicatesForm(next.duplicates);
-      showNotice("Success", successMessage, "success");
+      toast.success(successMessage);
       return true;
     } catch {
-      showNotice("Save Failed", "Failed to save.", "error");
+      toast.error("Failed to save.", "Save Failed");
       return false;
     } finally {
       setIsSaving(false);
@@ -145,11 +138,15 @@ export function MappingIntakeSettingsTabs({
 
     const validationError = validateGeneralFilters(settings.generalFilters, fieldOptionsListByName);
     if (validationError) {
-      showNotice("Validation Error", validationError, "error");
+      toast.error(validationError, "Validation Error");
       return;
     }
 
-    void saveSection("filters", { generalFilters: settings.generalFilters }, "Filters saved successfully.");
+    void saveSection(
+      "filters",
+      { generalFilters: normalizeGeneralFiltersForStorage(settings.generalFilters) },
+      "Filters saved successfully."
+    );
   };
 
   const closeScheduleRuleModal = () => {
@@ -168,10 +165,10 @@ export function MappingIntakeSettingsTabs({
       const data = (await response.json()) as MappingIntakeSettingsRecord;
       setSettings(data);
       closeScheduleRuleModal();
-      showNotice("Success", "Schedule rule added successfully.", "success");
+      toast.success("Schedule rule added successfully.");
     } else {
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
-      showNotice("Save Failed", result?.message ?? "Failed to add schedule rule.", "error");
+      toast.error(result?.message ?? "Failed to add schedule rule.", "Save Failed");
     }
   };
 
@@ -179,13 +176,13 @@ export function MappingIntakeSettingsTabs({
     if (!settings) return;
 
     if (rule.days.length === 0) {
-      showNotice("Invalid Schedule", "Please select at least one day.", "error");
+      toast.error("Please select at least one day.", "Invalid Schedule");
       return;
     }
 
     const overlap = findScheduleRuleOverlap(rule, settings.scheduleRules, editingScheduleRule?.id ?? null);
     if (overlap) {
-      showNotice("Schedule Overlap", getScheduleRuleOverlapMessage(rule, overlap), "error");
+      toast.error(getScheduleRuleOverlapMessage(rule, overlap), "Schedule Overlap");
       return;
     }
 
@@ -301,6 +298,19 @@ export function MappingIntakeSettingsTabs({
       ) : null}
 
       {activeTab === "filters" ? (
+        <DualSaveBar
+          dual={shouldUseDualSaveBar(settings.generalFilters.length)}
+          renderActions={() => (
+            <PrimaryButton
+              type="button"
+              disabled={isSaving}
+              onClick={handleSaveFilters}
+              className="bg-emerald-800 hover:bg-emerald-700"
+            >
+              {isSaving ? "Saving..." : "Save Filters"}
+            </PrimaryButton>
+          )}
+        >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Enabled general filters are applied to incoming publisher leads before they are accepted.
@@ -320,7 +330,12 @@ export function MappingIntakeSettingsTabs({
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{filter.description}</p>
-                    <ToggleSwitch checked={filter.enabled} onChange={(enabled) => updateGeneralFilter(filter.fieldId, { enabled })} />
+                    <ToggleSwitch
+                      checked={filter.enabled}
+                      onChange={(enabled) =>
+                        updateGeneralFilter(filter.fieldId, buildGeneralFilterEnabledPatch(filter, enabled))
+                      }
+                    />
                   </div>
 
                   {filter.dataTypeFilter === "Range" ? (
@@ -415,6 +430,7 @@ export function MappingIntakeSettingsTabs({
 
                   {filter.dataTypeFilter === "Text" ? (
                     <Input
+                      id={`${filter.fieldId}-text`}
                       value={filter.textValue ?? ""}
                       disabled={!isInteractive}
                       onChange={(event) => updateGeneralFilter(filter.fieldId, { textValue: event.target.value })}
@@ -428,19 +444,24 @@ export function MappingIntakeSettingsTabs({
           {settings.generalFilters.length === 0 ? (
             <p className="text-sm text-slate-500">No filterable fields yet. Add fields with Text, Range, or Checkbox filters.</p>
           ) : null}
-
-          <PrimaryButton
-            type="button"
-            disabled={isSaving}
-            onClick={handleSaveFilters}
-            className="bg-emerald-800 hover:bg-emerald-700"
-          >
-            {isSaving ? "Saving..." : "Save Filters"}
-          </PrimaryButton>
         </div>
+        </DualSaveBar>
       ) : null}
 
       {activeTab === "schedule" ? (
+        <DualSaveBar
+          dual={shouldUseDualSaveBar(settings.scheduleRules.length)}
+          renderActions={() => (
+            <PrimaryButton
+              type="button"
+              disabled={isSaving}
+              onClick={() => void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone: settings.timezone }, "Schedule settings saved successfully.")}
+              className="bg-emerald-800 hover:bg-emerald-700"
+            >
+              {isSaving ? "Saving..." : "Save Schedule Settings"}
+            </PrimaryButton>
+          )}
+        >
         <div className="space-y-4">
           <div className="grid max-w-md gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-timezone" label="Timezone" />
@@ -555,16 +576,8 @@ export function MappingIntakeSettingsTabs({
           {settings.scheduleRules.length > 0 ? (
             <CampaignScheduleCalendar rules={settings.scheduleRules} timezone={settings.timezone} />
           ) : null}
-
-          <PrimaryButton
-            type="button"
-            disabled={isSaving}
-            onClick={() => void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone: settings.timezone }, "Schedule settings saved successfully.")}
-            className="bg-emerald-800 hover:bg-emerald-700"
-          >
-            {isSaving ? "Saving..." : "Save Schedule Settings"}
-          </PrimaryButton>
         </div>
+        </DualSaveBar>
       ) : null}
 
       <CampaignScheduleRuleModal
@@ -574,26 +587,6 @@ export function MappingIntakeSettingsTabs({
         onSave={(rule) => void handleSaveScheduleRule(rule)}
       />
 
-      <Modal
-        open={Boolean(noticeModal?.open)}
-        title={noticeModal?.title ?? ""}
-        description={noticeModal?.message}
-        onClose={() => setNoticeModal(null)}
-        panelClassName="max-w-sm"
-        actions={
-          <PrimaryButton
-            type="button"
-            onClick={() => setNoticeModal(null)}
-            className={cn(
-              noticeModal?.variant === "error"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-emerald-800 hover:bg-emerald-700"
-            )}
-          >
-            OK
-          </PrimaryButton>
-        }
-      />
     </div>
   );
 }

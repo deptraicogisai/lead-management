@@ -9,6 +9,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 
 type LogRow = {
@@ -172,7 +173,7 @@ export default function LogsPage() {
       }
       await fetchLogs();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Failed to delete logs.");
+      toast.error(error instanceof Error ? error.message : "Failed to delete logs.");
     } finally {
       setIsDeleting(false);
     }
@@ -280,7 +281,7 @@ export default function LogsPage() {
   ];
 
   return (
-    <PageSection title="Request Logs">
+    <PageSection>
       <ListControls
         searchValue={search}
         onSearchChange={(value) => {

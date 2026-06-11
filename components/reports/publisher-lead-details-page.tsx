@@ -264,7 +264,7 @@ export function PublisherLeadDetailsPage() {
   }, [fieldColumns]);
 
   return (
-    <PageSection title="Publisher Reports — Lead Details">
+    <PageSection>
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

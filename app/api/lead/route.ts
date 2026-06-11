@@ -1,6 +1,5 @@
 import { handleSellerLeadPost } from "@/lib/seller-lead-intake-route";
 
-/** @deprecated Use POST /api/lead. Publisher is resolved from api_key. */
 export async function POST(req: Request) {
   return handleSellerLeadPost(req);
 }

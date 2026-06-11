@@ -1,3 +1,10 @@
+import { buildFieldExampleRequest, buildFieldExampleValue, getFieldOptionValues } from "@/lib/lead-field-value";
+
+export type DocumentationFieldOption = {
+  label: string;
+  value: string;
+};
+
 export type DocumentationField = {
   id: string;
   fieldName: string;
@@ -10,7 +17,17 @@ export type DocumentationField = {
     days?: number;
   };
   ignoreValues?: string[];
+  options?: DocumentationFieldOption[];
 };
+
+export function formatAcceptedValues(field: DocumentationField) {
+  const values = getFieldOptionValues(field.options ?? []);
+  return values.length > 0 ? values.join(", ") : null;
+}
+
+export function fieldHasAcceptedValues(field: DocumentationField) {
+  return (field.options?.length ?? 0) > 0;
+}
 
 export type DocumentationContext = {
   sellerId: string;
@@ -135,11 +152,6 @@ export const CODE_THEME_BY_LANGUAGE: Record<
   },
 };
 
-const SAMPLE_REQUEST_OVERRIDES: Record<string, unknown> = {
-  fname: "Jim",
-  zip_code: "550000",
-};
-
 function normalizeType(type: string) {
   return type.trim().toLowerCase();
 }
@@ -160,33 +172,12 @@ function toCSharpHttpMethod(method: string) {
   return "Post";
 }
 
-function buildExampleValue(field: DocumentationField): unknown {
-  if (field.fieldName in SAMPLE_REQUEST_OVERRIDES) {
-    return SAMPLE_REQUEST_OVERRIDES[field.fieldName];
-  }
-
-  const normalizedType = normalizeType(field.type);
-  const normalizedFormat = field.format?.trim().toLowerCase();
-
-  if (normalizedFormat === "email") return "jim@example.com";
-  if (normalizedFormat === "e.164") return "+15551234567";
-  if (normalizedType === "boolean") return true;
-  if (normalizedType === "date") return "2026-04-25";
-  if (normalizedType === "number" || normalizedType === "numeric" || normalizedType === "numberic") return 1000;
-
-  if (field.fieldName.toLowerCase().includes("zip")) return "550000";
-  if (field.fieldName.toLowerCase().includes("phone")) return "+15551234567";
-  if (field.fieldName.toLowerCase().includes("email")) return "jim@example.com";
-  if (field.fieldName.toLowerCase().includes("name")) return "Jim";
-
-  return "sample_value";
+export function buildExampleRequest(fields: DocumentationField[]) {
+  return buildFieldExampleRequest(fields);
 }
 
-export function buildExampleRequest(fields: DocumentationField[]) {
-  return fields.reduce<Record<string, unknown>>((payload, field) => {
-    payload[field.fieldName] = buildExampleValue(field);
-    return payload;
-  }, {});
+function buildExampleValue(field: DocumentationField): unknown {
+  return buildFieldExampleValue(field);
 }
 
 export function describeFieldCondition(field: DocumentationField) {
@@ -567,7 +558,7 @@ export type DocumentationOutline = {
   overview: DocumentationSectionHeading;
   endpointInformation: DocumentationSectionHeading;
   requestBody: DocumentationSectionHeading;
-  fieldConditions: DocumentationSectionHeading | null;
+  requirements: DocumentationSectionHeading;
   exampleJsonRequest: DocumentationSectionHeading;
   codeSnippets: DocumentationSectionHeading;
   responseStatus: DocumentationSectionHeading;
@@ -586,13 +577,13 @@ function nextSectionHeading(counter: { value: number }, title: string): Document
   };
 }
 
-export function buildDocumentationOutline(hasFieldConditions: boolean): DocumentationOutline {
+export function buildDocumentationOutline(): DocumentationOutline {
   const counter = { value: 0 };
 
   const overview = nextSectionHeading(counter, "Overview");
   const endpointInformation = nextSectionHeading(counter, "Endpoint Information");
   const requestBody = nextSectionHeading(counter, "Request Body");
-  const fieldConditions = hasFieldConditions ? nextSectionHeading(counter, "Field Conditions") : null;
+  const requirements = nextSectionHeading(counter, "Requirements");
   const exampleJsonRequest = nextSectionHeading(counter, "Example JSON Request");
   const codeSnippets = nextSectionHeading(counter, "Code Snippets");
   const responseStatus = nextSectionHeading(counter, "Response Status");
@@ -614,7 +605,7 @@ export function buildDocumentationOutline(hasFieldConditions: boolean): Document
     overview,
     endpointInformation,
     requestBody,
-    fieldConditions,
+    requirements,
     exampleJsonRequest,
     codeSnippets,
     responseStatus,
@@ -626,11 +617,11 @@ export function buildDocumentationOutline(hasFieldConditions: boolean): Document
 export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = [
   {
     statusCode: 1,
-    title: "Sold",
-    description: "The lead was accepted and sold successfully. The response includes a redirect URL for the consumer.",
+    title: "Accepted",
+    description: "The lead was accepted successfully. The response includes a redirect URL for the consumer.",
     example: {
       status: 1,
-      status_text: "sold",
+      status_text: "Accepted",
       redirect_url: "https://leads.system.com/redirect?id=81649f87d4e596a711d449970392ed67",
     },
   },
@@ -643,7 +634,7 @@ export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = 
       status_text: "reject",
       reasons: [
         { message: "Email is required." },
-        { message: "State filter rejected. Allowed: AL. Received: TX." },
+        { message: "State filter rejected. Allowed: AK. Received: AL." },
       ],
     },
   },

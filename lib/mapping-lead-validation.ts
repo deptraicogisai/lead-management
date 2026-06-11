@@ -4,6 +4,11 @@ import {
   resolveDuplicateFieldNames,
   type MappingIntakeSettingsRecord,
 } from "@/lib/mapping-intake-settings";
+import {
+  formatAcceptedValuesList,
+  isValueInFieldOptions,
+  type FieldOptionLike,
+} from "@/lib/lead-field-value";
 
 export type MappingLeadFieldConfig = {
   fieldName: string;
@@ -12,6 +17,7 @@ export type MappingLeadFieldConfig = {
   required: boolean;
   format?: string | null;
   ignoreValues?: string[] | null;
+  options?: FieldOptionLike[] | null;
   emailDuplicateRule?: {
     mode?: "days" | "forever" | null;
     days?: number | null;
@@ -109,6 +115,15 @@ export async function validateMappingFieldConfiguration(
     }
 
     if (
+      isPresentValue(value) &&
+      (field.options?.length ?? 0) > 0 &&
+      !isValueInFieldOptions(value, field.options ?? [])
+    ) {
+      reasons.push(`${label} must be one of the accepted values: ${formatAcceptedValuesList(field.options ?? [])}.`);
+      continue;
+    }
+
+    if (
       normalizedType === "email" &&
       isPresentValue(value) &&
       (await checkEmailDuplicate(field.fieldName, value, field.emailDuplicateRule))
@@ -130,9 +145,9 @@ export function buildDuplicateExistsQuery(
   duplicateKey: string
 ) {
   const { emailField, ssnField } = resolveDuplicateFieldNames(payload, fields);
-  const parts = duplicateKey.split("|");
+  const parts = duplicateKey.split("|").map((part) => part.trim());
 
-  if (parts.length === 2) {
+  if (parts.length === 2 && parts.some(Boolean)) {
     const [ssn, email] = parts;
     const andConditions: Record<string, unknown>[] = [];
 

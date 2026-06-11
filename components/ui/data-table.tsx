@@ -1,9 +1,19 @@
-import { ReactNode } from "react";
+"use client";
+
+import { GripVertical } from "lucide-react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { reorderIds } from "@/lib/reorder-fields";
+import { cn } from "@/lib/utils";
 
 export type Column<T> = {
   key: keyof T | string;
   label: ReactNode;
   render?: (row: T) => ReactNode;
+};
+
+type DragSession = {
+  rowId: string;
+  pointerId: number;
 };
 
 type DataTableProps<T> = {
@@ -13,7 +23,30 @@ type DataTableProps<T> = {
   selectedRowIds?: string[];
   onToggleRow?: (rowId: string) => void;
   onToggleAllRows?: (checked: boolean) => void;
+  rowReorder?: {
+    onReorder: (orderedIds: string[]) => void | Promise<void>;
+    disabled?: boolean;
+  };
 };
+
+function resolveRowDropTarget(tbody: HTMLElement, clientY: number) {
+  const rowElements = Array.from(tbody.querySelectorAll<HTMLElement>("[data-reorder-row-id]"));
+
+  if (rowElements.length === 0) {
+    return null;
+  }
+
+  for (const rowElement of rowElements) {
+    const rect = rowElement.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+
+    if (clientY < midpoint) {
+      return rowElement.dataset.reorderRowId ?? null;
+    }
+  }
+
+  return rowElements[rowElements.length - 1]?.dataset.reorderRowId ?? null;
+}
 
 export function DataTable<T extends { id: string }>({
   columns,
@@ -22,10 +55,110 @@ export function DataTable<T extends { id: string }>({
   selectedRowIds = [],
   onToggleRow,
   onToggleAllRows,
+  rowReorder,
 }: DataTableProps<T>) {
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const dragOverRowIdRef = useRef<string | null>(null);
+  const dropTargetRef = useRef<string | null>(null);
+
+  const [dragSession, setDragSession] = useState<DragSession | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
+
   const isSelectable = Boolean(onToggleRow);
+  const isReorderable = Boolean(rowReorder) && !rowReorder?.disabled;
+  const isDragging = Boolean(dragSession);
+  const draggedRowId = dragSession?.rowId ?? null;
   const selectedIds = new Set(selectedRowIds);
   const allRowsSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+
+  const setDropTarget = useCallback((rowId: string | null) => {
+    if (dragOverRowIdRef.current === rowId) return;
+    dragOverRowIdRef.current = rowId;
+    dropTargetRef.current = rowId;
+    setDragOverRowId(rowId);
+  }, []);
+
+  const clearDragState = useCallback(() => {
+    dragOverRowIdRef.current = null;
+    dropTargetRef.current = null;
+    setDragSession(null);
+    setDragOverRowId(null);
+  }, []);
+
+  const updateDropTargetFromPointer = useCallback(
+    (clientY: number) => {
+      const tbody = tbodyRef.current;
+      if (!tbody) return;
+      setDropTarget(resolveRowDropTarget(tbody, clientY));
+    },
+    [setDropTarget]
+  );
+
+  const startPointerDrag = (rowId: string, event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isReorderable || event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    setDragSession({
+      rowId,
+      pointerId: event.pointerId,
+    });
+    updateDropTargetFromPointer(event.clientY);
+  };
+
+  useEffect(() => {
+    if (!dragSession || !rowReorder) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== dragSession.pointerId) return;
+      updateDropTargetFromPointer(event.clientY);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== dragSession.pointerId) return;
+
+      const tbody = tbodyRef.current;
+      const targetRowId =
+        dropTargetRef.current ?? (tbody ? resolveRowDropTarget(tbody, event.clientY) : null);
+
+      if (targetRowId && targetRowId !== dragSession.rowId) {
+        const orderedIds = reorderIds(
+          rows.map((row) => row.id),
+          dragSession.rowId,
+          targetRowId
+        );
+        void rowReorder.onReorder(orderedIds);
+      }
+
+      clearDragState();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [clearDragState, dragSession, rowReorder, rows, updateDropTargetFromPointer]);
+
+  useEffect(() => {
+    if (!dragSession) return;
+
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    };
+  }, [dragSession]);
 
   if (rows.length === 0) {
     return (
@@ -41,6 +174,9 @@ export function DataTable<T extends { id: string }>({
         <table className="min-w-max w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
             <tr>
+              {isReorderable ? (
+                <th className="w-10 border-b border-slate-200 px-2 py-3 text-left dark:border-slate-600" aria-label="Reorder" />
+              ) : null}
               {isSelectable ? (
                 <th className="w-14 border-b border-slate-200 px-4 py-3 text-left dark:border-slate-600">
                   <input
@@ -62,38 +198,69 @@ export function DataTable<T extends { id: string }>({
               ))}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={row.id}
-                className={`transition-colors duration-200 hover:bg-blue-50/50 dark:hover:bg-blue-400/10 ${index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70"}`}
-              >
-                {isSelectable ? (
-                  <td className="border-b border-slate-100 px-4 py-3 align-top dark:border-slate-700/80">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(row.id)}
-                      onChange={() => onToggleRow?.(row.id)}
-                      aria-label={`Select row ${row.id}`}
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
-                    />
-                  </td>
-                ) : null}
-                {columns.map((column) => (
-                  <td
-                    key={String(column.key)}
-                    className="border-b border-slate-100 px-4 py-3 text-slate-600 transition-colors duration-200 dark:border-slate-700/80 dark:text-slate-200"
-                  >
-                    {column.render
-                      ? column.render(row)
-                      : (() => {
-                          const value = row[column.key as keyof T];
-                          return value === undefined || value === null ? "" : String(value);
-                        })()}
-                  </td>
-                ))}
-              </tr>
-            ))}
+          <tbody ref={tbodyRef}>
+            {rows.map((row, index) => {
+              const isRowDragging = draggedRowId === row.id;
+              const isDropTarget = dragOverRowId === row.id && draggedRowId !== row.id;
+
+              return (
+                <tr
+                  key={row.id}
+                  data-reorder-row-id={isReorderable ? row.id : undefined}
+                  className={cn(
+                    index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70",
+                    !isDragging && "hover:bg-blue-50/50 dark:hover:bg-blue-400/10",
+                    isRowDragging && "opacity-50",
+                    isDropTarget && "bg-blue-50 shadow-[inset_0_0_0_2px_rgb(147,197,253)] dark:bg-blue-500/10 dark:shadow-[inset_0_0_0_2px_rgb(96,165,250)]"
+                  )}
+                >
+                  {isReorderable ? (
+                    <td className="border-b border-slate-100 px-2 py-3 align-top dark:border-slate-700/80">
+                      <div
+                        data-drag-handle
+                        data-dragging={isRowDragging ? "true" : undefined}
+                        title="Drag to move"
+                        style={{ touchAction: "none" }}
+                        onPointerDown={(event) => startPointerDrag(row.id, event)}
+                        aria-label={`Drag to reorder ${row.id}`}
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full border bg-white text-slate-500 shadow-sm transition-colors",
+                          isRowDragging
+                            ? "border-blue-400 bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/30"
+                            : "border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                        )}
+                      >
+                        <GripVertical size={14} strokeWidth={2.25} className="pointer-events-none" />
+                      </div>
+                    </td>
+                  ) : null}
+                  {isSelectable ? (
+                    <td className="border-b border-slate-100 px-4 py-3 align-top dark:border-slate-700/80">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => onToggleRow?.(row.id)}
+                        aria-label={`Select row ${row.id}`}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+                      />
+                    </td>
+                  ) : null}
+                  {columns.map((column) => (
+                    <td
+                      key={String(column.key)}
+                      className="border-b border-slate-100 px-4 py-3 text-slate-600 transition-colors duration-200 dark:border-slate-700/80 dark:text-slate-200"
+                    >
+                      {column.render
+                        ? column.render(row)
+                        : (() => {
+                            const value = row[column.key as keyof T];
+                            return value === undefined || value === null ? "" : String(value);
+                          })()}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -12,6 +12,7 @@ import {
   defaultScheduleRule,
   findScheduleRuleOverlap,
   getScheduleRuleOverlapMessage,
+  normalizeGeneralFiltersForStorage,
   validateScheduleRulesNoOverlap,
   type CampaignDuplicatesSettings,
   type CampaignGeneralFilter,
@@ -92,7 +93,7 @@ export async function PATCH(req: Request, context: Params) {
     }
 
     if (body.section === "filters" && body.generalFilters) {
-      mapping.set("generalFilters", body.generalFilters);
+      mapping.set("generalFilters", normalizeGeneralFiltersForStorage(body.generalFilters));
       mapping.markModified("generalFilters");
     }
 

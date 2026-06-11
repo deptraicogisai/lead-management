@@ -15,14 +15,16 @@ type MappingWithApiRequest = {
 
 const MAX_API_KEY_ATTEMPTS = 8;
 
+export const PUBLISHER_LEAD_ENDPOINT_PATH = "/api/lead";
+
 function buildApiKey() {
   return randomBytes(16).toString("hex").toUpperCase();
 }
 
-export function buildMappingApiRequest(sellerRef: string, apiKey = buildApiKey()): MappingApiRequest {
+export function buildMappingApiRequest(_sellerRef?: string, apiKey = buildApiKey()): MappingApiRequest {
   return {
     apiKey,
-    url: `/api/${sellerRef}/lead`,
+    url: PUBLISHER_LEAD_ENDPOINT_PATH,
     method: "POST",
   };
 }
@@ -48,6 +50,14 @@ function isCompleteApiRequest(apiRequest: Partial<MappingApiRequest> | null | un
 
 export async function ensureMappingApiRequest(mapping: MappingWithApiRequest) {
   if (isCompleteApiRequest(mapping.apiRequest)) {
+    if (mapping.apiRequest.url !== PUBLISHER_LEAD_ENDPOINT_PATH) {
+      mapping.apiRequest = {
+        ...mapping.apiRequest,
+        url: PUBLISHER_LEAD_ENDPOINT_PATH,
+      };
+      await mapping.save();
+    }
+
     return mapping.apiRequest;
   }
 

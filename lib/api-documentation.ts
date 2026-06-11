@@ -7,8 +7,7 @@ import {
   buildOverviewParagraphs,
   buildDocumentationOutline,
   buildLeadResponseStatusMarkdown,
-  describeFieldCondition,
-  getFieldsWithConditions,
+  formatAcceptedValues,
   getCodeTokenPdfColor,
   tokenizeCode,
   tokenizeJson,
@@ -16,6 +15,14 @@ import {
   type CodeToken,
   type DocumentationErrorRow,
 } from "@/lib/api-documentation-content";
+import {
+  buildDocumentationRequirementRows,
+  buildDocumentationRequirementsMarkdown,
+  formatRequirementCell,
+  type DocumentationRequirementRow,
+} from "@/lib/api-documentation-requirements";
+import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
+import { buildFieldExampleRequest, buildFieldExampleValue } from "@/lib/lead-field-value";
 
 export type DocumentationField = {
   id: string;
@@ -29,6 +36,7 @@ export type DocumentationField = {
     days?: number;
   };
   ignoreValues?: string[];
+  options?: Array<{ label: string; value: string }>;
 };
 
 export type DocumentationContext = {
@@ -40,10 +48,6 @@ export type DocumentationContext = {
   method: string;
   sellerName?: string;
   baseUrl?: string;
-};
-const SAMPLE_REQUEST_OVERRIDES: Record<string, unknown> = {
-  fname: "Jim",
-  zip_code: "550000",
 };
 
 // Use PDFKit's built-in fonts so PDF generation works on serverless
@@ -63,70 +67,45 @@ export function prettyType(type: string) {
 }
 
 function buildExampleValue(field: DocumentationField): unknown {
-  if (field.fieldName in SAMPLE_REQUEST_OVERRIDES) {
-    return SAMPLE_REQUEST_OVERRIDES[field.fieldName];
-  }
-
-  const normalizedType = normalizeType(field.type);
-  const normalizedFormat = field.format?.trim().toLowerCase();
-
-  if (normalizedFormat === "email") return "jim@example.com";
-  if (normalizedFormat === "e.164") return "+15551234567";
-  if (normalizedType === "boolean") return true;
-  if (normalizedType === "date") return "2026-04-25";
-  if (normalizedType === "number" || normalizedType === "numeric" || normalizedType === "numberic") return 1000;
-
-  if (field.fieldName.toLowerCase().includes("zip")) return "550000";
-  if (field.fieldName.toLowerCase().includes("phone")) return "+15551234567";
-  if (field.fieldName.toLowerCase().includes("email")) return "jim@example.com";
-  if (field.fieldName.toLowerCase().includes("name")) return "Jim";
-
-  return "sample_value";
+  return buildFieldExampleValue(field);
 }
 
 export function buildExampleRequest(fields: DocumentationField[]) {
-  return fields.reduce<Record<string, unknown>>((payload, field) => {
-    payload[field.fieldName] = buildExampleValue(field);
-    return payload;
-  }, {});
+  return buildFieldExampleRequest(fields);
 }
 
 function buildRequestFieldTable(fields: DocumentationField[]) {
   const header = [
-    "| Parameter | Type | Required | Description | Condition | Sample Value |",
+    "| Parameter | Type | Required | Description | Accepted Values | Sample Value |",
     "| --- | --- | --- | --- | --- | --- |",
   ];
 
   const rows = fields.map((field) => {
     const exampleValue = buildExampleValue(field);
-    return `| \`${field.fieldName}\` | \`${prettyType(field.type)}\` | ${field.required ? "Yes" : "No"} | ${field.description || "-"} | ${describeFieldCondition(field)} | \`${JSON.stringify(exampleValue)}\` |`;
+    return `| \`${field.fieldName}\` | \`${prettyType(field.type)}\` | ${field.required ? "Yes" : "No"} | ${field.description || "-"} | ${formatAcceptedValues(field) ?? "-"} | \`${JSON.stringify(exampleValue)}\` |`;
   });
 
   return [...header, ...rows].join("\n");
 }
 
-export function buildApiDocumentationMarkdown(context: DocumentationContext, fields: DocumentationField[]) {
+export function buildApiDocumentationMarkdown(
+  context: DocumentationContext,
+  fields: DocumentationField[],
+  intakeSettings: MappingIntakeSettingsRecord
+) {
   const exampleRequest = buildExampleRequest(fields);
-  const conditionedFields = getFieldsWithConditions(fields);
-  const outline = buildDocumentationOutline(conditionedFields.length > 0);
+  const outline = buildDocumentationOutline();
+  const requirementRows = buildDocumentationRequirementRows(intakeSettings, fields);
+  const requirementsSection = `## ${outline.requirements.label}
+
+${buildDocumentationRequirementsMarkdown(requirementRows)}
+
+`;
   const errorResponse = {
     status: "error",
     reasons: [{ message: `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.` }],
   };
   const leadResponseStatusSection = buildLeadResponseStatusMarkdown(outline);
-  const fieldConditionsSection =
-    outline.fieldConditions
-      ? `## ${outline.fieldConditions.label}
-
-${conditionedFields
-  .map((field) => `- \`${field.fieldName}\`: ${describeFieldCondition(field)}`)
-  .join("\n")}
-
-`
-      : "";
-  const conditionNotes = conditionedFields
-    .map((field) => `- Field condition for \`${field.fieldName}\`: ${describeFieldCondition(field)}.`)
-    .join("\n");
 
   return `## ${outline.overview.label}
 
@@ -145,7 +124,7 @@ In a real-world workflow, this endpoint is used by partner systems, landing page
 
 ${buildRequestFieldTable(fields)}
 
-${fieldConditionsSection}## ${outline.exampleJsonRequest.label}
+${requirementsSection}## ${outline.exampleJsonRequest.label}
 
 \`\`\`json
 ${JSON.stringify(exampleRequest, null, 2)}
@@ -175,8 +154,6 @@ ${JSON.stringify(errorResponse, null, 2)}
 - Saved leads are displayed in the \`Lead Menu\` inside the dashboard.
 - The server automatically captures the post time as \`postedAt\`.
 - The server automatically captures the request \`User-Agent\` header as \`userAgent\`.
-${conditionNotes ? `${conditionNotes}
-` : ""}
 
 ## Error Handling
 
@@ -402,17 +379,86 @@ function writeTintedCodeBlock(doc: PDFKit.PDFDocument, title: string, code: stri
   }
 }
 
+function writeRequirementsTable(doc: PDFKit.PDFDocument, rows: DocumentationRequirementRow[]) {
+  if (rows.length === 0) {
+    writeParagraph(doc, "No requirements are configured for this API.");
+    return;
+  }
+
+  const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const startX = doc.page.margins.left;
+  const columnWidths = [120, tableWidth - 120];
+  const headers = ["Category", "Requirement"];
+  const tableRows = rows.map((row) => [row.category, formatRequirementCell(row.requirements)]);
+
+  const getRowHeight = (values: string[], isHeader = false) => {
+    const paddingY = isHeader ? 8 : 7;
+    const fontSize = isHeader ? 9.5 : 9;
+    doc.font(isHeader ? FONT_BOLD : FONT_REGULAR).fontSize(fontSize);
+
+    const contentHeight = values.reduce((max, value, index) => {
+      const height = doc.heightOfString(value, {
+        width: columnWidths[index] - 12,
+        lineGap: 2,
+      });
+      return Math.max(max, height);
+    }, 0);
+
+    return contentHeight + paddingY * 2;
+  };
+
+  const drawRow = (values: string[], y: number, isHeader = false, index = 0) => {
+    const rowHeight = getRowHeight(values, isHeader);
+    let currentX = startX;
+
+    values.forEach((value, cellIndex) => {
+      doc
+        .rect(currentX, y, columnWidths[cellIndex], rowHeight)
+        .fillAndStroke(isHeader ? "#E2E8F0" : index % 2 === 0 ? "#FFFFFF" : "#F8FAFC", "#E2E8F0");
+
+      doc
+        .font(isHeader ? FONT_BOLD : FONT_REGULAR)
+        .fontSize(isHeader ? 9.5 : 9)
+        .fillColor(isHeader ? "#0F172A" : "#334155")
+        .text(value, currentX + 6, y + (isHeader ? 8 : 7), {
+          width: columnWidths[cellIndex] - 12,
+          lineGap: 2,
+        });
+
+      currentX += columnWidths[cellIndex];
+    });
+
+    return rowHeight;
+  };
+
+  let cursorY = doc.y;
+  ensureSpace(doc, getRowHeight(headers, true));
+  cursorY = doc.y;
+  cursorY += drawRow(headers, cursorY, true);
+
+  tableRows.forEach((row, index) => {
+    const rowHeight = getRowHeight(row);
+    ensureSpace(doc, rowHeight);
+    cursorY = doc.y;
+    cursorY += drawRow(row, cursorY, false, index);
+    doc.y = cursorY;
+  });
+
+  doc.y = cursorY + 5;
+  resetTextCursor(doc);
+}
+
 function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationField[]) {
   const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const startX = doc.page.margins.left;
-  const columnWidths = [112, 72, 58, 150, tableWidth - 112 - 72 - 58 - 150];
-  const headers = ["Parameter", "Type", "Required", "Description", "Condition"];
+  const columnWidths = [84, 52, 46, 130, tableWidth - 84 - 52 - 46 - 130];
+  const headers = ["Parameter", "Type", "Required", "Description", "Accepted Values"];
   const rows = fields.map((field) => [
     field.fieldName,
     prettyType(field.type),
     field.required ? "Yes" : "No",
     field.description || "-",
-    describeFieldCondition(field),
+    formatAcceptedValues(field) ?? "-",
   ]);
 
   const getRowHeight = (values: string[], isHeader = false) => {
@@ -560,13 +606,14 @@ function writeErrorResponsesTable(doc: PDFKit.PDFDocument, rows: DocumentationEr
 
 export async function generateApiDocumentationPdfBuffer(
   context: DocumentationContext,
-  fields: DocumentationField[]
+  fields: DocumentationField[],
+  intakeSettings: MappingIntakeSettingsRecord
 ) {
   const exampleRequest = buildExampleRequest(fields);
   const errorRows = buildErrorRows(fields);
   const overviewParagraphs = buildOverviewParagraphs(context.verticalName);
-  const conditionedFields = getFieldsWithConditions(fields);
-  const outline = buildDocumentationOutline(conditionedFields.length > 0);
+  const outline = buildDocumentationOutline();
+  const requirementRows = buildDocumentationRequirementRows(intakeSettings, fields);
 
   const doc = new PDFDocument({
     size: "A4",
@@ -608,12 +655,8 @@ export async function generateApiDocumentationPdfBuffer(
   writeSectionHeading(doc, outline.requestBody.label);
   writeRequestBodyTable(doc, fields);
 
-  if (outline.fieldConditions) {
-    writeSectionHeading(doc, outline.fieldConditions.label);
-    conditionedFields.forEach((field) => {
-      writeBullet(doc, `${field.fieldName}: ${describeFieldCondition(field)}`);
-    });
-  }
+  writeSectionHeading(doc, outline.requirements.label);
+  writeRequirementsTable(doc, requirementRows);
 
   writeSectionHeading(doc, outline.exampleJsonRequest.label);
   writeTintedCodeBlock(doc, "JSON — Example Request", JSON.stringify(exampleRequest, null, 2), "json");

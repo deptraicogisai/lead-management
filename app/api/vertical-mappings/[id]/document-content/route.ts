@@ -3,26 +3,13 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { connectToDatabase } from "@/lib/mongodb";
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
-import { type DocumentationField } from "@/lib/api-documentation";
+import { toDocumentationField } from "@/lib/api-documentation-field";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { ensureMappingApiRequest } from "@/lib/mapping-api-request";
+import type { MappingFieldDoc } from "@/lib/mapping-field-api";
+import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
 
 type Params = { params: Promise<{ id: string }> };
-
-type MappingFieldDoc = {
-  _id?: { toString(): string };
-  sourceVerticalFieldId?: string | null;
-  fieldName: string;
-  description: string;
-  type: string;
-  required: boolean;
-  format?: string | null;
-  emailDuplicateRule?: {
-    mode?: "days" | "forever" | null;
-    days?: number | null;
-  } | null;
-  ignoreValues?: string[] | null;
-};
 
 type VerticalFieldDoc = {
   _id?: { toString(): string } | string;
@@ -36,32 +23,8 @@ type VerticalFieldDoc = {
     days?: number | null;
   } | null;
   ignoreValues?: string[] | null;
+  options?: Array<{ label?: string | null; value?: string | null }> | null;
 };
-
-function toDocumentationField(field: {
-  id: string;
-  fieldName: string;
-  description: string;
-  type: string;
-  required: boolean;
-  format: string;
-  emailDuplicateRule?: {
-    mode: "days" | "forever";
-    days?: number;
-  };
-  ignoreValues?: string[];
-}): DocumentationField {
-  return {
-    id: field.id,
-    fieldName: field.fieldName,
-    description: field.description,
-    type: field.type,
-    required: field.required,
-    format: field.format ?? "",
-    emailDuplicateRule: field.emailDuplicateRule,
-    ignoreValues: field.ignoreValues ?? [],
-  };
-}
 
 export async function GET(req: Request, context: Params) {
   try {
@@ -91,9 +54,10 @@ export async function GET(req: Request, context: Params) {
       return NextResponse.json({ message: "Vertical mapping references are invalid." }, { status: 400 });
     }
 
+    const mappingFields = (mapping.fields as MappingFieldDoc[] | undefined) ?? [];
     const fields = getEffectiveMappingFields(
       (vertical.fields as VerticalFieldDoc[] | undefined) ?? [],
-      (mapping.fields as MappingFieldDoc[] | undefined) ?? []
+      mappingFields
     ).map(toDocumentationField);
 
     if (fields.length === 0) {
@@ -103,6 +67,8 @@ export async function GET(req: Request, context: Params) {
       );
     }
 
+    const intakeSettings = toMappingIntakeSettings(mapping.toObject(), mappingFields);
+
     return NextResponse.json({
       sellerName: seller.name,
       verticalName: vertical.name,
@@ -111,6 +77,7 @@ export async function GET(req: Request, context: Params) {
       apiKey: apiRequest.apiKey,
       method: apiRequest.method,
       fields,
+      intakeSettings,
     });
   } catch {
     return NextResponse.json({ message: "Failed to load API documentation content." }, { status: 500 });

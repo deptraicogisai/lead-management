@@ -9,6 +9,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 
 type LeadRow = {
@@ -64,11 +65,7 @@ function formatPostedAt(value: string) {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
-type LeadsListProps = {
-  title?: string;
-};
-
-export function LeadsList({ title = "Leads List" }: LeadsListProps) {
+export function LeadsList() {
   const [rows, setRows] = useState<LeadRow[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -242,7 +239,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
       }
       await fetchLeads();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Failed to delete leads.");
+      toast.error(error instanceof Error ? error.message : "Failed to delete leads.");
     } finally {
       setIsDeleting(false);
     }
@@ -253,7 +250,7 @@ export function LeadsList({ title = "Leads List" }: LeadsListProps) {
   };
 
   return (
-    <PageSection title={title}>
+    <PageSection>
       <ListControls
         searchValue={search}
         onSearchChange={(value) => {

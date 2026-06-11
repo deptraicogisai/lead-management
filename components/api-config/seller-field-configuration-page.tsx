@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Calendar, Copy, Filter, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
@@ -9,6 +8,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
+import { reorderItemsByIds } from "@/lib/reorder-fields";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatVerticalFieldTypeLabel, type VerticalFieldOption } from "@/lib/vertical-field";
 
@@ -122,7 +123,6 @@ export function SellerFieldConfigurationPage() {
 
   const [fields, setFields] = useState<ApiField[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -139,6 +139,7 @@ export function SellerFieldConfigurationPage() {
     { mode: "single"; field: ApiField } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const [activeTab, setActiveTab] = useState<FieldConfigurationTab>("fields");
 
   const fetchFields = async () => {
@@ -175,7 +176,6 @@ export function SellerFieldConfigurationPage() {
     null;
 
   const clearActionFeedback = () => {
-    setActionMessage("");
     setActionError("");
   };
 
@@ -346,7 +346,7 @@ export function SellerFieldConfigurationPage() {
 
       const createdField = normalizeApiField(result as ApiField);
       setFields((current) => [...current, createdField]);
-      setActionMessage(`Field "${createdField.fieldName}" created successfully.`);
+      toast.success(`Field "${createdField.fieldName}" created successfully.`);
       closeCreateModal();
     } catch {
       setCreateErrors({ form: "Failed to create field." });
@@ -365,7 +365,7 @@ export function SellerFieldConfigurationPage() {
     setIsSavingEdit(false);
 
     if (result.ok) {
-      setActionMessage(`Field "${result.data.fieldName}" saved successfully.`);
+      toast.success(`Field "${result.data.fieldName}" saved successfully.`);
       cancelEdit();
     } else {
       setActionError(result.message);
@@ -380,6 +380,43 @@ export function SellerFieldConfigurationPage() {
 
   const handleToggleAllRows = (checked: boolean) => {
     setSelectedFieldIds(checked ? rows.map((row) => row.id) : []);
+  };
+
+  const handleReorderFields = async (orderedIds: string[]) => {
+    if (!sellerId || !mappingId || isReordering) return;
+
+    const reordered = reorderItemsByIds(fields, orderedIds);
+    if (!reordered) return;
+
+    const previous = fields;
+    setFields(reordered);
+    setIsReordering(true);
+    clearActionFeedback();
+
+    try {
+      const response = await fetch(
+        `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/field-configuration/reorder`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fieldIds: orderedIds }),
+        }
+      );
+      const result = (await response.json().catch(() => null)) as ApiField[] | { message?: string } | null;
+
+      if (!response.ok) {
+        setFields(previous);
+        setActionError((result as { message?: string } | null)?.message ?? "Failed to reorder fields.");
+        return;
+      }
+
+      setFields(((result as ApiField[]) ?? reordered).map((field) => normalizeApiField(field)));
+    } catch {
+      setFields(previous);
+      setActionError("Failed to reorder fields.");
+    } finally {
+      setIsReordering(false);
+    }
   };
 
   const openDeleteConfirm = (field: ApiField) => {
@@ -441,12 +478,12 @@ export function SellerFieldConfigurationPage() {
       if (failed) {
         setActionError(`Failed to delete field "${deleteConfirm.field.fieldName}".`);
       } else {
-        setActionMessage(`Field "${deleteConfirm.field.fieldName}" deleted successfully.`);
+        toast.success(`Field "${deleteConfirm.field.fieldName}" deleted successfully.`);
       }
     } else if (failed) {
       setActionError(`Deleted ${deletedCount} field(s), but some deletions failed.`);
     } else {
-      setActionMessage(`Deleted ${deletedCount} field(s).`);
+      toast.success(`Deleted ${deletedCount} field(s).`);
     }
 
     setIsDeleting(false);
@@ -515,7 +552,7 @@ export function SellerFieldConfigurationPage() {
       const result = await saveField({ ...optionsModalField, options: nextOptions });
 
       if (result.ok) {
-        setActionMessage(`Options for "${result.data.fieldName}" saved successfully.`);
+        toast.success(`Options for "${result.data.fieldName}" saved successfully.`);
         closeOptionsModal();
       } else {
         setOptionsError(result.message);
@@ -740,26 +777,17 @@ export function SellerFieldConfigurationPage() {
       ) : null}
 
       <PageSection
-        title="Field Configuration List"
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {activeTab === "fields" ? (
-              <PrimaryButton
-                type="button"
-                disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
-                onClick={openCreateModal}
-              >
-                <Plus size={15} />
-                <span>Add Field</span>
-              </PrimaryButton>
-            ) : null}
-            <Link
-              href={`/api-config?sellerId=${encodeURIComponent(sellerId)}&sellerName=${encodeURIComponent(sellerName ?? "")}`}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          activeTab === "fields" ? (
+            <PrimaryButton
+              type="button"
+              disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
+              onClick={openCreateModal}
             >
-              Back to API Configuration
-            </Link>
-          </div>
+              <Plus size={15} />
+              <span>Add Field</span>
+            </PrimaryButton>
+          ) : null
         }
       >
         <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
@@ -796,8 +824,8 @@ export function SellerFieldConfigurationPage() {
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
-            <span className="font-medium">Edit</span> on a row to update it directly in the grid. Use checkboxes to select fields and delete
-            them in bulk. Click Options to view or edit option values.
+            <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to reorder
+            fields. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
           </p>
 
           {selectedFieldIds.length > 0 ? (
@@ -816,7 +844,6 @@ export function SellerFieldConfigurationPage() {
           ) : null}
 
           <FormError error={actionError} />
-          {actionMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{actionMessage}</p> : null}
         </div>
 
         <DataTable<ApiField>
@@ -830,6 +857,10 @@ export function SellerFieldConfigurationPage() {
           selectedRowIds={selectedFieldIds}
           onToggleRow={handleToggleRow}
           onToggleAllRows={handleToggleAllRows}
+          rowReorder={{
+            onReorder: handleReorderFields,
+            disabled: Boolean(editingFieldId) || isLoading,
+          }}
         />
         </>
         ) : sellerId && mappingId ? (

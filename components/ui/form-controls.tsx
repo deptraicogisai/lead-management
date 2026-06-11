@@ -29,16 +29,24 @@ export function FieldLabel({ htmlFor, label }: { htmlFor: string; label: string 
 }
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
-  { className, ...restProps },
+  { className, disabled, readOnly, tabIndex, ...restProps },
   ref
 ) {
   return (
     <input
       ref={ref}
+      disabled={disabled}
+      readOnly={disabled ? true : readOnly}
+      tabIndex={disabled ? -1 : tabIndex}
       {...restProps}
       className={cn(
-        fieldControlClassName,
-        "px-3 py-2.5 focus:-translate-y-px dark:placeholder:text-slate-400",
+        "w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition duration-200 dark:placeholder:text-slate-400",
+        disabled
+          ? "pointer-events-none cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 caret-transparent selection:bg-transparent focus:border-slate-200 focus:ring-0 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400"
+          : cn(
+              fieldControlClassName,
+              "focus:-translate-y-px"
+            ),
         className
       )}
     />

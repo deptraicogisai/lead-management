@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import {
   CircleHelp,
   ExternalLink,
@@ -13,8 +14,8 @@ import {
   Plug,
   X,
 } from "lucide-react";
-import { BackLink } from "@/components/ui/action-buttons";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { toast } from "@/lib/toast";
 import {
   normalizeBuyerStatus,
   type BuyerListRecord,
@@ -76,15 +77,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
   const [integrationPickerValue, setIntegrationPickerValue] = useState("");
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
-  const [integrationSaveError, setIntegrationSaveError] = useState("");
-  const [integrationSaveMessage, setIntegrationSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
   const [deleteError, setDeleteError] = useState("");
 
   const activeTab = buyerTabs.find((tab) => tab.id === activeTabId) ?? buyerTabs[0];
+
+  useBreadcrumbLabel(`[${buyer.displayId}] ${name}`);
 
   useEffect(() => {
     setName(buyer.name);
@@ -147,7 +147,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const handleSave = async () => {
     if (!name.trim()) {
       setSaveError("Name cannot be blank.");
-      setSaveMessage("");
       return;
     }
 
@@ -161,7 +160,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
     setIsSaving(true);
     setSaveError("");
-    setSaveMessage("");
 
     try {
       const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
@@ -172,14 +170,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
       if (!response.ok) {
         const result = (await response.json().catch(() => null)) as { message?: string } | null;
-        setSaveError(result?.message ?? "Failed to save buyer.");
+        toast.error(result?.message ?? "Failed to save buyer.");
         return;
       }
 
-      setSaveMessage("Buyer saved successfully.");
+      toast.success("Buyer saved successfully.");
       router.refresh();
     } catch {
-      setSaveError("Failed to save buyer.");
+      toast.error("Failed to save buyer.");
     } finally {
       setIsSaving(false);
     }
@@ -187,8 +185,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
   const handleSaveIntegrations = async () => {
     setIsSavingIntegrations(true);
-    setIntegrationSaveError("");
-    setIntegrationSaveMessage("");
 
     try {
       const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
@@ -199,14 +195,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
       if (!response.ok) {
         const result = (await response.json().catch(() => null)) as { message?: string } | null;
-        setIntegrationSaveError(result?.message ?? "Failed to save integrations.");
+        toast.error(result?.message ?? "Failed to save integrations.");
         return;
       }
 
-      setIntegrationSaveMessage("Integrations saved successfully.");
+      toast.success("Integrations saved successfully.");
       router.refresh();
     } catch {
-      setIntegrationSaveError("Failed to save integrations.");
+      toast.error("Failed to save integrations.");
     } finally {
       setIsSavingIntegrations(false);
     }
@@ -298,7 +294,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                 {isSaving ? "Saving..." : "Save"}
               </PrimaryButton>
               <FormError error={saveError || deleteError} />
-              {saveMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{saveMessage}</p> : null}
             </div>
           </div>
         </div>
@@ -372,10 +367,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               >
                 {isSavingIntegrations ? "Saving..." : "Save"}
               </PrimaryButton>
-              <FormError error={integrationSaveError} />
-              {integrationSaveMessage ? (
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">{integrationSaveMessage}</p>
-              ) : null}
             </div>
           </div>
         </div>
@@ -411,14 +402,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
   return (
     <div className="space-y-5">
-      <BackLink href="/buyers" label="Back to Buyers" />
-
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Buyer Detail - [{buyer.displayId}] {buyer.name}
-        </h3>
-
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex flex-wrap gap-2">
             {rightHeaderActions.map((action) => {
               const Icon = action.icon;

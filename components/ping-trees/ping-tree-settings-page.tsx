@@ -20,6 +20,7 @@ import {
   type PingTreeCampaignType,
   type PingTreeRecord,
 } from "@/lib/ping-tree";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type DropTarget = {
@@ -375,7 +376,6 @@ export function PingTreeSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTabRefreshing, setIsTabRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState("");
 
   const pingTreeListRef = useRef(pingTreeList);
   const notInPingTreeRef = useRef(notInPingTree);
@@ -505,7 +505,6 @@ export function PingTreeSettingsPage() {
 
     setActiveSearch("");
     setInactiveFilter("");
-    setMessage("");
     setDragSession(null);
     setDropTarget(null);
     setDropIndicator(null);
@@ -520,7 +519,6 @@ export function PingTreeSettingsPage() {
       if (!tree) return false;
 
       setIsSaving(true);
-      setMessage("");
 
       try {
         const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
@@ -534,11 +532,11 @@ export function PingTreeSettingsPage() {
         });
 
         if (response.ok) {
-          setMessage("Ping tree updated.");
+          toast.success("Ping tree updated.");
           return true;
         }
 
-        setMessage("Failed to update ping tree.");
+        toast.error("Failed to update ping tree.");
         await loadTree(tree.id, { withSpinner: false });
         return false;
       } finally {
@@ -822,14 +820,14 @@ export function PingTreeSettingsPage() {
       </div>
 
       {isLoading && !tree ? (
-        <PageSection title={`${activeTab} Ping Tree`}>
+        <PageSection>
           <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
             <Spinner />
             <span>Loading ping tree...</span>
           </div>
         </PageSection>
       ) : tree ? (
-      <PageSection title={`${activeTab} Ping Tree`}>
+      <PageSection>
         <div className="relative">
           {isTabRefreshing ? <LoadingOverlay /> : null}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -840,7 +838,6 @@ export function PingTreeSettingsPage() {
                 Drag using the crosshair icon. A line shows where the campaign will land.
               </p>
             ) : null}
-            {message ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{message}</p> : null}
             {isSaving ? <p className="text-sm text-slate-500">Saving...</p> : null}
           </div>
 

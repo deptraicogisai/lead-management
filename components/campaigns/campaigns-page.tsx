@@ -166,7 +166,7 @@ export function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <PageSection title="Campaigns">
+      <PageSection>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div>

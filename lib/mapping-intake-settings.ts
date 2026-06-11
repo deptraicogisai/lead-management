@@ -9,6 +9,13 @@ import {
   type CampaignScheduleRule,
 } from "@/lib/campaign";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
+import {
+  formatAcceptedValuesList,
+  getAllowedOptionValuesInRange,
+  isValueInCheckboxFilter,
+  isValueInRangeFilter,
+  type FieldOptionLike,
+} from "@/lib/lead-field-value";
 
 export type MappingIntakeSettingsRecord = {
   timezone: string;
@@ -37,39 +44,11 @@ type MappingIntakeDoc = {
   > | null;
 };
 
-type FieldOptionLike = { value: string; label?: string };
-
 function formatPayloadValueForMessage(value: unknown) {
   if (value === undefined || value === null || (typeof value === "string" && !value.trim())) {
     return "(empty)";
   }
   return String(value);
-}
-
-function buildAllowedCheckboxValues(selectedValues: string[], options: FieldOptionLike[]) {
-  const allowed = new Set<string>();
-
-  for (const selected of selectedValues) {
-    const normalizedSelected = selected.trim().toLowerCase();
-    if (!normalizedSelected) continue;
-
-    allowed.add(normalizedSelected);
-
-    const matchedOption = options.find(
-      (option) =>
-        option.value.trim().toLowerCase() === normalizedSelected ||
-        option.label?.trim().toLowerCase() === normalizedSelected
-    );
-
-    if (matchedOption?.value) {
-      allowed.add(matchedOption.value.trim().toLowerCase());
-    }
-    if (matchedOption?.label) {
-      allowed.add(matchedOption.label.trim().toLowerCase());
-    }
-  }
-
-  return allowed;
 }
 
 const TIMEZONE_IANA_MAP: Record<string, string> = {
@@ -137,7 +116,10 @@ export function toMappingIntakeSettings(
 
   return {
     timezone: resolveCampaignTimezone(doc.timezone),
-    duplicates: doc.duplicates ?? defaultCampaignDuplicates(),
+    duplicates: {
+      ...defaultCampaignDuplicates(),
+      ...(doc.duplicates ?? {}),
+    },
     generalFilters: syncGeneralFiltersWithFields(existingFilters, mappingFields),
     scheduleRules: (doc.scheduleRules ?? []).map((rule) => ({
       id: rule._id?.toString() ?? "",
@@ -159,30 +141,6 @@ function normalizeComparableValue(value: unknown) {
   if (typeof value === "string") return value.trim().toLowerCase();
   if (typeof value === "number" || typeof value === "boolean") return String(value).trim().toLowerCase();
   return "";
-}
-
-function getRangeOptionOrder(value: string, options: FieldOptionLike[]) {
-  const index = options.findIndex((option) => option.value === value);
-  if (index >= 0) return index;
-
-  const numeric = Number(value);
-  return Number.isNaN(numeric) ? null : numeric;
-}
-
-function isValueInRange(value: unknown, minValue: string, maxValue: string, options: FieldOptionLike[]) {
-  const comparable = normalizeComparableValue(value);
-  if (!comparable) return false;
-
-  const minOrder = getRangeOptionOrder(minValue, options);
-  const maxOrder = getRangeOptionOrder(maxValue, options);
-  const valueOrder = getRangeOptionOrder(comparable, options);
-
-  if (minOrder !== null && maxOrder !== null && valueOrder !== null) {
-    return valueOrder >= minOrder && valueOrder <= maxOrder;
-  }
-
-  return comparable.localeCompare(minValue, undefined, { numeric: true }) >= 0
-    && comparable.localeCompare(maxValue, undefined, { numeric: true }) <= 0;
 }
 
 export function evaluateGeneralFiltersForPayload(
@@ -209,14 +167,12 @@ export function evaluateGeneralFiltersForPayload(
     }
 
     if (filter.dataTypeFilter === "Checkbox" && (filter.selectedValues?.length ?? 0) > 0) {
-      const comparable = normalizeComparableValue(value);
-      if (!comparable) {
+      if (!normalizeComparableValue(value)) {
         reasons.push(`${label} is required.`);
         continue;
       }
 
-      const allowed = buildAllowedCheckboxValues(filter.selectedValues ?? [], options);
-      if (!allowed.has(comparable)) {
+      if (!isValueInCheckboxFilter(value, filter.selectedValues ?? [], options)) {
         reasons.push(
           `${label} filter rejected. Allowed: ${(filter.selectedValues ?? []).join(", ")}. Received: ${formatPayloadValueForMessage(value)}.`
         );
@@ -225,9 +181,22 @@ export function evaluateGeneralFiltersForPayload(
     }
 
     if (filter.dataTypeFilter === "Range" && filter.minValue && filter.maxValue) {
-      if (!isValueInRange(value, filter.minValue, filter.maxValue, options)) {
+      if (!normalizeComparableValue(value)) {
+        reasons.push(`${label} is required.`);
+        continue;
+      }
+
+      if (!isValueInRangeFilter(value, filter.minValue, filter.maxValue, options)) {
+        const allowedInRange = formatAcceptedValuesList(
+          getAllowedOptionValuesInRange(filter.minValue, filter.maxValue, options).map((optionValue) => ({
+            value: optionValue,
+          }))
+        );
+
         reasons.push(
-          `${label} filter rejected. Allowed range: ${filter.minValue} to ${filter.maxValue}. Received: ${formatPayloadValueForMessage(value)}.`
+          allowedInRange
+            ? `${label} filter rejected. Allowed: ${allowedInRange}. Received: ${formatPayloadValueForMessage(value)}.`
+            : `${label} filter rejected. Allowed range: ${filter.minValue} to ${filter.maxValue}. Received: ${formatPayloadValueForMessage(value)}.`
         );
       }
     }
@@ -236,7 +205,8 @@ export function evaluateGeneralFiltersForPayload(
   return reasons;
 }
 
-function parseDuplicatePeriodDays(period: string) {
+function parseDuplicatePeriodDays(period?: string | null) {
+  if (!period) return null;
   const trimmed = period.trim();
   if (!trimmed || trimmed === "OFF") return null;
   if (trimmed === "1 day") return 1;
@@ -257,12 +227,47 @@ function readPayloadString(payload: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
-export function resolveDuplicateFieldNames(payload: Record<string, unknown>, fields: MappingFieldDoc[]) {
+function isEmailLikeField(field: Pick<MappingFieldDoc, "fieldName" | "type" | "format">) {
+  const type = field.type.trim().toLowerCase();
+  const format = field.format?.trim().toLowerCase() ?? "";
+  const name = field.fieldName.trim().toLowerCase();
+
+  return type === "email" || format === "email" || name === "email" || name.includes("email");
+}
+
+function readEmailFromPayload(payload: Record<string, unknown>, fields: MappingFieldDoc[]) {
   const emailField =
     fields.find((field) => field.type.trim().toLowerCase() === "email")?.fieldName ??
-    (payload.email !== undefined ? "email" : "email");
+    fields.find((field) => field.format?.trim().toLowerCase() === "email")?.fieldName ??
+    fields.find((field) => field.fieldName.trim().toLowerCase() === "email")?.fieldName ??
+    fields.find((field) => isEmailLikeField(field))?.fieldName;
+
+  if (emailField) {
+    const value = readPayloadString(payload, [emailField]);
+    if (value) return { emailField, email: value };
+  }
+
+  for (const field of fields) {
+    const value = payload[field.fieldName];
+    if (typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+      return { emailField: field.fieldName, email: value.trim() };
+    }
+  }
+
+  const fallbackEmail = readPayloadString(payload, ["email", "Email", "EMAIL"]);
+  if (fallbackEmail) {
+    return { emailField: "email", email: fallbackEmail };
+  }
+
+  return { emailField: emailField ?? "email", email: "" };
+}
+
+export function resolveDuplicateFieldNames(payload: Record<string, unknown>, fields: MappingFieldDoc[]) {
+  const { emailField } = readEmailFromPayload(payload, fields);
   const ssnField =
-    fields.find((field) => field.fieldName.trim().toLowerCase() === "ssn")?.fieldName ?? "ssn";
+    fields.find((field) => field.fieldName.trim().toLowerCase() === "ssn")?.fieldName ??
+    fields.find((field) => field.type.trim().toLowerCase() === "ssn")?.fieldName ??
+    "ssn";
 
   return { emailField, ssnField };
 }
@@ -272,8 +277,8 @@ function buildDuplicateKey(
   method: CampaignDuplicatesSettings["duplicateMethod"],
   fields: MappingFieldDoc[]
 ) {
-  const { emailField, ssnField } = resolveDuplicateFieldNames(payload, fields);
-  const email = readPayloadString(payload, [emailField, "email"]);
+  const { email } = readEmailFromPayload(payload, fields);
+  const { ssnField } = resolveDuplicateFieldNames(payload, fields);
   const ssn = readPayloadString(payload, [ssnField, "ssn"]);
 
   if (method === "SSN + Email") {
@@ -299,25 +304,29 @@ export async function evaluateDuplicateRules(
   checkDuplicate: DuplicateCheckFn
 ) {
   const reasons: string[] = [];
-  const duplicateKey = buildDuplicateKey(payload, duplicates.duplicateMethod, fields);
+  const normalizedDuplicates = {
+    ...defaultCampaignDuplicates(),
+    ...duplicates,
+  };
+  const duplicateKey = buildDuplicateKey(payload, normalizedDuplicates.duplicateMethod, fields);
   if (!duplicateKey) return reasons;
 
-  const soldDays = parseDuplicatePeriodDays(duplicates.duplicateSold);
+  const soldDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicateSold);
   if (soldDays !== null) {
     const exists = await checkDuplicate(mappingId, duplicateKey, soldDays, "success");
     if (exists) {
       reasons.push(
-        `Duplicate sold lead rejected. A sold lead with the same ${duplicates.duplicateMethod.toLowerCase()} was found within ${duplicates.duplicateSold}.`
+        `Duplicate sold lead rejected. A sold lead with the same ${normalizedDuplicates.duplicateMethod.toLowerCase()} was found within ${normalizedDuplicates.duplicateSold}.`
       );
     }
   }
 
-  const postedDays = parseDuplicatePeriodDays(duplicates.duplicatePosted);
+  const postedDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicatePosted);
   if (postedDays !== null) {
     const exists = await checkDuplicate(mappingId, duplicateKey, postedDays);
     if (exists) {
       reasons.push(
-        `Duplicate posted lead rejected. A lead with the same ${duplicates.duplicateMethod.toLowerCase()} was already posted within ${duplicates.duplicatePosted}.`
+        `Duplicate posted lead rejected. A lead with the same ${normalizedDuplicates.duplicateMethod.toLowerCase()} was already posted within ${normalizedDuplicates.duplicatePosted}.`
       );
     }
   }

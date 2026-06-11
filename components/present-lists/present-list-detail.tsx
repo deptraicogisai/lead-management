@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { BackLink, ClearButton, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
+import { ClearButton, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
@@ -12,6 +13,7 @@ import { PageSection, Spinner } from "@/components/ui/state";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { formatPresentListDateTime, type PresentListRecord, type PresentListValueRecord } from "@/lib/present-list";
+import { toast } from "@/lib/toast";
 
 type PresentListDetailProps = {
   listId: string;
@@ -19,6 +21,7 @@ type PresentListDetailProps = {
 
 export function PresentListDetail({ listId }: PresentListDetailProps) {
   const [list, setList] = useState<PresentListRecord | null>(null);
+  useBreadcrumbLabel(list?.name ?? null);
   const [values, setValues] = useState<PresentListValueRecord[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -30,7 +33,6 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [valuesText, setValuesText] = useState("");
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<PresentListValueRecord | null>(null);
 
   const loadList = useCallback(async () => {
@@ -71,7 +73,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
       setError(result?.message ?? "Failed to add values.");
       return;
     }
-    setMessage(`Added ${result?.addedCount ?? 0} value(s).`);
+    toast.success(`Added ${result?.addedCount ?? 0} value(s).`);
     setValuesText("");
     setIsAddOpen(false);
     void loadList();
@@ -109,7 +111,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
 
   if (isInitialLoad && !list) {
     return (
-      <PageSection title="Present List">
+      <PageSection>
         <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
           <Spinner />
           <span>Loading list...</span>
@@ -120,7 +122,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
 
   if (!list) {
     return (
-      <PageSection title="Present List">
+      <PageSection>
         <p className="text-sm text-slate-500">List not found.</p>
       </PageSection>
     );
@@ -128,9 +130,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/present-lists" label="Back to lists" />
-
-      <PageSection title={`${list.name} Global list`}>
+      <PageSection>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
           <FieldLabel htmlFor="value-search" label="Search for a Value" />
           <Input id="value-search" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -151,8 +151,6 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
             </button>
           </div>
         </div>
-
-        {message ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">{message}</p> : null}
 
         <div className="mt-4">
           <ListTableContainer

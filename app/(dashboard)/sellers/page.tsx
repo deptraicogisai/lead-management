@@ -1,17 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { CircleHelp, Plus } from "lucide-react";
 import { SellerForm } from "@/components/forms/seller-form";
+import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { ListControls } from "@/components/ui/list-controls";
+import { IdBadge } from "@/components/ui/id-badge";
+import { Input } from "@/components/ui/form-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { ListTableContainer } from "@/components/ui/list-table-container";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatBuyerCreated } from "@/lib/buyer";
 import type { Seller } from "@/lib/mock-data";
 import { useListLoadState } from "@/lib/use-list-load-state";
+import { cn } from "@/lib/utils";
 
 type SellerListResponse = {
   items: Seller[];
@@ -21,6 +26,18 @@ type SellerListResponse = {
   totalPages: number;
 };
 
+const STATUS_FILTER_OPTIONS = ["All", "Active", "Inactive"] as const;
+
+function parseDateInput(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function apiConfigHref(row: Seller) {
+  return `/api-config?sellerId=${encodeURIComponent(row.id)}&sellerName=${encodeURIComponent(row.name)}`;
+}
+
 export default function SellersPage() {
   const [sellerRows, setSellerRows] = useState<Seller[]>([]);
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
@@ -28,11 +45,22 @@ export default function SellersPage() {
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [deleteTarget, setDeleteTarget] = useState<Seller | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [tableFilter, setTableFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>("All");
+  const [dateFrom, setDateFrom] = useState("2000-01-01");
+  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+
+  const [appliedFilters, setAppliedFilters] = useState({
+    statusFilter: "All" as (typeof STATUS_FILTER_OPTIONS)[number],
+    dateFrom: "2000-01-01",
+    dateTo: new Date().toISOString().slice(0, 10),
+  });
 
   const editingSeller = sellerRows.find((seller) => seller.id === editingSellerId) ?? null;
 
@@ -43,7 +71,6 @@ export default function SellersPage() {
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(pageSize),
-          search,
         });
         const response = await fetch(`/api/sellers?${params.toString()}`);
         if (!response.ok) return;
@@ -58,7 +85,56 @@ export default function SellersPage() {
     };
 
     void fetchSellers();
-  }, [page, pageSize, search, reloadKey]);
+  }, [page, pageSize, reloadKey]);
+
+  const filteredRows = useMemo(() => {
+    const fromDate = parseDateInput(appliedFilters.dateFrom);
+    const toDate = parseDateInput(appliedFilters.dateTo);
+
+    return sellerRows.filter((row) => {
+      const matchesStatus =
+        appliedFilters.statusFilter === "All" ? true : row.status === appliedFilters.statusFilter;
+
+      const createdAt = row.createdAt ? new Date(row.createdAt) : null;
+      const matchesDateFrom = !fromDate || !createdAt ? true : createdAt >= fromDate;
+      const matchesDateTo = !toDate || !createdAt ? true : createdAt <= new Date(`${appliedFilters.dateTo}T23:59:59`);
+
+      const search = tableFilter.trim().toLowerCase();
+      const matchesTableFilter = search
+        ? row.name.toLowerCase().includes(search) ||
+          row.email.toLowerCase().includes(search) ||
+          row.region.toLowerCase().includes(search) ||
+          row.status.toLowerCase().includes(search) ||
+          String(row.displayId ?? "").includes(search)
+        : true;
+
+      return matchesStatus && matchesDateFrom && matchesDateTo && matchesTableFilter;
+    });
+  }, [sellerRows, appliedFilters, tableFilter]);
+
+  const handleSearch = () => {
+    setAppliedFilters({
+      statusFilter,
+      dateFrom,
+      dateTo,
+    });
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setStatusFilter("All");
+    setDateFrom("2000-01-01");
+    setDateTo(today);
+    setTableFilter("");
+    setAppliedFilters({
+      statusFilter: "All",
+      dateFrom: "2000-01-01",
+      dateTo: today,
+    });
+    setSelectedIds([]);
+    setPage(1);
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -119,25 +195,69 @@ export default function SellersPage() {
     setReloadKey((prev) => prev + 1);
   };
 
+  const toggleRow = (rowId: string) => {
+    setSelectedIds((current) => (current.includes(rowId) ? current.filter((id) => id !== rowId) : [...current, rowId]));
+  };
+
+  const toggleAllRows = (checked: boolean) => {
+    setSelectedIds(checked ? filteredRows.map((row) => row.id) : []);
+  };
+
   const columns: Column<Seller>[] = [
-    { key: "name", label: "Name" },
-    { key: "email", label: "Email" },
-    { key: "region", label: "Region" },
+    {
+      key: "id",
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          <span>ID</span>
+          <span
+            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500"
+            title="Publisher record identifier"
+          >
+            <CircleHelp size={10} strokeWidth={2.5} />
+          </span>
+        </span>
+      ),
+      render: (row) => (
+        <Link href={apiConfigHref(row)} className="group inline-flex">
+          <IdBadge id={row.displayId ?? 0} interactive />
+        </Link>
+      ),
+    },
+    {
+      key: "name",
+      label: "Name",
+      render: (row) => <DetailNameLink href={apiConfigHref(row)}>{row.name}</DetailNameLink>,
+    },
+    {
+      key: "email",
+      label: "Email",
+      render: (row) => <span className="text-xs text-slate-700 dark:text-slate-200">{row.email}</span>,
+    },
+    {
+      key: "region",
+      label: "Region",
+      render: (row) => <span className="text-xs text-slate-700 dark:text-slate-200">{row.region}</span>,
+    },
+    {
+      key: "createdAt",
+      label: "Created",
+      render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
+    },
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => <StatusBadge status={row.status} variant="outline" />,
     },
     {
       key: "actions",
       label: "Actions",
       render: (row) => (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
-            href={`/api-config?sellerId=${encodeURIComponent(row.id)}&sellerName=${encodeURIComponent(row.name)}`}
-            className="rounded-lg border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20"
+            href={apiConfigHref(row)}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
-            Generate API Config
+            API Config
           </Link>
           <button
             type="button"
@@ -158,53 +278,135 @@ export default function SellersPage() {
     },
   ];
 
+  const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = filteredRows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
   return (
     <div className="space-y-6">
-      <ListControls
-        searchValue={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(1);
-        }}
-        searchPlaceholder="Search by name, email, region or status"
-      />
+      <PageSection>
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
+                >
+                  {STATUS_FILTER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      <PageSection
-        title="Publisher List"
-        actions={
-          <button
-            type="button"
-            onClick={handleCreate}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
-          >
-            Create Publisher
-          </button>
-        }
-      >
-        <ListTableContainer
-          isInitialLoad={isInitialLoad}
-          isRefreshing={isRefreshing}
-          loadingMessage="Loading publishers..."
-        >
-          <DataTable<Seller>
-            columns={columns}
-            rows={sellerRows}
-            emptyMessage="No publishers yet. Create your first publisher to get started."
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date Range</label>
+                <div className="flex items-center gap-2">
+                  <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+                  <span className="text-sm text-slate-500">-</span>
+                  <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <SearchButton onClick={handleSearch} />
+              <ClearButton onClick={clearFilters} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                  {[15, 50].map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setPageSize(size);
+                        setPage(1);
+                      }}
+                      className={cn(
+                        "px-3 py-2 text-sm font-medium transition",
+                        pageSize === size
+                          ? "bg-emerald-800 text-white dark:bg-emerald-600"
+                          : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-300">
+                  Showing <span className="font-semibold text-slate-900 dark:text-slate-100">{showingFrom}</span> to{" "}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{showingTo}</span> of{" "}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{totalItems}</span> entries
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <CircleHelp size={14} />
+                  <span>Filter:</span>
+                  <input
+                    type="text"
+                    value={tableFilter}
+                    onChange={(event) => setTableFilter(event.target.value)}
+                    className="w-28 border-none bg-transparent text-sm outline-none dark:text-slate-100"
+                    placeholder=""
+                  />
+                </div>
+                <ExportButton disabled />
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                >
+                  <Plus size={15} />
+                  Add New Publisher
+                </button>
+                {selectedIds.length > 0 ? (
+                  <span className="inline-flex items-center rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {selectedIds.length} selected
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <ListTableContainer
+              isInitialLoad={isInitialLoad}
+              isRefreshing={isRefreshing}
+              loadingMessage="Loading publishers..."
+            >
+              <DataTable<Seller>
+                columns={columns}
+                rows={filteredRows}
+                emptyMessage="No publishers found."
+                selectedRowIds={selectedIds}
+                onToggleRow={toggleRow}
+                onToggleAllRows={toggleAllRows}
+              />
+            </ListTableContainer>
+          </div>
+
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            pageSizeOptions={[15, 50]}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+            onPageChange={setPage}
           />
-        </ListTableContainer>
+        </div>
       </PageSection>
-
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        pageSize={pageSize}
-        onPageSizeChange={(value) => {
-          setPageSize(value);
-          setPage(1);
-        }}
-        onPageChange={setPage}
-      />
 
       <Modal
         open={isFormOpen}

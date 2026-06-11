@@ -17,10 +17,13 @@ import {
   Shield,
   Trash2,
 } from "lucide-react";
-import { BackLink, IconActionButton } from "@/components/ui/action-buttons";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
+import { IconActionButton } from "@/components/ui/action-buttons";
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
+import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
+import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -33,9 +36,11 @@ import {
   SCHEDULE_DAY_OPTIONS,
   TIMEZONE_OPTIONS,
   findScheduleRuleOverlap,
+  buildGeneralFilterEnabledPatch,
   getMaxRangeOptions,
   getScheduleRuleOverlapMessage,
   isGeneralFilterRangeValid,
+  normalizeGeneralFiltersForStorage,
   validateGeneralFilters,
   type CampaignRecord,
   type CampaignScheduleRule,
@@ -53,6 +58,7 @@ type CampaignDetailProps = {
 
 export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [campaign, setCampaign] = useState<CampaignRecord | null>(null);
+  useBreadcrumbLabel(campaign ? `[${campaign.displayId}] ${campaign.name}` : null);
   const [verticalFields, setVerticalFields] = useState<ApiFieldConfig[]>([]);
   const [presentLists, setPresentLists] = useState<PresentListRecord[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationBuilderRecord[]>([]);
@@ -60,12 +66,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [filterSubTab, setFilterSubTab] = useState<FilterSubTab>("general-filters");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [noticeModal, setNoticeModal] = useState<{
-    open: boolean;
-    title: string;
-    message: string;
-    variant: "success" | "error";
-  } | null>(null);
   const [generalForm, setGeneralForm] = useState({
     name: "",
     status: "Active" as CampaignRecord["status"],
@@ -144,10 +144,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     return new Map(verticalFields.map((field) => [field.fieldName, field.options ?? []]));
   }, [verticalFields]);
 
-  const showNotice = (title: string, message: string, variant: "success" | "error") => {
-    setNoticeModal({ open: true, title, message, variant });
-  };
-
   const saveSection = async (
     section: CampaignTab,
     payload: Record<string, unknown>,
@@ -164,15 +160,15 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
       const result = (await response.json().catch(() => null)) as CampaignRecord | { message?: string } | null;
       if (!response.ok) {
-        showNotice("Save Failed", (result as { message?: string } | null)?.message ?? "Failed to save.", "error");
+        toast.error((result as { message?: string } | null)?.message ?? "Failed to save.", "Save Failed");
         return false;
       }
 
       setCampaign(result as CampaignRecord);
-      showNotice("Success", successMessage, "success");
+      toast.success(successMessage);
       return true;
     } catch {
-      showNotice("Save Failed", "Failed to save.", "error");
+      toast.error("Failed to save.", "Save Failed");
       return false;
     } finally {
       setIsSaving(false);
@@ -184,14 +180,14 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
     const validationError = validateGeneralFilters(campaign.generalFilters, fieldOptionsListByName);
     if (validationError) {
-      showNotice("Validation Error", validationError, "error");
+      toast.error(validationError, "Validation Error");
       return;
     }
 
     void saveSection(
       "filters",
       {
-        generalFilters: campaign.generalFilters,
+        generalFilters: normalizeGeneralFiltersForStorage(campaign.generalFilters),
         plDnplListIds: selectedPlDnplIds,
         copyPlDnplToOtherCampaigns,
       },
@@ -235,10 +231,10 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       const data = (await response.json()) as CampaignRecord;
       setCampaign(data);
       closeScheduleRuleModal();
-      showNotice("Success", "Schedule rule added successfully.", "success");
+      toast.success("Schedule rule added successfully.");
     } else {
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
-      showNotice("Save Failed", result?.message ?? "Failed to add schedule rule.", "error");
+      toast.error(result?.message ?? "Failed to add schedule rule.", "Save Failed");
     }
   };
 
@@ -246,13 +242,13 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     if (!campaign) return;
 
     if (rule.days.length === 0) {
-      showNotice("Invalid Schedule", "Please select at least one day.", "error");
+      toast.error("Please select at least one day.", "Invalid Schedule");
       return;
     }
 
     const overlap = findScheduleRuleOverlap(rule, campaign.scheduleRules, editingScheduleRule?.id ?? null);
     if (overlap) {
-      showNotice("Schedule Overlap", getScheduleRuleOverlapMessage(rule, overlap), "error");
+      toast.error(getScheduleRuleOverlapMessage(rule, overlap), "Schedule Overlap");
       return;
     }
 
@@ -285,7 +281,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
   if (isLoading || !campaign) {
     return (
-      <PageSection title="Campaign Setup">
+      <PageSection>
         <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
           <Spinner />
           <span>Loading campaign...</span>
@@ -296,9 +292,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/campaigns" label="Back to Campaigns" />
-
-      <PageSection title={`${campaign.name} Campaign Setup`}>
+      <PageSection>
         <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -435,7 +429,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               }
               className="bg-emerald-800 hover:bg-emerald-700"
             >
-              Save Duplicates Settings
+              {isSaving ? "Saving..." : "Save Duplicates Settings"}
             </PrimaryButton>
           </div>
         ) : null}
@@ -471,6 +465,25 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               })}
             </div>
 
+            <DualSaveBar
+              dual={
+                filterSubTab === "general-filters"
+                  ? shouldUseDualSaveBar(campaign.generalFilters.length)
+                  : filterSubTab === "pl-dnpl"
+                    ? shouldUseDualSaveBar(presentLists.length)
+                    : false
+              }
+              renderActions={() => (
+                <PrimaryButton
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSaveFilters}
+                  className="bg-emerald-800 hover:bg-emerald-700"
+                >
+                  {isSaving ? "Saving..." : "Save Filters"}
+                </PrimaryButton>
+              )}
+            >
             {filterSubTab === "general-filters" ? (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {campaign.generalFilters.map((filter) => {
@@ -490,7 +503,9 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{filter.description}</p>
                         <ToggleSwitch
                           checked={filter.enabled}
-                          onChange={(enabled) => updateGeneralFilter(filter.fieldId, { enabled })}
+                          onChange={(enabled) =>
+                            updateGeneralFilter(filter.fieldId, buildGeneralFilterEnabledPatch(filter, enabled))
+                          }
                         />
                       </div>
 
@@ -590,6 +605,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
                       {filter.dataTypeFilter === "Text" ? (
                         <Input
+                          id={`${filter.fieldId}-text`}
                           value={filter.textValue ?? ""}
                           disabled={!isInteractive}
                           onChange={(e) => updateGeneralFilter(filter.fieldId, { textValue: e.target.value })}
@@ -614,15 +630,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                 Coming soon.
               </div>
             )}
-
-            <PrimaryButton
-              type="button"
-              disabled={isSaving}
-              onClick={handleSaveFilters}
-              className="bg-emerald-800 hover:bg-emerald-700"
-            >
-              Save Filters
-            </PrimaryButton>
+            </DualSaveBar>
           </div>
         ) : null}
 
@@ -719,8 +727,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         ) : null}
 
         {activeTab === "integration" ? (
-          <div className="mt-6 space-y-4">
-              <div className="grid max-w-4xl gap-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="mt-6 max-w-4xl space-y-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                 <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                   <FieldLabel htmlFor="integration-select" label="Integration" />
                   <div className="flex min-w-0 items-center gap-2">
@@ -803,27 +810,26 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <PrimaryButton
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() =>
-                      void saveSection(
-                        "integration",
-                        {
-                          integrationId: integrationForm.integrationId,
-                          postUrl: integrationForm.postUrl,
-                          postTimeout: integrationForm.postTimeout,
-                        },
-                        "Integration settings saved successfully."
-                      )
-                    }
-                    className="bg-emerald-800 hover:bg-emerald-700"
-                  >
-                    {isSaving ? "Saving..." : "Save Integration Settings"}
-                  </PrimaryButton>
-                </div>
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <PrimaryButton
+                type="button"
+                disabled={isSaving}
+                onClick={() =>
+                  void saveSection(
+                    "integration",
+                    {
+                      integrationId: integrationForm.integrationId,
+                      postUrl: integrationForm.postUrl,
+                      postTimeout: integrationForm.postTimeout,
+                    },
+                    "Integration settings saved successfully."
+                  )
+                }
+                className="bg-emerald-800 hover:bg-emerald-700"
+              >
+                {isSaving ? "Saving..." : "Save Integration Settings"}
+              </PrimaryButton>
+            </div>
           </div>
         ) : null}
       </PageSection>
@@ -833,27 +839,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         onClose={closeScheduleRuleModal}
         initialRule={editingScheduleRule}
         onSave={(rule) => void handleSaveScheduleRule(rule)}
-      />
-
-      <Modal
-        open={Boolean(noticeModal?.open)}
-        title={noticeModal?.title ?? ""}
-        description={noticeModal?.message}
-        onClose={() => setNoticeModal(null)}
-        panelClassName="max-w-sm"
-        actions={
-          <PrimaryButton
-            type="button"
-            onClick={() => setNoticeModal(null)}
-            className={cn(
-              noticeModal?.variant === "error"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-emerald-800 hover:bg-emerald-700"
-            )}
-          >
-            OK
-          </PrimaryButton>
-        }
       />
 
       <Modal

@@ -156,8 +156,8 @@ export async function ensureVerticalMappingReferencesMigrated() {
       for (const mapping of mappings) {
         const update: Record<string, unknown> = {};
 
-        if (mapping.sellerRef && mapping.apiRequest && typeof mapping.apiRequest.url === "string") {
-          const expectedUrl = `/api/${mapping.sellerRef.toString()}/lead`;
+        if (mapping.apiRequest && typeof mapping.apiRequest.url === "string") {
+          const expectedUrl = "/api/lead";
           if (mapping.apiRequest.url !== expectedUrl) {
             update.apiRequest = {
               ...mapping.apiRequest,

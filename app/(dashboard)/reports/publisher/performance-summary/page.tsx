@@ -2,9 +2,6 @@ import { ReportPlaceholderPage } from "@/components/reports/report-placeholder-p
 
 export default function PublisherPerformanceSummaryPage() {
   return (
-    <ReportPlaceholderPage
-      title="Publisher Performance Summary"
-      description="Publisher performance summary report will be available here."
-    />
+    <ReportPlaceholderPage description="Publisher performance summary report will be available here." />
   );
 }

@@ -5,6 +5,7 @@ import {
   defaultScheduleRule,
   findScheduleRuleOverlap,
   getScheduleRuleOverlapMessage,
+  normalizeGeneralFiltersForStorage,
   toCampaignRecord,
   validateScheduleRulesNoOverlap,
   type CampaignDuplicatesSettings,
@@ -93,7 +94,7 @@ export async function PATCH(req: Request, context: Params) {
 
     if (body.section === "filters") {
       if (body.generalFilters) {
-        campaign.set("generalFilters", body.generalFilters);
+        campaign.set("generalFilters", normalizeGeneralFiltersForStorage(body.generalFilters));
         campaign.markModified("generalFilters");
       }
       if (body.plDnplListIds) {

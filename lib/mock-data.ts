@@ -1,9 +1,11 @@
 export type Seller = {
   id: string;
+  displayId?: number;
   name: string;
   email: string;
   region: string;
   status: "Active" | "Inactive";
+  createdAt?: string | null;
   apiFields?: ApiFieldConfig[];
 };
 

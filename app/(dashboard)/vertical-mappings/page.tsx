@@ -227,7 +227,6 @@ export default function VerticalMappingsPage() {
       />
 
       <PageSection
-        title="Vertical Mapping List"
         actions={
           <button
             type="button"

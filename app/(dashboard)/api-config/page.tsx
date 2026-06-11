@@ -147,7 +147,6 @@ export default function ApiConfigPage() {
       )}
 
       <PageSection
-        title="Seller API List"
         actions={
           sellerId ? (
             <button

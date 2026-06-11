@@ -1,4 +1,7 @@
 import { formatProductLabel } from "@/lib/integration-builder";
+import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-value";
+
+export { getMaxRangeOptions, isGeneralFilterRangeValid };
 
 export type CampaignStatus = "Active" | "Paused" | "Disabled";
 export type CampaignType = "Redirect" | "Silent";
@@ -160,39 +163,6 @@ export function defaultCampaignDuplicates(): CampaignDuplicatesSettings {
 
 type RangeOptionLike = { value: string };
 
-function getRangeOptionOrder(value: string, options: RangeOptionLike[]) {
-  const index = options.findIndex((option) => option.value === value);
-  if (index >= 0) return index;
-
-  const numeric = Number(value);
-  return Number.isNaN(numeric) ? null : numeric;
-}
-
-export function getMaxRangeOptions(minValue: string, options: RangeOptionLike[]) {
-  if (!minValue) return options;
-
-  const minOrder = getRangeOptionOrder(minValue, options);
-  if (minOrder === null) return options;
-
-  return options.filter((option) => {
-    const order = getRangeOptionOrder(option.value, options);
-    return order !== null && order >= minOrder;
-  });
-}
-
-export function isGeneralFilterRangeValid(minValue: string, maxValue: string, options: RangeOptionLike[]) {
-  if (!minValue || !maxValue) return true;
-
-  const minOrder = getRangeOptionOrder(minValue, options);
-  const maxOrder = getRangeOptionOrder(maxValue, options);
-
-  if (minOrder !== null && maxOrder !== null) {
-    return maxOrder >= minOrder;
-  }
-
-  return maxValue.localeCompare(minValue, undefined, { numeric: true }) >= 0;
-}
-
 export function validateGeneralFilters(
   filters: CampaignGeneralFilter[],
   optionsByFieldName: Map<string, RangeOptionLike[]>
@@ -208,6 +178,41 @@ export function validateGeneralFilters(
   }
 
   return null;
+}
+
+export function clearDisabledGeneralFilterValues(filter: CampaignGeneralFilter): CampaignGeneralFilter {
+  if (filter.enabled) {
+    return filter;
+  }
+
+  if (filter.dataTypeFilter === "Text") {
+    return { ...filter, textValue: "" };
+  }
+
+  if (filter.dataTypeFilter === "Range") {
+    return { ...filter, minValue: "", maxValue: "" };
+  }
+
+  if (filter.dataTypeFilter === "Checkbox") {
+    return { ...filter, selectedValues: [] };
+  }
+
+  return filter;
+}
+
+export function normalizeGeneralFiltersForStorage(filters: CampaignGeneralFilter[]) {
+  return filters.map(clearDisabledGeneralFilterValues);
+}
+
+export function buildGeneralFilterEnabledPatch(
+  filter: CampaignGeneralFilter,
+  enabled: boolean
+): Partial<CampaignGeneralFilter> {
+  if (enabled) {
+    return { enabled: true };
+  }
+
+  return clearDisabledGeneralFilterValues({ ...filter, enabled: false });
 }
 
 export function defaultScheduleRule(): Omit<CampaignScheduleRule, "id"> {

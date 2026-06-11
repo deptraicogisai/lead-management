@@ -16,8 +16,11 @@ import {
   Waypoints,
 } from "lucide-react";
 import { TwigTemplateInput } from "@/components/integration-builder/twig-template-input";
-import { BackLink, ComingSoonButton } from "@/components/ui/action-buttons";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
+import { ComingSoonButton } from "@/components/ui/action-buttons";
+import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { toast } from "@/lib/toast";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
@@ -353,41 +356,30 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const [dataType, setDataType] = useState("JSON");
   const [payloadType, setPayloadType] = useState("Object");
   const [integrationName, setIntegrationName] = useState(builder?.name ?? "");
+  useBreadcrumbLabel(integrationName || builder?.name || null);
   const [generalStatus, setGeneralStatus] = useState(builder?.status ?? "Active");
   const [dateUpdated, setDateUpdated] = useState(builder?.updatedAt ?? "");
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
-  const [generalSaveError, setGeneralSaveError] = useState("");
-  const [generalSaveMessage, setGeneralSaveMessage] = useState("");
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
   const [sampleJson, setSampleJson] = useState("");
   const [sampleImportError, setSampleImportError] = useState("");
   const [headers, setHeaders] = useState<HeaderRow[]>(DEFAULT_HEADER_ROWS);
   const [requestDataRows, setRequestDataRows] = useState<RequestDataRow[]>([]);
   const [isSavingHeaders, setIsSavingHeaders] = useState(false);
-  const [headerSaveError, setHeaderSaveError] = useState("");
-  const [headerSaveMessage, setHeaderSaveMessage] = useState("");
   const [isSavingData, setIsSavingData] = useState(false);
-  const [dataSaveError, setDataSaveError] = useState("");
-  const [dataSaveMessage, setDataSaveMessage] = useState("");
   const [arrayMappingFields, setArrayMappingFields] = useState<ApiFieldConfig[]>([]);
   const [arrayMappingEntries, setArrayMappingEntries] = useState<ArrayMappingEntry[]>([]);
   const [expandedArraySections, setExpandedArraySections] = useState<Record<string, boolean>>({});
   const [isLoadingArrayFields, setIsLoadingArrayFields] = useState(false);
   const [isSavingArrayMappings, setIsSavingArrayMappings] = useState(false);
-  const [arrayMappingError, setArrayMappingError] = useState("");
-  const [arrayMappingMessage, setArrayMappingMessage] = useState("");
   const [selectedArrayVariable, setSelectedArrayVariable] = useState("");
   const [arrayMappingAddError, setArrayMappingAddError] = useState("");
   const [leadFieldNames, setLeadFieldNames] = useState<string[]>([]);
   const [configFieldRows, setConfigFieldRows] = useState<ConfigFieldRow[]>([]);
   const [isSavingConfigFields, setIsSavingConfigFields] = useState(false);
-  const [configSaveError, setConfigSaveError] = useState("");
-  const [configSaveMessage, setConfigSaveMessage] = useState("");
   const [responseDataType, setResponseDataType] = useState("JSON");
   const [responseFieldRows, setResponseFieldRows] = useState<ResponseMappingRow[]>([]);
   const [isSavingResponseMapping, setIsSavingResponseMapping] = useState(false);
-  const [responseSaveError, setResponseSaveError] = useState("");
-  const [responseSaveMessage, setResponseSaveMessage] = useState("");
 
   const activeTab = builderTabs.find((tab) => tab.id === activeTabId) ?? builderTabs[0];
 
@@ -458,12 +450,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
     const loadArrayMappingFields = async () => {
       setIsLoadingArrayFields(true);
-      setArrayMappingError("");
 
       try {
         const response = await fetch(`/api/industries/${encodeURIComponent(builder.verticalId)}/fields`);
         if (!response.ok) {
-          setArrayMappingError("Failed to load vertical fields.");
+          toast.error("Failed to load vertical fields.");
           return;
         }
 
@@ -486,7 +477,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         setArrayMappingAddError("");
         setExpandedArraySections({});
       } catch {
-        setArrayMappingError("Failed to load vertical fields.");
+        toast.error("Failed to load vertical fields.");
       } finally {
         setIsLoadingArrayFields(false);
       }
@@ -497,19 +488,16 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveIntegration = async () => {
     if (!builder?.id) {
-      setGeneralSaveError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
 
     if (!integrationName.trim()) {
-      setGeneralSaveError("Integration name is required.");
-      setGeneralSaveMessage("");
+      toast.error("Integration name is required.");
       return;
     }
 
     setIsSavingGeneral(true);
-    setGeneralSaveError("");
-    setGeneralSaveMessage("");
 
     try {
       const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
@@ -524,7 +512,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setGeneralSaveError(payload?.message ?? "Failed to save integration.");
+        toast.error(payload?.message ?? "Failed to save integration.");
         return;
       }
 
@@ -537,9 +525,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       setIntegrationName(updated.name);
       setGeneralStatus(updated.status);
       setDateUpdated(updated.updatedAt);
-      setGeneralSaveMessage("Integration saved successfully.");
+      toast.success("Integration saved successfully.");
     } catch {
-      setGeneralSaveError("Failed to save integration.");
+      toast.error("Failed to save integration.");
     } finally {
       setIsSavingGeneral(false);
     }
@@ -652,12 +640,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveHeaders = async () => {
     if (!builder?.id) {
-      setHeaderSaveError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
-
-    setHeaderSaveError("");
-    setHeaderSaveMessage("");
 
     const twigError = validateRequestMappingTwigPayload(
       {
@@ -671,7 +656,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     );
 
     if (twigError) {
-      setHeaderSaveError(twigError);
+      toast.error(twigError);
       return;
     }
 
@@ -695,15 +680,15 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setHeaderSaveError(payload?.message ?? "Failed to save headers.");
+        toast.error(payload?.message ?? "Failed to save headers.");
         return;
       }
 
       const updated = (await response.json()) as { updatedAt?: string };
       if (updated.updatedAt) setDateUpdated(updated.updatedAt);
-      setHeaderSaveMessage("Headers saved successfully.");
+      toast.success("Headers saved successfully.");
     } catch {
-      setHeaderSaveError("Failed to save headers.");
+      toast.error("Failed to save headers.");
     } finally {
       setIsSavingHeaders(false);
     }
@@ -711,12 +696,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveData = async () => {
     if (!builder?.id) {
-      setDataSaveError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
-
-    setDataSaveError("");
-    setDataSaveMessage("");
 
     const twigError = validateRequestMappingTwigPayload(
       {
@@ -730,7 +712,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     );
 
     if (twigError) {
-      setDataSaveError(twigError);
+      toast.error(twigError);
       return;
     }
 
@@ -755,15 +737,15 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setDataSaveError(payload?.message ?? "Failed to save data.");
+        toast.error(payload?.message ?? "Failed to save data.");
         return;
       }
 
       const updated = (await response.json()) as { updatedAt?: string };
       if (updated.updatedAt) setDateUpdated(updated.updatedAt);
-      setDataSaveMessage("Data saved successfully.");
+      toast.success("Data saved successfully.");
     } catch {
-      setDataSaveError("Failed to save data.");
+      toast.error("Failed to save data.");
     } finally {
       setIsSavingData(false);
     }
@@ -785,13 +767,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveConfigFields = async () => {
     if (!builder?.id) {
-      setConfigSaveError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
 
     setIsSavingConfigFields(true);
-    setConfigSaveError("");
-    setConfigSaveMessage("");
 
     try {
       const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
@@ -810,16 +790,16 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setConfigSaveError(payload?.message ?? "Failed to save integration config.");
+        toast.error(payload?.message ?? "Failed to save integration config.");
         return;
       }
 
       const updated = (await response.json()) as { updatedAt?: string; configFields?: IntegrationBuilderConfigField[] };
       if (updated.updatedAt) setDateUpdated(updated.updatedAt);
       if (updated.configFields) setConfigFieldRows(mapConfigFieldsToRows(updated.configFields));
-      setConfigSaveMessage("Integration config saved successfully.");
+      toast.success("Integration config saved successfully.");
     } catch {
-      setConfigSaveError("Failed to save integration config.");
+      toast.error("Failed to save integration config.");
     } finally {
       setIsSavingConfigFields(false);
     }
@@ -831,12 +811,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveResponseMapping = async () => {
     if (!builder?.id) {
-      setResponseSaveError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
-
-    setResponseSaveError("");
-    setResponseSaveMessage("");
 
     const twigError = validateResponseMappingTwigPayload(
       {
@@ -849,7 +826,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     );
 
     if (twigError) {
-      setResponseSaveError(twigError);
+      toast.error(twigError);
       return;
     }
 
@@ -873,7 +850,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setResponseSaveError(payload?.message ?? "Failed to save response mapping.");
+        toast.error(payload?.message ?? "Failed to save response mapping.");
         return;
       }
 
@@ -888,9 +865,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         setResponseFieldRows(mapResponseFieldsToRows(updated.responseMapping.fields));
       }
 
-      setResponseSaveMessage("Response mapping saved successfully.");
+      toast.success("Response mapping saved successfully.");
     } catch {
-      setResponseSaveError("Failed to save response mapping.");
+      toast.error("Failed to save response mapping.");
     } finally {
       setIsSavingResponseMapping(false);
     }
@@ -898,13 +875,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const handleSaveArrayMappings = async () => {
     if (!builder?.id) {
-      setArrayMappingError("Integration record is missing.");
+      toast.error("Integration record is missing.");
       return;
     }
 
     setIsSavingArrayMappings(true);
-    setArrayMappingError("");
-    setArrayMappingMessage("");
 
     try {
       const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
@@ -918,13 +893,13 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        setArrayMappingError(payload?.message ?? "Failed to save array mappings.");
+        toast.error(payload?.message ?? "Failed to save array mappings.");
         return;
       }
 
-      setArrayMappingMessage("Array mappings saved successfully.");
+      toast.success("Array mappings saved successfully.");
     } catch {
-      setArrayMappingError("Failed to save array mappings.");
+      toast.error("Failed to save array mappings.");
     } finally {
       setIsSavingArrayMappings(false);
     }
@@ -987,10 +962,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               <option value="Paused">Paused</option>
             </select>
           )}
-
           <div className="flex flex-col gap-2 pt-6 sm:flex-row">
             <div className="hidden shrink-0 sm:block sm:w-52 sm:pr-6" aria-hidden />
-            <div className="w-full max-w-xl flex-1 space-y-2">
+            <div className="w-full max-w-xl flex-1">
               <div className="flex justify-end">
                 <PrimaryButton
                   type="button"
@@ -1001,10 +975,6 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                   {isSavingGeneral ? "Saving..." : "Save Integration"}
                 </PrimaryButton>
               </div>
-              <FormError error={generalSaveError} />
-              {generalSaveMessage ? (
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">{generalSaveMessage}</p>
-              ) : null}
             </div>
           </div>
         </div>
@@ -1013,18 +983,10 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   );
 
   const renderIntegrationConfigTab = () => (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-            Integration Config
-          </h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Define custom config variables used in request templates such as{" "}
-            <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ config.url }}`}</code>.
-          </p>
-        </div>
-
+    <DualSaveBar
+      className="space-y-5"
+      dual={shouldUseDualSaveBar(configFieldRows.length)}
+      renderActions={() => (
         <PrimaryButton
           type="button"
           disabled={isSavingConfigFields || !builder?.id}
@@ -1033,10 +995,18 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         >
           {isSavingConfigFields ? "Saving..." : "Save Config"}
         </PrimaryButton>
+      )}
+    >
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+          Integration Config
+        </h3>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Define custom config variables used in request templates such as{" "}
+          <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ config.url }}`}</code>.
+        </p>
       </div>
-
-      <FormError error={configSaveError} />
-      {configSaveMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{configSaveMessage}</p> : null}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="space-y-4 p-5">
@@ -1128,6 +1098,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         </div>
       </div>
     </div>
+    </DualSaveBar>
   );
 
   const renderResponseMappingTab = () => {
@@ -1164,11 +1135,6 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             {isSavingResponseMapping ? "Saving..." : "Save Response Mapping"}
           </PrimaryButton>
         </div>
-
-        <FormError error={responseSaveError} />
-        {responseSaveMessage ? (
-          <p className="text-sm text-emerald-700 dark:text-emerald-300">{responseSaveMessage}</p>
-        ) : null}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="space-y-5 p-5">
@@ -1262,7 +1228,21 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             />
 
             <RequestMappingCollapsible open={showHeaders}>
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+              <DualSaveBar
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50"
+                dual={shouldUseDualSaveBar(headers.length)}
+                renderActions={() => (
+                  <PrimaryButton
+                    type="button"
+                    disabled={isSavingHeaders || !builder?.id}
+                    onClick={() => void handleSaveHeaders()}
+                    className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                  >
+                    {isSavingHeaders ? "Saving..." : "Save Headers"}
+                  </PrimaryButton>
+                )}
+              >
+              <div className="space-y-3">
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_48px]">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Key</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</p>
@@ -1299,24 +1279,8 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                   <Plus size={15} />
                   <span>Add new</span>
                 </button>
-
-                <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-600">
-                  <FormError error={headerSaveError} />
-                  {headerSaveMessage ? (
-                    <p className="text-right text-sm text-emerald-700 dark:text-emerald-300">{headerSaveMessage}</p>
-                  ) : null}
-                  <div className="flex justify-end">
-                    <PrimaryButton
-                      type="button"
-                      disabled={isSavingHeaders || !builder?.id}
-                      onClick={() => void handleSaveHeaders()}
-                      className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                    >
-                      {isSavingHeaders ? "Saving..." : "Save Headers"}
-                    </PrimaryButton>
-                  </div>
-                </div>
               </div>
+              </DualSaveBar>
             </RequestMappingCollapsible>
           </div>
 
@@ -1324,7 +1288,21 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             <RequestMappingToggle open={showData} label="Data" onToggle={() => setShowData((current) => !current)} />
 
             <RequestMappingCollapsible open={showData}>
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+              <DualSaveBar
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50"
+                dual={shouldUseDualSaveBar(requestDataRows.length)}
+                renderActions={() => (
+                  <PrimaryButton
+                    type="button"
+                    disabled={isSavingData || !builder?.id}
+                    onClick={() => void handleSaveData()}
+                    className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                  >
+                    {isSavingData ? "Saving..." : "Save Data"}
+                  </PrimaryButton>
+                )}
+              >
+              <div className="space-y-4">
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   Text fields accept plain values or Twig templates. Type{" "}
                   <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{`}</code> for suggestions — e.g.{" "}
@@ -1414,24 +1392,8 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                   <Plus size={15} />
                   <span>Add new</span>
                 </button>
-
-                <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-600">
-                  <FormError error={dataSaveError} />
-                  {dataSaveMessage ? (
-                    <p className="text-right text-sm text-emerald-700 dark:text-emerald-300">{dataSaveMessage}</p>
-                  ) : null}
-                  <div className="flex justify-end">
-                    <PrimaryButton
-                      type="button"
-                      disabled={isSavingData || !builder?.id}
-                      onClick={() => void handleSaveData()}
-                      className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                    >
-                      {isSavingData ? "Saving..." : "Save Data"}
-                    </PrimaryButton>
-                  </div>
-                </div>
               </div>
+              </DualSaveBar>
             </RequestMappingCollapsible>
           </div>
         </div>
@@ -1486,15 +1448,10 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     const availableVariables = arrayMappingFields.filter((field) => !addedFieldNames.has(field.fieldName));
 
     return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Array Mapping</h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Choose a variable with Display Array Mapping enabled, then add mapping rows below.
-          </p>
-        </div>
-
+    <DualSaveBar
+      className="space-y-5"
+      dual={shouldUseDualSaveBar(arrayMappingEntries.length)}
+      renderActions={() => (
         <PrimaryButton
           type="button"
           disabled={isSavingArrayMappings || !builder?.id}
@@ -1503,10 +1460,15 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         >
           {isSavingArrayMappings ? "Saving..." : "Save Array Mapping"}
         </PrimaryButton>
+      )}
+    >
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Array Mapping</h3>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+          Choose a variable with Display Array Mapping enabled, then add mapping rows below.
+        </p>
       </div>
-
-      <FormError error={arrayMappingError} />
-      {arrayMappingMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{arrayMappingMessage}</p> : null}
 
       {isLoadingArrayFields ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
@@ -1638,6 +1600,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         </>
       )}
     </div>
+    </DualSaveBar>
     );
   };
 
@@ -1686,9 +1649,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   return (
     <div className="space-y-6">
-      <BackLink href="/integration-builder" label="Back to Integration Builder" />
-
-      <PageSection title="Builder">
+      <PageSection>
         <div className="space-y-5">
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
             <div className="flex min-w-max items-center gap-3">

@@ -9,6 +9,8 @@ import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/for
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
+import { reorderItemsByIds } from "@/lib/reorder-fields";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { formatVerticalFieldTypeLabel, type VerticalFieldOption } from "@/lib/vertical-field";
 
@@ -81,8 +83,6 @@ export default function IndustryFieldsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState("");
-  const [importMessage, setImportMessage] = useState("");
-  const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -99,6 +99,7 @@ export default function IndustryFieldsPage() {
     { mode: "single"; field: ApiFieldConfig } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   const fetchFields = async () => {
     if (!verticalId) return;
@@ -126,7 +127,6 @@ export default function IndustryFieldsPage() {
     null;
 
   const clearActionFeedback = () => {
-    setActionMessage("");
     setActionError("");
   };
 
@@ -264,7 +264,7 @@ export default function IndustryFieldsPage() {
 
       const createdField = result as ApiFieldConfig;
       setFields((current) => [...current, createdField]);
-      setActionMessage(`Field "${createdField.fieldName}" created successfully.`);
+      toast.success(`Field "${createdField.fieldName}" created successfully.`);
       closeCreateModal();
     } catch {
       setCreateErrors({ form: "Failed to create field." });
@@ -283,7 +283,7 @@ export default function IndustryFieldsPage() {
     setIsSavingEdit(false);
 
     if (result.ok) {
-      setActionMessage(`Field "${result.data.fieldName}" saved successfully.`);
+      toast.success(`Field "${result.data.fieldName}" saved successfully.`);
       cancelEdit();
     } else {
       setActionError(result.message);
@@ -298,7 +298,6 @@ export default function IndustryFieldsPage() {
 
     clearActionFeedback();
     setImportError("");
-    setImportMessage("");
     setIsImporting(true);
     cancelEdit();
 
@@ -331,7 +330,7 @@ export default function IndustryFieldsPage() {
         return;
       }
 
-      setImportMessage(result?.message ?? `Imported ${result?.count ?? 0} field(s).`);
+      toast.success(result?.message ?? `Imported ${result?.count ?? 0} field(s).`);
       setSelectedFieldIds([]);
       await fetchFields();
     } catch (error) {
@@ -349,6 +348,40 @@ export default function IndustryFieldsPage() {
 
   const handleToggleAllRows = (checked: boolean) => {
     setSelectedFieldIds(checked ? rows.map((row) => row.id) : []);
+  };
+
+  const handleReorderFields = async (orderedIds: string[]) => {
+    if (!verticalId || isReordering) return;
+
+    const reordered = reorderItemsByIds(fields, orderedIds);
+    if (!reordered) return;
+
+    const previous = fields;
+    setFields(reordered);
+    setIsReordering(true);
+    clearActionFeedback();
+
+    try {
+      const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields/reorder`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fieldIds: orderedIds }),
+      });
+      const result = (await response.json().catch(() => null)) as ApiFieldConfig[] | { message?: string } | null;
+
+      if (!response.ok) {
+        setFields(previous);
+        setActionError((result as { message?: string } | null)?.message ?? "Failed to reorder fields.");
+        return;
+      }
+
+      setFields((result as ApiFieldConfig[]) ?? reordered);
+    } catch {
+      setFields(previous);
+      setActionError("Failed to reorder fields.");
+    } finally {
+      setIsReordering(false);
+    }
   };
 
   const openDeleteConfirm = (field: ApiFieldConfig) => {
@@ -411,12 +444,12 @@ export default function IndustryFieldsPage() {
       if (failed) {
         setActionError(`Failed to delete field "${deleteConfirm.field.fieldName}".`);
       } else {
-        setActionMessage(`Field "${deleteConfirm.field.fieldName}" deleted successfully.`);
+        toast.success(`Field "${deleteConfirm.field.fieldName}" deleted successfully.`);
       }
     } else if (failed) {
       setActionError(`Deleted ${deletedCount} field(s), but some deletions failed.`);
     } else {
-      setActionMessage(`Deleted ${deletedCount} field(s).`);
+      toast.success(`Deleted ${deletedCount} field(s).`);
     }
 
     setIsDeleting(false);
@@ -483,7 +516,7 @@ export default function IndustryFieldsPage() {
       const result = await saveField({ ...optionsModalField, options: nextOptions });
 
       if (result.ok) {
-        setActionMessage(`Options for "${result.data.fieldName}" saved successfully.`);
+        toast.success(`Options for "${result.data.fieldName}" saved successfully.`);
         closeOptionsModal();
       } else {
         setOptionsError(result.message);
@@ -695,7 +728,6 @@ export default function IndustryFieldsPage() {
       )}
 
       <PageSection
-        title="Vertical Field List"
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <PrimaryButton
@@ -734,8 +766,8 @@ export default function IndustryFieldsPage() {
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
-            <span className="font-medium">Edit</span> on a row to update it directly in the grid. Use checkboxes to select
-            fields and delete them in bulk. Click Options to view or edit option values.
+            <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to
+            reorder fields. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
           </p>
 
           {selectedFieldIds.length > 0 ? (
@@ -757,8 +789,6 @@ export default function IndustryFieldsPage() {
 
           <FormError error={importError} />
           <FormError error={actionError} />
-          {importMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{importMessage}</p> : null}
-          {actionMessage ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{actionMessage}</p> : null}
         </div>
 
         <DataTable<ApiFieldConfig>
@@ -772,6 +802,10 @@ export default function IndustryFieldsPage() {
           selectedRowIds={selectedFieldIds}
           onToggleRow={handleToggleRow}
           onToggleAllRows={handleToggleAllRows}
+          rowReorder={{
+            onReorder: handleReorderFields,
+            disabled: Boolean(editingFieldId) || isLoading,
+          }}
         />
       </PageSection>
 

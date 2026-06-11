@@ -163,7 +163,6 @@ export default function IndustriesPage() {
       />
 
       <PageSection
-        title="Vertical List"
         actions={
           <button
             type="button"

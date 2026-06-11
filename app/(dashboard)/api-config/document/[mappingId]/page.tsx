@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
@@ -13,8 +12,6 @@ import {
   buildErrorRows,
   buildExampleRequest,
   buildOverviewParagraphs,
-  describeFieldCondition,
-  getFieldsWithConditions,
   getCodeTokenClassName,
   LEAD_RESPONSE_STATUS_DEFINITIONS,
   prettyType,
@@ -24,6 +21,11 @@ import {
   type DocumentationErrorRow,
   type DocumentationField,
 } from "@/lib/api-documentation-content";
+import {
+  buildDocumentationRequirementRows,
+  type DocumentationRequirementRow,
+} from "@/lib/api-documentation-requirements";
+import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import { PageSection, Spinner } from "@/components/ui/state";
 import { cn } from "@/lib/utils";
 
@@ -37,48 +39,69 @@ type DocumentContentResponse = {
   sellerName: string;
   baseUrl: string;
   fields: DocumentationField[];
+  intakeSettings: MappingIntakeSettingsRecord;
 };
 
-function FieldConditionDisplay({ field }: { field: DocumentationField }) {
-  const ignoreValues = field.ignoreValues ?? [];
+function AcceptedValuesDisplay({ field }: { field: DocumentationField }) {
+  const values = (field.options ?? [])
+    .map((option) => option.value?.trim() || option.label?.trim() || "")
+    .filter(Boolean);
 
-  if (field.type.trim().toLowerCase() === "email" && field.emailDuplicateRule) {
-    const label =
-      field.emailDuplicateRule.mode === "forever"
-        ? "Unique Forever"
-        : `Unique ${field.emailDuplicateRule.days} Day(s)`;
+  if (values.length === 0) {
+    return <span className="text-slate-400">-</span>;
+  }
 
+  return (
+    <div className="flex flex-wrap gap-2">
+      {values.map((value) => (
+        <span
+          key={`${field.id}-${value}`}
+          className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800"
+        >
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function RequirementsSection({ rows }: { rows: DocumentationRequirementRow[] }) {
+  if (rows.length === 0) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
-          Email Rule
-        </span>
-        <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
-          {label}
-        </span>
-      </div>
+      <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+        No requirements are configured for this API.
+      </p>
     );
   }
 
-  if (ignoreValues.length > 0) {
-    return (
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {ignoreValues.map((value) => (
-            <span
-              key={`${field.id}-${value}`}
-              className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700"
-            >
-              {value}
-            </span>
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200">
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className="w-44 border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Category</th>
+            <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.category}-${index}`} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+              <td className="border-b border-slate-100 px-4 py-3 align-top font-medium text-slate-900">{row.category}</td>
+              <td className="border-b border-slate-100 px-4 py-3 align-top text-slate-700">
+                <div className="space-y-1">
+                  {row.requirements.map((requirement, requirementIndex) => (
+                    <p key={`${row.category}-${requirementIndex}`} className="leading-6">
+                      {requirement}
+                    </p>
+                  ))}
+                </div>
+              </td>
+            </tr>
           ))}
-        </div>
-        <p className="text-xs text-slate-500">Ignored values</p>
-      </div>
-    );
-  }
-
-  return <span className="text-slate-400">-</span>;
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function CollapsibleCodeSnippet({
@@ -194,11 +217,14 @@ export default function ApiDocumentPreviewPage() {
     [documentContent, exampleRequest]
   );
   const errorRows: DocumentationErrorRow[] = documentContent ? buildErrorRows(documentContent.fields) : [];
-  const conditionedFields = documentContent ? getFieldsWithConditions(documentContent.fields) : [];
-  const outline = useMemo(
-    () => buildDocumentationOutline(conditionedFields.length > 0),
-    [conditionedFields.length]
+  const requirementRows = useMemo(
+    () =>
+      documentContent
+        ? buildDocumentationRequirementRows(documentContent.intakeSettings, documentContent.fields)
+        : [],
+    [documentContent]
   );
+  const outline = useMemo(() => buildDocumentationOutline(), []);
 
   const handleDownload = async () => {
     if (!downloadUrl) return;
@@ -239,24 +265,15 @@ export default function ApiDocumentPreviewPage() {
       </div>
 
       <PageSection
-        title="API Documentation"
         actions={
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void handleDownload()}
-              disabled={!mappingId || isDownloading}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              {isDownloading ? "Downloading..." : "Download"}
-            </button>
-            <Link
-              href={backUrl}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Back to API Configuration
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={!mappingId || isDownloading}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          >
+            {isDownloading ? "Downloading..." : "Download"}
+          </button>
         }
       >
         {downloadError ? (
@@ -316,7 +333,7 @@ export default function ApiDocumentPreviewPage() {
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Type</th>
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Required</th>
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Description</th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Condition</th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Accepted Values</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -327,7 +344,7 @@ export default function ApiDocumentPreviewPage() {
                         <td className="border-b border-slate-100 px-4 py-3">{field.required ? "Yes" : "No"}</td>
                         <td className="border-b border-slate-100 px-4 py-3">{field.description}</td>
                         <td className="border-b border-slate-100 px-4 py-3">
-                          <FieldConditionDisplay field={field} />
+                          <AcceptedValuesDisplay field={field} />
                         </td>
                       </tr>
                     ))}
@@ -336,22 +353,10 @@ export default function ApiDocumentPreviewPage() {
               </div>
             </section>
 
-            {outline.fieldConditions ? (
-              <section className="space-y-3">
-                <DocumentSectionHeading label={outline.fieldConditions.label} />
-                <div className="space-y-2">
-                  {conditionedFields.map((field) => (
-                    <div key={field.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div className="flex flex-col gap-2">
-                        <p className="font-mono text-xs text-slate-700">{field.fieldName}</p>
-                        <FieldConditionDisplay field={field} />
-                        <p className="text-sm text-slate-600">{describeFieldCondition(field)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
+            <section className="space-y-3">
+              <DocumentSectionHeading label={outline.requirements.label} />
+              <RequirementsSection rows={requirementRows} />
+            </section>
 
             <section className="space-y-3">
               <DocumentSectionHeading label={outline.exampleJsonRequest.label} />

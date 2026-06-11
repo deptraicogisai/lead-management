@@ -209,7 +209,7 @@ export default function BuyersPage() {
 
   return (
     <div className="space-y-6">
-      <PageSection title="Buyer List">
+      <PageSection>
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
             <div className="grid gap-4 md:grid-cols-2">
