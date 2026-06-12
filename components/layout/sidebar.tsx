@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -63,20 +63,8 @@ export function Sidebar() {
     section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
   );
   const isReportsActive = pathname.startsWith("/reports");
-  const [isClientManagementOpen, setIsClientManagementOpen] = useState(isClientManagementActive);
-  const [isReportsOpen, setIsReportsOpen] = useState(isReportsActive);
-
-  useEffect(() => {
-    if (isClientManagementActive) {
-      setIsClientManagementOpen(true);
-    }
-  }, [isClientManagementActive]);
-
-  useEffect(() => {
-    if (isReportsActive) {
-      setIsReportsOpen(true);
-    }
-  }, [isReportsActive]);
+  const [isClientManagementOpen, setIsClientManagementOpen] = useState(true);
+  const [isReportsOpen, setIsReportsOpen] = useState(true);
 
   return (
     <aside className="fixed left-0 top-0 z-20 flex h-screen w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">

@@ -48,17 +48,22 @@ function isCompleteApiRequest(apiRequest: Partial<MappingApiRequest> | null | un
   return Boolean(apiRequest?.apiKey && apiRequest.url && apiRequest.method);
 }
 
-export async function ensureMappingApiRequest(mapping: MappingWithApiRequest) {
+export async function ensureMappingApiRequest(
+  mapping: MappingWithApiRequest
+): Promise<MappingApiRequest | null> {
   if (isCompleteApiRequest(mapping.apiRequest)) {
+    const apiRequest: MappingApiRequest = {
+      apiKey: mapping.apiRequest.apiKey,
+      url: PUBLISHER_LEAD_ENDPOINT_PATH,
+      method: mapping.apiRequest.method,
+    };
+
     if (mapping.apiRequest.url !== PUBLISHER_LEAD_ENDPOINT_PATH) {
-      mapping.apiRequest = {
-        ...mapping.apiRequest,
-        url: PUBLISHER_LEAD_ENDPOINT_PATH,
-      };
+      mapping.apiRequest = apiRequest;
       await mapping.save();
     }
 
-    return mapping.apiRequest;
+    return apiRequest;
   }
 
   const sellerRef = typeof mapping.sellerRef === "string" ? mapping.sellerRef : mapping.sellerRef?.toString();

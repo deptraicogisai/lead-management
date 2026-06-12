@@ -18,7 +18,9 @@ const listeners = new Set<ToastListener>();
 
 export function subscribeToToasts(listener: ToastListener) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 function emitToast(input: ToastInput) {

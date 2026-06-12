@@ -8,7 +8,6 @@ import {
   FileJson2,
   House,
   Info,
-  Minus,
   Plus,
   Settings2,
   Trash2,
@@ -627,7 +626,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const toggleArrayMappingSection = (fieldName: string) => {
     setExpandedArraySections((current) => ({
       ...current,
-      [fieldName]: !current[fieldName],
+      [fieldName]: !(current[fieldName] ?? false),
     }));
   };
 
@@ -1527,20 +1526,29 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                 key={entry.fieldName}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
               >
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleArrayMappingSection(entry.fieldName)}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                      aria-label={isExpanded ? "Collapse section" : "Expand section"}
-                    >
-                      {isExpanded ? <Minus size={16} /> : <Plus size={16} />}
-                    </button>
-                    <h4 className="truncate text-sm font-semibold uppercase tracking-wide text-slate-800 dark:text-slate-100">
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-4 py-3",
+                    isExpanded && "border-b border-slate-200 dark:border-slate-700"
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleArrayMappingSection(entry.fieldName)}
+                    aria-expanded={isExpanded}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  >
+                    <ChevronDown
+                      size={18}
+                      className={cn(
+                        "shrink-0 text-slate-500 transition-transform duration-200 dark:text-slate-400",
+                        isExpanded && "rotate-180"
+                      )}
+                    />
+                    <span className="truncate text-sm font-semibold uppercase tracking-wide text-slate-800 dark:text-slate-100">
                       {fieldNameToSectionTitle(entry.fieldName)}
-                    </h4>
-                  </div>
+                    </span>
+                  </button>
 
                   <div className="flex shrink-0 items-center gap-2">
                     <button

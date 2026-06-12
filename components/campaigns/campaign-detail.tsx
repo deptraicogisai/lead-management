@@ -558,7 +558,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                                   >
                                     <option value="">Select max</option>
                                     {maxOptions.map((option) => (
-                                      <option key={`max-${option.value}`} value={option.value}>
+                                      <option key={`max-${option.value}`} value={option.value ?? ""}>
                                         {option.value}
                                       </option>
                                     ))}

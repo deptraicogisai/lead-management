@@ -108,7 +108,7 @@ function CollapsibleCodeSnippet({
   title,
   language,
   code,
-  defaultExpanded = false,
+  defaultExpanded = true,
 }: {
   title: string;
   language: CodeLanguage;
