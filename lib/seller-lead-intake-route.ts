@@ -9,7 +9,7 @@ import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/model
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
-import { validateMappingLeadIntake } from "@/lib/mapping-lead-intake";
+import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 
 type MappingApiField = {
   _id?: { toString(): string };
@@ -454,7 +454,7 @@ export async function handleSellerLeadPost(req: Request) {
     const mappingId = matchedMapping._id?.toString() ?? "";
     const validationResult = await validateMappingLeadIntake({
       mappingId,
-      mappingDoc: matchedMapping,
+      mappingDoc: matchedMapping as MappingIntakeDoc,
       verticalFields: (vertical?.fields as VerticalApiField[] | undefined) ?? [],
       mappingFields: (matchedMapping.fields as MappingApiField[] | undefined) ?? [],
       payload,

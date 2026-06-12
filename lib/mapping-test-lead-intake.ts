@@ -35,7 +35,7 @@ export function buildTestLeadValidationChecks(
     intakeRuleGroups.filter((group) => group.rules.length > 0).map((group) => group.category)
   );
 
-  return [
+  const checks: TestLeadValidationCheck[] = [
     {
       category: "Fields",
       passed: breakdown.fields.length === 0,
@@ -56,7 +56,9 @@ export function buildTestLeadValidationChecks(
       passed: breakdown.schedule.length === 0,
       messages: breakdown.schedule,
     },
-  ].map((check) => {
+  ];
+
+  return checks.map((check): TestLeadValidationCheck => {
     if (check.category === "Fields") {
       return check.passed
         ? { ...check, messages: ["Passed."] }

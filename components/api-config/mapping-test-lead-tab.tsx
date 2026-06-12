@@ -8,7 +8,8 @@ import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-con
 import type { MappingTestLeadLogRecord } from "@/lib/mapping-test-lead-log";
 import type { TestLeadIntakeRuleGroup, TestLeadValidationCheck } from "@/lib/mapping-test-lead-intake";
 import {
-  buildPrefilledTestLeadForm,
+  buildEmptyTestLeadForm,
+  buildRandomTestLeadForm,
   buildTestLeadPayload,
   chunkTestLeadFields,
   formatTestLeadOptionLabel,
@@ -231,8 +232,6 @@ function ValidationChecksPanel({ checks }: { checks: TestLeadValidationCheck[] }
 const LOG_HISTORY_PAGE_SIZE = 10;
 
 type LogResultFilter = "all" | "pass" | "fail";
-type LogModeFilter = "all" | "validate" | "saved";
-type LogSortOrder = "newest" | "oldest";
 
 function isLogHttpSuccess(log: MappingTestLeadLogRecord) {
   return log.status >= 200 && log.status < 300;
@@ -240,14 +239,26 @@ function isLogHttpSuccess(log: MappingTestLeadLogRecord) {
 
 function getLogModeLabel(log: MappingTestLeadLogRecord) {
   if (!log.saveLead) return "Validate only";
-  return log.leadSaved ? "Saved lead" : "Save requested";
+  return log.leadSaved ? "Save lead" : "Save requested";
+}
+
+function padLogDatePart(value: number) {
+  return String(value).padStart(2, "0");
 }
 
 function formatLogTimestamp(iso: string) {
   const date = new Date(iso);
+  const day = padLogDatePart(date.getDate());
+  const month = padLogDatePart(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const hours = padLogDatePart(date.getHours());
+  const minutes = padLogDatePart(date.getMinutes());
+  const seconds = padLogDatePart(date.getSeconds());
+
   return {
-    date: date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-    time: date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    date: `${day}/${month}/${year}`,
+    time: `${hours}:${minutes}:${seconds}`,
+    full: `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`,
   };
 }
 
@@ -262,8 +273,6 @@ function TestLeadLogHistory({
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<LogResultFilter>("all");
-  const [modeFilter, setModeFilter] = useState<LogModeFilter>("all");
-  const [sortOrder, setSortOrder] = useState<LogSortOrder>("newest");
   const [page, setPage] = useState(1);
 
   const filteredLogs = useMemo(() => {
@@ -272,9 +281,6 @@ function TestLeadLogHistory({
     const filtered = logs.filter((log) => {
       if (resultFilter === "pass" && !log.validationPassed) return false;
       if (resultFilter === "fail" && log.validationPassed) return false;
-
-      if (modeFilter === "validate" && log.saveLead) return false;
-      if (modeFilter === "saved" && (!log.saveLead || !log.leadSaved)) return false;
 
       if (!normalizedQuery) return true;
 
@@ -295,9 +301,9 @@ function TestLeadLogHistory({
     return filtered.sort((left, right) => {
       const leftTime = new Date(left.submittedAt).getTime();
       const rightTime = new Date(right.submittedAt).getTime();
-      return sortOrder === "newest" ? rightTime - leftTime : leftTime - rightTime;
+      return rightTime - leftTime;
     });
-  }, [logs, modeFilter, resultFilter, searchQuery, sortOrder]);
+  }, [logs, resultFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / LOG_HISTORY_PAGE_SIZE));
   const currentPage = filteredLogs.length > 0 ? Math.min(page, totalPages) : 1;
@@ -309,7 +315,7 @@ function TestLeadLogHistory({
 
   useEffect(() => {
     setPage(1);
-  }, [modeFilter, resultFilter, searchQuery, sortOrder]);
+  }, [resultFilter, searchQuery]);
 
   useEffect(() => {
     if (filteredLogs.length === 0) return;
@@ -343,35 +349,14 @@ function TestLeadLogHistory({
             aria-label="Search saved logs"
           />
 
-          <div className="grid grid-cols-2 gap-2">
-            <Select
-              value={resultFilter}
-              onChange={(event) => setResultFilter(event.target.value as LogResultFilter)}
-              aria-label="Filter by validation result"
-            >
-              <option value="all">All results</option>
-              <option value="pass">Passed</option>
-              <option value="fail">Failed</option>
-            </Select>
-
-            <Select
-              value={modeFilter}
-              onChange={(event) => setModeFilter(event.target.value as LogModeFilter)}
-              aria-label="Filter by save mode"
-            >
-              <option value="all">All modes</option>
-              <option value="validate">Validate only</option>
-              <option value="saved">Saved lead</option>
-            </Select>
-          </div>
-
           <Select
-            value={sortOrder}
-            onChange={(event) => setSortOrder(event.target.value as LogSortOrder)}
-            aria-label="Sort saved logs"
+            value={resultFilter}
+            onChange={(event) => setResultFilter(event.target.value as LogResultFilter)}
+            aria-label="Filter by validation result"
           >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
+            <option value="all">All results</option>
+            <option value="pass">Passed</option>
+            <option value="fail">Failed</option>
           </Select>
         </div>
       </div>
@@ -490,7 +475,7 @@ function TestLeadLogDetail({ log, endpointUrl }: { log: MappingTestLeadLogRecord
         )}
       >
         <p className="font-medium text-slate-800 dark:text-slate-100">
-          Submitted: {new Date(log.submittedAt).toLocaleString()}
+          Submitted: {formatLogTimestamp(log.submittedAt).full}
         </p>
         <p className="mt-2 flex flex-wrap items-center gap-2 text-slate-700 dark:text-slate-200">
           <span>HTTP Status:</span>
@@ -504,7 +489,7 @@ function TestLeadLogDetail({ log, endpointUrl }: { log: MappingTestLeadLogRecord
           </span>
           <span>{isSuccess ? "Success" : "Failed"}</span>
           <span className="text-slate-500 dark:text-slate-400">
-            {log.saveLead ? (log.leadSaved ? "Lead data saved" : "Save lead requested") : "Validation only"}
+            {log.saveLead ? (log.leadSaved ? "Save lead" : "Save lead requested") : "Validation only"}
           </span>
         </p>
       </div>
@@ -584,7 +569,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   }, [loadContext]);
 
   useEffect(() => {
-    setFormValues(buildPrefilledTestLeadForm(fields));
+    setFormValues(buildRandomTestLeadForm(fields));
   }, [fields]);
 
   const updateFieldValue = (fieldName: string, value: string) => {
@@ -592,12 +577,12 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   };
 
   const handlePrefill = () => {
-    setFormValues(buildPrefilledTestLeadForm(fields));
-    toast.success("Form prefilled with sample values.");
+    setFormValues(buildRandomTestLeadForm(fields));
+    toast.success("Form prefilled with random sample values.");
   };
 
   const handleReset = () => {
-    setFormValues(buildPrefilledTestLeadForm(fields));
+    setFormValues(buildEmptyTestLeadForm(fields));
   };
 
   const handleSubmit = async () => {
@@ -693,13 +678,22 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
         </div>
 
         {activeView === "form" ? (
-          <button
-            type="button"
-            onClick={handlePrefill}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Prefill Sample Values
-          </button>
+          <div className="flex shrink-0 flex-nowrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handlePrefill}
+              className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Prefill Sample Values
+            </button>
+            <Checkbox
+              id="test-lead-save-lead"
+              checked={saveLead}
+              onChange={setSaveLead}
+              label="Save lead"
+              className="w-auto shrink-0 whitespace-nowrap"
+            />
+          </div>
         ) : null}
       </div>
 
@@ -745,17 +739,9 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <div className="flex flex-wrap items-center gap-4">
-              <PrimaryButton type="button" disabled={isSubmitting || fields.length === 0} onClick={() => void handleSubmit()}>
-                {isSubmitting ? "Running test..." : "Send lead"}
-              </PrimaryButton>
-              <Checkbox
-                id="test-lead-save-lead"
-                checked={saveLead}
-                onChange={setSaveLead}
-                label="Save test lead data"
-              />
-            </div>
+            <PrimaryButton type="button" disabled={isSubmitting || fields.length === 0} onClick={() => void handleSubmit()}>
+              {isSubmitting ? "Running test..." : "Send lead"}
+            </PrimaryButton>
             <button
               type="button"
               onClick={handleReset}

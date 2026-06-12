@@ -25,7 +25,7 @@ export type MappingIntakeSettingsRecord = {
 
 type MappingIntakeDoc = {
   timezone?: string | null;
-  duplicates?: CampaignDuplicatesSettings | null;
+  duplicates?: Partial<CampaignDuplicatesSettings> | null;
   generalFilters?: Array<
     Omit<CampaignGeneralFilter, "minValue" | "maxValue" | "textValue" | "selectedValues"> & {
       minValue?: string | null;

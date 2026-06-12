@@ -51,6 +51,8 @@ type VerticalApiField = {
 
 type MappingIntakeDoc = Parameters<typeof toMappingIntakeSettings>[0];
 
+export type { MappingIntakeDoc };
+
 export type MappingLeadValidationBreakdown = {
   fields: string[];
   duplicates: string[];
@@ -247,7 +249,7 @@ export async function runMappingTestLeadSubmit(params: {
   } else if (validationResult.passed) {
     responseBody = {
       status: 1,
-      status_text: "Validated",
+      status_text: "Accepted",
       message: "Lead passed validation. Test lead data was not saved.",
     };
   } else {
