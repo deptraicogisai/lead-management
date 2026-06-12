@@ -9,7 +9,7 @@ export type PublisherLeadDetailsRow = {
   qualityDots: boolean[];
   postedAt: string;
   createdAt: string;
-  statusLabel: "Sold" | "Reject";
+  statusLabel: "Accepted" | "Reject";
   tier: number;
   publisherLabel: string;
   redirectLabel: string;
@@ -59,11 +59,14 @@ export function formatPublisherLeadTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
-  return `${hours}:${minutes}:${seconds}`;
+  return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
 export function formatPublisherLeadDateRangeLabel(from: string, to: string) {
@@ -260,7 +263,7 @@ export function mapLeadDocToPublisherRow(input: {
     qualityDots: buildQualityDots(input.validationStatus),
     postedAt: input.postedAt,
     createdAt: input.createdAt,
-    statusLabel: input.validationStatus === "success" ? "Sold" : "Reject",
+    statusLabel: input.validationStatus === "success" ? "Accepted" : "Reject",
     tier: 0,
     publisherLabel: input.publisherIndex
       ? `[${input.publisherIndex}] ${input.publisherName}`

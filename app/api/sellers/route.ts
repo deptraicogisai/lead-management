@@ -85,7 +85,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as SellerPayload;
-    if (!body.name?.trim() || !body.email?.trim() || !body.region?.trim() || !body.status) {
+    if (!body.name?.trim() || !body.email?.trim() || !body.status) {
       return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
     }
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     const seller = await SellerModel.create({
       name: body.name.trim(),
       email: body.email.trim(),
-      region: body.region.trim(),
+      region: body.region?.trim() ?? "",
       status: body.status,
     });
 

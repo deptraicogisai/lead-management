@@ -8,14 +8,8 @@ import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
-import type { MappingFieldDoc } from "@/lib/mapping-field-api";
-import {
-  buildDuplicateExistsQuery,
-  buildLeadRejectResponse,
-  validateMappingFieldConfiguration,
-  validateMappingIntakeSettings,
-} from "@/lib/mapping-lead-validation";
-import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
+import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
+import { validateMappingLeadIntake } from "@/lib/mapping-lead-intake";
 
 type MappingApiField = {
   _id?: { toString(): string };
@@ -172,40 +166,6 @@ function isIgnoredFieldValue(value: unknown, ignoreValues?: string[]) {
   }
 
   return (ignoreValues ?? []).some((item) => item.trim().toLowerCase() === comparableValue);
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-async function violatesEmailDuplicateRule(
-  mappingId: string,
-  fieldName: string,
-  value: unknown,
-  rule?: {
-    mode?: "days" | "forever" | null;
-    days?: number | null;
-  } | null
-) {
-  if (!rule?.mode || typeof value !== "string" || !value.trim() || !Types.ObjectId.isValid(mappingId)) {
-    return false;
-  }
-
-  const filter: Record<string, unknown> = {
-    mappingRef: new Types.ObjectId(mappingId),
-    [`payload.${fieldName}`]: {
-      $regex: new RegExp(`^\\s*${escapeRegExp(value.trim())}\\s*$`, "i"),
-    },
-  };
-
-  if (rule.mode === "days" && typeof rule.days === "number" && rule.days > 0) {
-    const thresholdDate = new Date();
-    thresholdDate.setDate(thresholdDate.getDate() - rule.days);
-    filter.postedAt = { $gte: thresholdDate };
-  }
-
-  const matchedLead = await SellerLeadModel.exists(filter);
-  return Boolean(matchedLead);
 }
 
 function buildBuyerPayload(sourcePayload: Record<string, unknown>, buyer: BuyerDoc) {
@@ -492,71 +452,16 @@ export async function handleSellerLeadPost(req: Request) {
     }
 
     const mappingId = matchedMapping._id?.toString() ?? "";
-    const intakeFields: MappingFieldDoc[] = apiFields.map((field) => ({
-      fieldName: field.fieldName,
-      description: field.description,
-      type: field.type,
-      required: field.required,
-      format: field.format || null,
-      options: field.options,
-    }));
-
-    const fieldReasons = await validateMappingFieldConfiguration(
-      payload,
-      apiFields,
-      async (fieldName, value, rule) =>
-        violatesEmailDuplicateRule(mappingId, fieldName, value, rule ?? undefined)
-    );
-
-    const intakeSettings = toMappingIntakeSettings(
-      matchedMapping as Parameters<typeof toMappingIntakeSettings>[0],
-      intakeFields
-    );
-
-    const intakeReasons = await validateMappingIntakeSettings({
+    const validationResult = await validateMappingLeadIntake({
       mappingId,
+      mappingDoc: matchedMapping,
+      verticalFields: (vertical?.fields as VerticalApiField[] | undefined) ?? [],
+      mappingFields: (matchedMapping.fields as MappingApiField[] | undefined) ?? [],
       payload,
-      settings: intakeSettings,
-      fields: intakeFields,
       postedAt,
-      checkDuplicate: async (targetMappingId, duplicateKey, periodDays, validationStatus) => {
-        if (!duplicateKey || !Types.ObjectId.isValid(targetMappingId)) return false;
-
-        const threshold = new Date(postedAt);
-        threshold.setDate(threshold.getDate() - periodDays);
-
-        const identityQuery = buildDuplicateExistsQuery(payload, intakeFields, duplicateKey);
-        if (!identityQuery) return false;
-
-        const baseFilter: Record<string, unknown> = {
-          mappingRef: new Types.ObjectId(targetMappingId),
-          postedAt: { $gte: threshold },
-          ...identityQuery,
-        };
-
-        if (validationStatus) {
-          baseFilter.validationStatus = validationStatus;
-        }
-
-        return Boolean(await SellerLeadModel.exists(baseFilter));
-      },
-      countLeads: async (targetMappingId, from, to, validationStatus) => {
-        if (!Types.ObjectId.isValid(targetMappingId)) return 0;
-
-        const filter: Record<string, unknown> = {
-          mappingRef: new Types.ObjectId(targetMappingId),
-          postedAt: { $gte: from, $lt: to },
-        };
-
-        if (validationStatus) {
-          filter.validationStatus = validationStatus;
-        }
-
-        return SellerLeadModel.countDocuments(filter);
-      },
     });
 
-    const reasons = [...fieldReasons, ...intakeReasons];
+    const reasons = validationResult.allReasons;
 
     const validationStatus = reasons.length === 0 ? "success" : "fail";
     const createdLead = await SellerLeadModel.create({

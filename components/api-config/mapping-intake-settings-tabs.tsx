@@ -23,6 +23,7 @@ import {
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
+import { resolveFieldOptionKey } from "@/lib/lead-field-value";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import type { VerticalFieldOption } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
@@ -238,6 +239,9 @@ export function MappingIntakeSettingsTabs({
         <div className="max-w-3xl space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             These duplicate rules are evaluated when a publisher posts a lead to this API.
+            {duplicatesForm.duplicateMethod === "SSN + Email"
+              ? " SSN + Email rejects a lead when both SSN and email match a previous lead. Duplicate Posted OFF still checks all historical leads."
+              : " Duplicate Posted must be enabled to reject duplicate emails."}
           </p>
           <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-duplicate-method" label="Duplicate Method" />
@@ -407,18 +411,19 @@ export function MappingIntakeSettingsTabs({
                     >
                       <div className="flex flex-col gap-0.5">
                         {options.map((option) => {
-                          const selected = filter.selectedValues?.includes(option.value) ?? false;
+                          const optionKey = resolveFieldOptionKey(option);
+                          const selected = filter.selectedValues?.includes(optionKey) ?? false;
                           return (
                             <Checkbox
-                              key={option.value}
-                              id={`${filter.fieldId}-${option.value}`}
+                              key={optionKey}
+                              id={`${filter.fieldId}-${optionKey}`}
                               checked={selected}
                               disabled={!isInteractive}
                               label={option.label}
                               onChange={(checked) => {
                                 const current = new Set(filter.selectedValues ?? []);
-                                if (checked) current.add(option.value);
-                                else current.delete(option.value);
+                                if (checked) current.add(optionKey);
+                                else current.delete(optionKey);
                                 updateGeneralFilter(filter.fieldId, { selectedValues: Array.from(current) });
                               }}
                             />

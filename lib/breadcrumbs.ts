@@ -11,19 +11,18 @@ type BuildBreadcrumbsOptions = {
   searchParams?: Pick<URLSearchParams, "get"> | null;
 };
 
+type BreadcrumbResult = {
+  items: BreadcrumbItem[];
+  pageTitle: string;
+};
+
 const DASHBOARD_CRUMB: BreadcrumbItem = { label: "Dashboard", href: "/dashboard" };
 
-const STATIC_ROUTES: Record<string, { pageTitle: string; section?: string }> = {
-  "/dashboard": { pageTitle: "Dashboard" },
-  "/verticals": { pageTitle: "Vertical" },
-  "/verticals/fields": { pageTitle: "Vertical Fields" },
-  "/industries": { pageTitle: "Vertical" },
-  "/industries/fields": { pageTitle: "Vertical Fields" },
+const STATIC_ROUTES: Record<string, { pageTitle: string }> = {
   "/leads": { pageTitle: "Leads" },
   "/logs": { pageTitle: "Logs" },
   "/distributions": { pageTitle: "Distributions" },
   "/vertical-mappings": { pageTitle: "Vertical Mappings" },
-  "/api-config": { pageTitle: "API Configuration" },
   "/ping-tree-settings": { pageTitle: "Ping Tree Settings" },
 };
 
@@ -33,6 +32,77 @@ function withDashboard(items: BreadcrumbItem[]) {
   }
 
   return [DASHBOARD_CRUMB, ...items];
+}
+
+function buildListDetailBreadcrumbs(
+  listLabel: string,
+  listHref: string,
+  detailLabel: string
+): BreadcrumbResult {
+  return {
+    items: withDashboard([
+      { label: listLabel, href: listHref },
+      { label: detailLabel },
+    ]),
+    pageTitle: detailLabel,
+  };
+}
+
+function buildApiConfigSellerHref(sellerId: string, sellerName?: string) {
+  if (!sellerId) return "/api-config";
+
+  const params = new URLSearchParams({ sellerId });
+  if (sellerName) {
+    params.set("sellerName", sellerName);
+  }
+
+  return `/api-config?${params.toString()}`;
+}
+
+function hasPublisherContext(context: { sellerId: string; sellerName: string }) {
+  return Boolean(context.sellerId || context.sellerName);
+}
+
+function buildPublisherApiBreadcrumbs(
+  context: { sellerId: string; sellerName: string },
+  sellerHref: string,
+  tail: BreadcrumbItem[]
+) {
+  if (!hasPublisherContext(context)) {
+    return [{ label: "API Configuration", href: "/api-config" }, ...tail];
+  }
+
+  return [
+    { label: "Publisher List", href: "/sellers" },
+    ...(context.sellerName
+      ? [{ label: context.sellerName, href: sellerHref }]
+      : context.sellerId
+        ? [{ label: "Publisher Detail", href: sellerHref }]
+        : []),
+    ...tail,
+  ];
+}
+
+function resolveApiConfigContext(pathname: string, searchParams?: Pick<URLSearchParams, "get"> | null) {
+  const fieldConfigurationMatch = pathname.match(/^\/api-config\/([^/]+)\/mappings\/([^/]+)\/field-configuration$/);
+
+  if (fieldConfigurationMatch) {
+    return {
+      sellerId: decodeURIComponent(fieldConfigurationMatch[1]),
+      mappingId: fieldConfigurationMatch[2],
+      sellerName: searchParams?.get("sellerName")?.trim() ?? "",
+      apiName: searchParams?.get("apiName")?.trim() ?? "",
+      verticalName: searchParams?.get("verticalName")?.trim() ?? "",
+    };
+  }
+
+  return {
+    sellerId: searchParams?.get("sellerId")?.trim() ?? "",
+    mappingId: "",
+    sellerName: searchParams?.get("sellerName")?.trim() ?? "",
+    apiName: searchParams?.get("apiName")?.trim() ?? "",
+    verticalName: searchParams?.get("verticalName")?.trim() ?? "",
+  };
 }
 
 function findClientManagementNav(pathname: string) {
@@ -55,28 +125,78 @@ function findReportNav(pathname: string) {
   return null;
 }
 
+function buildBuyersBreadcrumbs(pathname: string, overrideLabel?: string | null) {
+  if (pathname === "/buyers") {
+    return {
+      items: withDashboard([{ label: "Buyer List" }]),
+      pageTitle: "Buyer List",
+    };
+  }
+
+  if (/^\/buyers\/[^/]+$/.test(pathname)) {
+    const detailLabel = overrideLabel || "Buyer Detail";
+    return buildListDetailBreadcrumbs("Buyer List", "/buyers", detailLabel);
+  }
+
+  return null;
+}
+
+function buildSellersBreadcrumbs(pathname: string) {
+  if (pathname === "/sellers") {
+    return {
+      items: withDashboard([{ label: "Publisher List" }]),
+      pageTitle: "Publisher List",
+    };
+  }
+
+  return null;
+}
+
+function buildVerticalBreadcrumbs(pathname: string, searchParams?: Pick<URLSearchParams, "get"> | null) {
+  if (pathname === "/verticals" || pathname === "/industries") {
+    return {
+      items: withDashboard([{ label: "Vertical" }]),
+      pageTitle: "Vertical",
+    };
+  }
+
+  if (pathname === "/verticals/fields" || pathname === "/industries/fields") {
+    const verticalName = searchParams?.get("verticalName")?.trim() ?? "";
+    const detailLabel = verticalName ? `${verticalName} - Fields` : "Vertical Fields";
+
+    return {
+      items: withDashboard([
+        { label: "Vertical", href: "/verticals" },
+        { label: detailLabel },
+      ]),
+      pageTitle: detailLabel,
+    };
+  }
+
+  return null;
+}
+
 function buildClientManagementBreadcrumbs(pathname: string, overrideLabel?: string | null) {
   const navItem = findClientManagementNav(pathname);
   if (!navItem) return null;
 
+  const detailLabel = overrideLabel ?? getClientManagementDetailLabel(pathname);
   const items: BreadcrumbItem[] = [
     { label: "Client Management" },
     ...(pathname === navItem.href
       ? [{ label: navItem.label }]
       : [
           { label: navItem.label, href: navItem.href },
-          { label: overrideLabel ?? getClientManagementDetailLabel(pathname) },
+          { label: detailLabel },
         ]),
   ];
 
-  const pageTitle =
-    pathname === navItem.href ? navItem.label : overrideLabel ?? getClientManagementDetailLabel(pathname);
+  const pageTitle = pathname === navItem.href ? navItem.label : detailLabel;
 
   return { items: withDashboard(items), pageTitle };
 }
 
 function getClientManagementDetailLabel(pathname: string) {
-  if (/^\/buyers\/[^/]+$/.test(pathname)) return "Buyer Detail";
   if (/^\/campaigns\/[^/]+$/.test(pathname)) return "Campaign Setup";
   if (/^\/present-lists\/[^/]+$/.test(pathname)) return "Present List Detail";
   if (/^\/integration-builder\/[^/]+$/.test(pathname)) return "Integration Detail";
@@ -99,46 +219,45 @@ function buildReportBreadcrumbs(pathname: string) {
 function buildApiConfigBreadcrumbs(pathname: string, searchParams?: Pick<URLSearchParams, "get"> | null) {
   if (!pathname.startsWith("/api-config")) return null;
 
-  const sellerId = searchParams?.get("sellerId")?.trim() ?? "";
-  const sellerName = searchParams?.get("sellerName")?.trim() ?? "";
-  const apiName = searchParams?.get("apiName")?.trim() ?? "";
+  const context = resolveApiConfigContext(pathname, searchParams);
+  const sellerHref = buildApiConfigSellerHref(context.sellerId, context.sellerName);
 
   if (pathname === "/api-config") {
-    const items: BreadcrumbItem[] = [{ label: "API Configuration" }];
-    if (sellerName) {
-      items.push({ label: sellerName });
-    }
+    const items: BreadcrumbItem[] = hasPublisherContext(context)
+      ? [
+          { label: "Publisher List", href: "/sellers" },
+          { label: context.sellerName || "Publisher Detail" },
+        ]
+      : [{ label: "API Configuration" }];
 
     return {
       items: withDashboard(items),
-      pageTitle: sellerName ? `API Configuration - ${sellerName}` : "API Configuration",
+      pageTitle: context.sellerName || (hasPublisherContext(context) ? "Publisher Detail" : "API Configuration"),
     };
   }
 
-  if (pathname.includes("/field-configuration")) {
-    const sellerHref = sellerId
-      ? `/api-config?sellerId=${encodeURIComponent(sellerId)}${sellerName ? `&sellerName=${encodeURIComponent(sellerName)}` : ""}`
-      : "/api-config";
-
-    const items: BreadcrumbItem[] = [
-      { label: "API Configuration", href: "/api-config" },
-      ...(sellerName ? [{ label: sellerName, href: sellerHref }] : []),
-      { label: apiName ? `${apiName} - Field Configuration` : "Field Configuration" },
-    ];
+  if (/^\/api-config\/[^/]+\/mappings\/[^/]+\/field-configuration$/.test(pathname)) {
+    const fieldLabel = context.apiName ? `${context.apiName} - Field Configuration` : "Field Configuration";
+    const items = buildPublisherApiBreadcrumbs(context, sellerHref, [{ label: fieldLabel }]);
 
     return {
       items: withDashboard(items),
-      pageTitle: apiName ? `Field Configuration - ${apiName}` : "Field Configuration",
+      pageTitle: context.apiName ? `Field Configuration - ${context.apiName}` : "Field Configuration",
     };
   }
 
   if (/^\/api-config\/document\/[^/]+$/.test(pathname)) {
+    const documentLabel = context.apiName
+      ? `${context.apiName} - Documentation`
+      : context.verticalName
+        ? `${context.verticalName} - Documentation`
+        : "API Documentation";
+
+    const items = buildPublisherApiBreadcrumbs(context, sellerHref, [{ label: documentLabel }]);
+
     return {
-      items: withDashboard([
-        { label: "API Configuration", href: "/api-config" },
-        { label: "API Documentation" },
-      ]),
-      pageTitle: "API Documentation",
+      items: withDashboard(items),
+      pageTitle: documentLabel,
     };
   }
 
@@ -146,7 +265,7 @@ function buildApiConfigBreadcrumbs(pathname: string, searchParams?: Pick<URLSear
 }
 
 export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOptions = {}) {
-  const overrideLabel = options.overrideLabel?.trim();
+  const overrideLabel = options.overrideLabel?.trim() || null;
 
   if (pathname === "/dashboard") {
     return {
@@ -157,13 +276,22 @@ export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOpti
 
   const apiConfig = buildApiConfigBreadcrumbs(pathname, options.searchParams);
   if (apiConfig) {
-    if (overrideLabel) {
-      const items = [...apiConfig.items];
-      items[items.length - 1] = { label: overrideLabel };
-      return { items, pageTitle: overrideLabel };
-    }
-
     return apiConfig;
+  }
+
+  const buyers = buildBuyersBreadcrumbs(pathname, overrideLabel);
+  if (buyers) {
+    return buyers;
+  }
+
+  const sellers = buildSellersBreadcrumbs(pathname);
+  if (sellers) {
+    return sellers;
+  }
+
+  const verticals = buildVerticalBreadcrumbs(pathname, options.searchParams);
+  if (verticals) {
+    return verticals;
   }
 
   const clientManagement = buildClientManagementBreadcrumbs(pathname, overrideLabel);
@@ -192,7 +320,7 @@ export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOpti
     .join(" / ");
 
   return {
-    items: withDashboard([{ label: fallbackTitle || "Dashboard" }]),
-    pageTitle: fallbackTitle || "Dashboard",
+    items: withDashboard([{ label: overrideLabel || fallbackTitle || "Dashboard" }]),
+    pageTitle: overrideLabel || fallbackTitle || "Dashboard",
   };
 }

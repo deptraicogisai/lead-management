@@ -97,6 +97,7 @@ export default function ApiConfigPage() {
     {
       key: "actions",
       label: "Actions",
+      sortable: false,
       render: (row) => (
         <div className="flex flex-wrap items-center gap-2">
           <IconActionButton
@@ -116,7 +117,7 @@ export default function ApiConfigPage() {
             Delete
           </IconActionButton>
           <Link
-            href={`/api-config/document/${encodeURIComponent(row.id)}?sellerId=${encodeURIComponent(sellerId ?? "")}&sellerName=${encodeURIComponent(sellerName ?? "")}&verticalName=${encodeURIComponent(row.verticalName)}`}
+            href={`/api-config/document/${encodeURIComponent(row.id)}?sellerId=${encodeURIComponent(sellerId ?? "")}&sellerName=${encodeURIComponent(sellerName ?? "")}&apiName=${encodeURIComponent(row.apiName)}&verticalName=${encodeURIComponent(row.verticalName)}`}
             target="_blank"
             rel="noreferrer"
             className="rounded-lg border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"

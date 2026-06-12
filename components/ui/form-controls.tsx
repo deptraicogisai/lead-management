@@ -20,10 +20,19 @@ export function FormError({ error }: { error?: string }) {
   return <p className="mt-1 text-xs text-red-600 dark:text-red-300">{error}</p>;
 }
 
-export function FieldLabel({ htmlFor, label }: { htmlFor: string; label: string }) {
+export function FieldLabel({
+  htmlFor,
+  label,
+  required = false,
+}: {
+  htmlFor: string;
+  label: string;
+  required?: boolean;
+}) {
   return (
     <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
       {label}
+      {required ? <span className="text-red-600 dark:text-red-400"> *</span> : null}
     </label>
   );
 }

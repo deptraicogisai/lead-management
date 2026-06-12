@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleHelp, Copy, Download, Filter, Plus, Trash2 } from "lucide-react";
+import { CircleHelp, Copy, Download, Plus, Trash2 } from "lucide-react";
 import { ClearButton, ComingSoonButton, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PageSection } from "@/components/ui/state";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -59,6 +60,7 @@ export default function IntegrationBuilderPage() {
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [tableFilter, setTableFilter] = useState("");
 
   useEffect(() => {
     const fetchRecords = async () => {
@@ -114,9 +116,17 @@ export default function IntegrationBuilderPage() {
       const matchesPostingType = postingTypeFilter === "All" ? true : record.postingType === postingTypeFilter;
       const matchesProduct = productFilter === "All" ? true : record.verticalId === productFilter;
 
-      return matchesId && matchesName && matchesStatus && matchesPostingType && matchesProduct;
+      const search = tableFilter.trim().toLowerCase();
+      const matchesTableFilter = search
+        ? [String(record.displayId), record.name, record.productLabel, record.product, record.postingType, record.status]
+            .join(" ")
+            .toLowerCase()
+            .includes(search)
+        : true;
+
+      return matchesId && matchesName && matchesStatus && matchesPostingType && matchesProduct && matchesTableFilter;
     });
-  }, [records, idFilter, nameFilter, statusFilter, postingTypeFilter, productFilter]);
+  }, [records, idFilter, nameFilter, statusFilter, postingTypeFilter, productFilter, tableFilter]);
 
   const columns: Column<IntegrationBuilderRecord>[] = [
     {
@@ -132,6 +142,7 @@ export default function IntegrationBuilderPage() {
           </span>
         </span>
       ),
+      sortValue: (row) => row.displayId,
       render: (row) => (
         <Link href={`/integration-builder/${encodeURIComponent(row.id)}`} className="group inline-flex">
           <IdBadge id={row.displayId} interactive />
@@ -155,25 +166,33 @@ export default function IntegrationBuilderPage() {
       label: "Status",
       render: (row) => <StatusBadge status={row.status} />,
     },
-    { key: "postingType", label: "Posting Type" },
+    {
+      key: "postingType",
+      label: "Posting Type",
+      render: (row) => <StatusBadge status={row.postingType} />,
+    },
     {
       key: "product",
       label: "Product",
+      sortValue: (row) => row.productLabel || row.product,
       render: (row) => row.productLabel || row.product,
     },
     {
       key: "createdAt",
       label: "Created",
+      sortValue: (row) => new Date(row.createdAt).getTime(),
       render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTime(row.createdAt)}</span>,
     },
     {
       key: "updatedAt",
       label: "Updated",
+      sortValue: (row) => new Date(row.updatedAt).getTime(),
       render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTime(row.updatedAt)}</span>,
     },
     {
       key: "actions",
       label: "Action",
+      sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
           <Link
@@ -215,6 +234,7 @@ export default function IntegrationBuilderPage() {
     setStatusFilter("All");
     setPostingTypeFilter("All");
     setProductFilter("All");
+    setTableFilter("");
     setSelectedIds([]);
   };
 
@@ -392,43 +412,37 @@ export default function IntegrationBuilderPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-slate-600 dark:text-slate-300">
-                Showing <span className="font-semibold text-slate-900 dark:text-slate-100">{rows.length > 0 ? 1 : 0}</span> to{" "}
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{rows.length}</span> of{" "}
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{records.length}</span> entries
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  <Filter size={14} />
-                  <span>Filter</span>
-                </div>
-                <ExportButton disabled />
-                <button
-                  type="button"
-                  onClick={handleOpenAddModal}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <Plus size={15} />
-                  <span>Add New Record</span>
-                </button>
-                {selectedIds.length > 0 ? (
+            <ListTableToolbar
+              showingFrom={rows.length > 0 ? 1 : 0}
+              showingTo={rows.length}
+              totalItems={records.length}
+              tableFilter={tableFilter}
+              onTableFilterChange={setTableFilter}
+              selectedCount={selectedIds.length}
+              actions={
+                <>
+                  <ExportButton disabled />
                   <button
                     type="button"
-                    onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+                    onClick={handleOpenAddModal}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                   >
-                    <Trash2 size={15} />
-                    <span>Remove ({selectedIds.length})</span>
+                    <Plus size={15} />
+                    <span>Add New Record</span>
                   </button>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-                    0 selected
-                  </div>
-                )}
-              </div>
-            </div>
+                  {selectedIds.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
+                      className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+                    >
+                      <Trash2 size={15} />
+                      <span>Remove ({selectedIds.length})</span>
+                    </button>
+                  ) : null}
+                </>
+              }
+            />
 
             {loadError ? <p className="mb-4 text-sm text-red-600 dark:text-red-300">{loadError}</p> : null}
             {deleteError ? <p className="mb-4 text-sm text-red-600 dark:text-red-300">{deleteError}</p> : null}

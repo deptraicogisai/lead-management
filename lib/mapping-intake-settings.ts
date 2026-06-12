@@ -10,8 +10,7 @@ import {
 } from "@/lib/campaign";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
-  formatAcceptedValuesList,
-  getAllowedOptionValuesInRange,
+  buildRangeFilterRejectMessage,
   isValueInCheckboxFilter,
   isValueInRangeFilter,
   type FieldOptionLike,
@@ -91,7 +90,15 @@ export function syncGeneralFiltersWithFields(
       textValue: previous.textValue,
       selectedValues: previous.selectedValues,
     };
-  });
+  }).concat(
+    existing.filter((filter) => {
+      if (built.some((item) => item.fieldName === filter.fieldName)) {
+        return false;
+      }
+
+      return Boolean(filter.enabled);
+    })
+  );
 }
 
 export function toMappingIntakeSettings(
@@ -187,16 +194,15 @@ export function evaluateGeneralFiltersForPayload(
       }
 
       if (!isValueInRangeFilter(value, filter.minValue, filter.maxValue, options)) {
-        const allowedInRange = formatAcceptedValuesList(
-          getAllowedOptionValuesInRange(filter.minValue, filter.maxValue, options).map((optionValue) => ({
-            value: optionValue,
-          }))
-        );
-
         reasons.push(
-          allowedInRange
-            ? `${label} filter rejected. Allowed: ${allowedInRange}. Received: ${formatPayloadValueForMessage(value)}.`
-            : `${label} filter rejected. Allowed range: ${filter.minValue} to ${filter.maxValue}. Received: ${formatPayloadValueForMessage(value)}.`
+          buildRangeFilterRejectMessage({
+            label,
+            value,
+            minValue: filter.minValue,
+            maxValue: filter.maxValue,
+            options,
+            formatValue: formatPayloadValueForMessage,
+          })
         );
       }
     }
@@ -219,12 +225,59 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function readPayloadString(payload: Record<string, unknown>, keys: string[]) {
+function readPayloadIdentityValue(payload: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" && !Number.isNaN(value)) {
+      return String(value).trim();
+    }
+    if (typeof value === "boolean") {
+      return String(value).trim();
+    }
   }
   return "";
+}
+
+function readPayloadString(payload: Record<string, unknown>, keys: string[]) {
+  return readPayloadIdentityValue(payload, keys);
+}
+
+function isSsnLikeField(field: Pick<MappingFieldDoc, "fieldName" | "description" | "type">) {
+  const name = field.fieldName.trim().toLowerCase();
+  const description = field.description?.trim().toLowerCase() ?? "";
+  const type = field.type.trim().toLowerCase();
+
+  return (
+    name === "ssn" ||
+    name.includes("ssn") ||
+    name.includes("social") ||
+    description.includes("ssn") ||
+    description.includes("social security") ||
+    type === "ssn"
+  );
+}
+
+function resolveSsnFieldName(payload: Record<string, unknown>, fields: MappingFieldDoc[]) {
+  const configuredField = fields.find((field) => isSsnLikeField(field))?.fieldName;
+  if (configuredField) {
+    return configuredField;
+  }
+
+  for (const key of Object.keys(payload)) {
+    const normalizedKey = key.trim().toLowerCase();
+    if (
+      normalizedKey === "ssn" ||
+      normalizedKey.includes("ssn") ||
+      normalizedKey.includes("social")
+    ) {
+      return key;
+    }
+  }
+
+  return "ssn";
 }
 
 function isEmailLikeField(field: Pick<MappingFieldDoc, "fieldName" | "type" | "format">) {
@@ -243,14 +296,14 @@ function readEmailFromPayload(payload: Record<string, unknown>, fields: MappingF
     fields.find((field) => isEmailLikeField(field))?.fieldName;
 
   if (emailField) {
-    const value = readPayloadString(payload, [emailField]);
+    const value = readPayloadIdentityValue(payload, [emailField]);
     if (value) return { emailField, email: value };
   }
 
   for (const field of fields) {
-    const value = payload[field.fieldName];
-    if (typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
-      return { emailField: field.fieldName, email: value.trim() };
+    const value = readPayloadIdentityValue(payload, [field.fieldName]);
+    if (value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      return { emailField: field.fieldName, email: value };
     }
   }
 
@@ -264,12 +317,14 @@ function readEmailFromPayload(payload: Record<string, unknown>, fields: MappingF
 
 export function resolveDuplicateFieldNames(payload: Record<string, unknown>, fields: MappingFieldDoc[]) {
   const { emailField } = readEmailFromPayload(payload, fields);
-  const ssnField =
-    fields.find((field) => field.fieldName.trim().toLowerCase() === "ssn")?.fieldName ??
-    fields.find((field) => field.type.trim().toLowerCase() === "ssn")?.fieldName ??
-    "ssn";
+  const ssnField = resolveSsnFieldName(payload, fields);
 
   return { emailField, ssnField };
+}
+
+function normalizeSsnIdentity(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits || value.trim().toLowerCase();
 }
 
 function buildDuplicateKey(
@@ -279,11 +334,11 @@ function buildDuplicateKey(
 ) {
   const { email } = readEmailFromPayload(payload, fields);
   const { ssnField } = resolveDuplicateFieldNames(payload, fields);
-  const ssn = readPayloadString(payload, [ssnField, "ssn"]);
+  const ssn = readPayloadIdentityValue(payload, [ssnField, "ssn"]);
 
   if (method === "SSN + Email") {
-    if (!email && !ssn) return "";
-    return `${ssn.toLowerCase()}|${email.toLowerCase()}`;
+    if (!email || !ssn) return "";
+    return `${normalizeSsnIdentity(ssn)}|${email.toLowerCase()}`;
   }
 
   return email.toLowerCase();
@@ -292,9 +347,17 @@ function buildDuplicateKey(
 type DuplicateCheckFn = (
   mappingId: string,
   duplicateKey: string,
-  periodDays: number,
+  periodDays: number | null,
   validationStatus?: "success" | "fail"
 ) => Promise<boolean>;
+
+function buildDuplicateRejectMessage(method: CampaignDuplicatesSettings["duplicateMethod"]) {
+  if (method === "SSN + Email") {
+    return "SSN and email cannot be duplicated.";
+  }
+
+  return "Email cannot be duplicated.";
+}
 
 export async function evaluateDuplicateRules(
   mappingId: string,
@@ -311,23 +374,28 @@ export async function evaluateDuplicateRules(
   const duplicateKey = buildDuplicateKey(payload, normalizedDuplicates.duplicateMethod, fields);
   if (!duplicateKey) return reasons;
 
+  const duplicateMessage = buildDuplicateRejectMessage(normalizedDuplicates.duplicateMethod);
+
   const soldDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicateSold);
   if (soldDays !== null) {
     const exists = await checkDuplicate(mappingId, duplicateKey, soldDays, "success");
     if (exists) {
-      reasons.push(
-        `Duplicate sold lead rejected. A sold lead with the same ${normalizedDuplicates.duplicateMethod.toLowerCase()} was found within ${normalizedDuplicates.duplicateSold}.`
-      );
+      reasons.push(duplicateMessage);
     }
   }
 
   const postedDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicatePosted);
-  if (postedDays !== null) {
-    const exists = await checkDuplicate(mappingId, duplicateKey, postedDays);
+  const postedCheckPeriod =
+    postedDays !== null
+      ? postedDays
+      : normalizedDuplicates.duplicateMethod === "SSN + Email"
+        ? null
+        : undefined;
+
+  if (postedCheckPeriod !== undefined) {
+    const exists = await checkDuplicate(mappingId, duplicateKey, postedCheckPeriod);
     if (exists) {
-      reasons.push(
-        `Duplicate posted lead rejected. A lead with the same ${normalizedDuplicates.duplicateMethod.toLowerCase()} was already posted within ${normalizedDuplicates.duplicatePosted}.`
-      );
+      reasons.push(duplicateMessage);
     }
   }
 
@@ -458,6 +526,44 @@ export function buildFieldOptionsMap(fields: MappingFieldDoc[]) {
   );
 }
 
+export async function evaluateMappingIntakeRulesByCategory(params: {
+  mappingId: string;
+  payload: Record<string, unknown>;
+  settings: MappingIntakeSettingsRecord;
+  fields: MappingFieldDoc[];
+  postedAt: Date;
+  checkDuplicate: DuplicateCheckFn;
+  countLeads: LeadCountFn;
+}) {
+  const duplicateReasons = await evaluateDuplicateRules(
+    params.mappingId,
+    params.payload,
+    params.settings.duplicates,
+    params.fields,
+    params.checkDuplicate
+  );
+
+  const filterReasons = evaluateGeneralFiltersForPayload(
+    params.payload,
+    params.settings.generalFilters,
+    buildFieldOptionsMap(params.fields)
+  );
+
+  const scheduleReasons = await evaluateScheduleRules(
+    params.mappingId,
+    params.settings,
+    params.postedAt,
+    params.countLeads
+  );
+
+  return {
+    duplicateReasons,
+    filterReasons,
+    scheduleReasons,
+    allReasons: [...duplicateReasons, ...filterReasons, ...scheduleReasons],
+  };
+}
+
 export async function evaluateMappingIntakeRules(params: {
   mappingId: string;
   payload: Record<string, unknown>;
@@ -469,32 +575,8 @@ export async function evaluateMappingIntakeRules(params: {
 }) {
   const reasons: string[] = [];
 
-  reasons.push(
-    ...(await evaluateDuplicateRules(
-      params.mappingId,
-      params.payload,
-      params.settings.duplicates,
-      params.fields,
-      params.checkDuplicate
-    ))
-  );
-
-  reasons.push(
-    ...evaluateGeneralFiltersForPayload(
-      params.payload,
-      params.settings.generalFilters,
-      buildFieldOptionsMap(params.fields)
-    )
-  );
-
-  reasons.push(
-    ...(await evaluateScheduleRules(
-      params.mappingId,
-      params.settings,
-      params.postedAt,
-      params.countLeads
-    ))
-  );
+  const categorized = await evaluateMappingIntakeRulesByCategory(params);
+  reasons.push(...categorized.allReasons);
 
   return reasons;
 }

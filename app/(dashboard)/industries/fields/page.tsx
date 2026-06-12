@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
@@ -585,15 +586,7 @@ export default function IndustryFieldsPage() {
       render: (row) =>
         renderFieldCell(
           row,
-          <span
-            className={
-              row.required
-                ? "rounded-full bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            }
-          >
-            {row.required ? "Yes" : "No"}
-          </span>,
+          <span className="text-slate-700 dark:text-slate-200">{row.required ? "Yes" : "No"}</span>,
           <select
             value={editDraft?.required ? "yes" : "no"}
             onChange={(event) => updateEditDraft({ required: event.target.value === "yes" })}
@@ -610,15 +603,7 @@ export default function IndustryFieldsPage() {
       render: (row) =>
         renderFieldCell(
           row,
-          <span
-            className={
-              row.displayArrayMapping
-                ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            }
-          >
-            {row.displayArrayMapping ? "Yes" : "No"}
-          </span>,
+          <span className="text-slate-700 dark:text-slate-200">{row.displayArrayMapping ? "Yes" : "No"}</span>,
           <select
             value={editDraft?.displayArrayMapping ? "yes" : "no"}
             onChange={(event) => updateEditDraft({ displayArrayMapping: event.target.value === "yes" })}

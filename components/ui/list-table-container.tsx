@@ -37,7 +37,7 @@ export function ListTableContainer({
   return (
     <div className={cn("relative", className)}>
       {children}
-      {isRefreshing ? <LoadingOverlay /> : null}
+      {isRefreshing ? <LoadingOverlay message={loadingMessage} /> : null}
     </div>
   );
 }

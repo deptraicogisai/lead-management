@@ -45,6 +45,7 @@ import {
   type CampaignRecord,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
+import { resolveFieldOptionKey } from "@/lib/lead-field-value";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
 import type { PresentListRecord } from "@/lib/present-list";
 import type { ApiFieldConfig } from "@/lib/mock-data";
@@ -582,18 +583,19 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                         >
                           <div className="flex flex-col gap-0.5">
                             {options.map((option) => {
-                              const selected = filter.selectedValues?.includes(option.value) ?? false;
+                              const optionKey = resolveFieldOptionKey(option);
+                              const selected = filter.selectedValues?.includes(optionKey) ?? false;
                               return (
                                 <Checkbox
-                                  key={option.value}
-                                  id={`${filter.fieldId}-${option.value}`}
+                                  key={optionKey}
+                                  id={`${filter.fieldId}-${optionKey}`}
                                   checked={selected}
                                   disabled={!isInteractive}
                                   label={option.label}
                                   onChange={(checked) => {
                                     const current = new Set(filter.selectedValues ?? []);
-                                    if (checked) current.add(option.value);
-                                    else current.delete(option.value);
+                                    if (checked) current.add(optionKey);
+                                    else current.delete(optionKey);
                                     updateGeneralFilter(filter.fieldId, { selectedValues: Array.from(current) });
                                   }}
                                 />

@@ -76,13 +76,20 @@ function parseRangeComparable(value: string, options: FieldOptionLike[] = []): R
   const trimmed = value.trim();
   if (!trimmed) return null;
 
+  const normalized = trimmed.toLowerCase();
   const matchedOption = options.find(
-    (option) => option.value?.trim().toLowerCase() === trimmed.toLowerCase()
+    (option) =>
+      option.value?.trim().toLowerCase() === normalized ||
+      option.label?.trim().toLowerCase() === normalized
   );
 
   if (matchedOption?.value?.trim()) {
     const numeric = Number(matchedOption.value.trim());
     return Number.isNaN(numeric) ? matchedOption.value.trim() : numeric;
+  }
+
+  if (matchedOption?.label?.trim()) {
+    return matchedOption.label.trim();
   }
 
   const directNumeric = Number(trimmed);
@@ -161,6 +168,36 @@ export function isGeneralFilterRangeValid(
   return compareRangeValues(maxComparable, minComparable) >= 0;
 }
 
+export function buildRangeFilterRejectMessage(params: {
+  label: string;
+  value: unknown;
+  minValue: string;
+  maxValue: string;
+  options: FieldOptionLike[];
+  formatValue?: (value: unknown) => string;
+}) {
+  const formatValue =
+    params.formatValue ??
+    ((input: unknown) => {
+      if (input === undefined || input === null || (typeof input === "string" && !input.trim())) {
+        return "(empty)";
+      }
+      return String(input);
+    });
+
+  const received = formatValue(params.value);
+  const min = params.minValue.trim();
+  const max = params.maxValue.trim();
+  const rangeLabel = `${min}-${max}`;
+  const isAcceptedOption = isValueInFieldOptions(params.value, params.options);
+
+  if (isAcceptedOption && params.options.length > 0) {
+    return `${params.label} is not within the allowed range ${rangeLabel}. Received: ${received}.`;
+  }
+
+  return `${params.label} filter rejected. Allowed range: ${rangeLabel}. Received: ${received}.`;
+}
+
 export function isValueInRangeFilter(
   value: unknown,
   minValue: string,
@@ -180,6 +217,10 @@ export function isValueInRangeFilter(
   return isWithinRangeComparable(valueComparable, minComparable, maxComparable);
 }
 
+export function resolveFieldOptionKey(option: FieldOptionLike) {
+  return option.value?.trim() || option.label?.trim() || "";
+}
+
 export function buildAllowedCheckboxFilterValues(selectedValues: string[], options: FieldOptionLike[] = []) {
   const allowed = new Set<string>();
 
@@ -192,7 +233,8 @@ export function buildAllowedCheckboxFilterValues(selectedValues: string[], optio
     const matchedOption = options.find(
       (option) =>
         option.value?.trim().toLowerCase() === normalizedSelected ||
-        option.label?.trim().toLowerCase() === normalizedSelected
+        option.label?.trim().toLowerCase() === normalizedSelected ||
+        resolveFieldOptionKey(option).toLowerCase() === normalizedSelected
     );
 
     if (matchedOption?.value) {
@@ -200,6 +242,11 @@ export function buildAllowedCheckboxFilterValues(selectedValues: string[], optio
     }
     if (matchedOption?.label) {
       allowed.add(matchedOption.label.trim().toLowerCase());
+    }
+
+    const canonical = resolveFieldOptionKey(matchedOption ?? { value: selected, label: selected });
+    if (canonical) {
+      allowed.add(canonical.toLowerCase());
     }
   }
 

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   LayoutList,
+  Users,
 } from "lucide-react";
 import { clientManagementSections } from "@/components/layout/client-management-nav-items";
 import { reportSections } from "@/components/layout/report-nav-items";
@@ -16,6 +17,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/verticals", label: "Vertical", icon: BriefcaseBusiness },
+  { href: "/buyers", label: "Buyer List", icon: LayoutList },
+  { href: "/sellers", label: "Publisher List", icon: Users },
 ];
 
 function NavLink({

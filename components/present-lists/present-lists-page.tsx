@@ -9,12 +9,13 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { useListLoadState } from "@/lib/use-list-load-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { formatPresentListDateTime, PRESENT_LIST_TYPE_OPTIONS, type PresentListRecord } from "@/lib/present-list";
-import { cn } from "@/lib/utils";
 
 type VerticalOption = { id: string; label: string };
 
@@ -36,6 +37,7 @@ export function PresentListsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [draftFilters, setDraftFilters] = useState({ productId: "", listType: "All", name: "" });
   const [appliedFilters, setAppliedFilters] = useState(draftFilters);
+  const [tableFilter, setTableFilter] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -71,25 +73,32 @@ export function PresentListsPage() {
     void fetchLists();
   }, [fetchLists, reloadKey]);
 
+  const filteredRows = rows.filter((row) => {
+    const search = tableFilter.trim().toLowerCase();
+    if (!search) return true;
+
+    return [String(row.displayId), row.name, row.productLabel, row.applyToField, row.listType]
+      .join(" ")
+      .toLowerCase()
+      .includes(search);
+  });
+
   const columns: Column<PresentListRecord>[] = [
     {
       key: "id",
       label: "ID",
+      sortValue: (row) => row.displayId,
       render: (row) => (
         <Link href={`/present-lists/${row.id}`} className="group inline-flex">
           <IdBadge id={row.displayId} interactive />
         </Link>
       ),
     },
-    { key: "product", label: "Product", render: (row) => row.productLabel },
+    { key: "product", label: "Product", sortValue: (row) => row.productLabel, render: (row) => row.productLabel },
     {
       key: "listType",
       label: "List Type",
-      render: (row) => (
-        <span className={cn("rounded-full px-2 py-1 text-xs font-medium", row.listType === "PL" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
-          {row.listType}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.listType} />,
     },
     {
       key: "name",
@@ -97,25 +106,35 @@ export function PresentListsPage() {
       render: (row) => <DetailNameLink href={`/present-lists/${row.id}`}>{row.name}</DetailNameLink>,
     },
     { key: "field", label: "Field Name", render: (row) => row.applyToField },
-    { key: "size", label: "List Size", render: (row) => row.listSize },
+    { key: "size", label: "List Size", sortValue: (row) => row.listSize, render: (row) => row.listSize },
     { key: "autoUpdate", label: "Auto-Update Frequency", render: (row) => row.autoUpdateFrequency },
     {
       key: "apiAccess",
       label: "Allow API Access",
-      render: (row) => (
-        <span className={cn("rounded-full px-2 py-1 text-xs font-medium", row.allowApiAccess ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
-          {row.allowApiAccess ? "Yes" : "No"}
-        </span>
-      ),
+      render: (row) => <StatusBadge status={row.allowApiAccess ? "Yes" : "No"} />,
     },
-    { key: "created", label: "Creation Time", render: (row) => formatPresentListDateTime(row.createdAt) },
-    { key: "updated", label: "Last Update Time", render: (row) => formatPresentListDateTime(row.updatedAt) },
+    {
+      key: "created",
+      label: "Creation Time",
+      sortValue: (row) => new Date(row.createdAt).getTime(),
+      render: (row) => formatPresentListDateTime(row.createdAt),
+    },
+    {
+      key: "updated",
+      label: "Last Update Time",
+      sortValue: (row) => new Date(row.updatedAt).getTime(),
+      render: (row) => formatPresentListDateTime(row.updatedAt),
+    },
   ];
+
+  const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = filteredRows.length > 0 ? Math.min((page - 1) * pageSize + filteredRows.length, totalItems) : 0;
 
   return (
     <div className="space-y-6">
       <PageSection>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+        <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <FieldLabel htmlFor="pl-product-filter" label="Product" />
@@ -153,20 +172,37 @@ export function PresentListsPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end">
-          <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600">
-            <Plus size={16} />
-            Add new list
-          </button>
-        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <ListTableToolbar
+            pageSize={pageSize}
+            pageSizeOptions={[15, 50]}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            showingFrom={showingFrom}
+            showingTo={showingTo}
+            totalItems={totalItems}
+            tableFilter={tableFilter}
+            onTableFilterChange={setTableFilter}
+            actions={
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+              >
+                <Plus size={15} />
+                Add new list
+              </button>
+            }
+          />
 
-        <div className="mt-4">
           <ListTableContainer
             isInitialLoad={isInitialLoad}
             isRefreshing={isRefreshing}
             loadingMessage="Loading lists..."
           >
-            <DataTable columns={columns} rows={rows} emptyMessage="No lists found." />
+            <DataTable columns={columns} rows={filteredRows} emptyMessage="No lists found." />
           </ListTableContainer>
         </div>
 
@@ -182,6 +218,7 @@ export function PresentListsPage() {
           }}
           onPageChange={setPage}
         />
+        </div>
       </PageSection>
 
       <PresentListCreateModal

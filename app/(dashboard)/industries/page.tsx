@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { IndustryForm } from "@/components/forms/industry-form";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { ListControls } from "@/components/ui/list-controls";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ListTableContainer } from "@/components/ui/list-table-container";
@@ -124,6 +124,7 @@ export default function IndustriesPage() {
     {
       key: "actions",
       label: "Actions",
+      sortable: false,
       render: (row) => (
         <div className="flex gap-2">
           <Link
@@ -151,52 +152,67 @@ export default function IndustriesPage() {
     },
   ];
 
+  const showingFrom = verticalRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = verticalRows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
   return (
     <div className="space-y-6">
-      <ListControls
-        searchValue={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(1);
-        }}
-        searchPlaceholder="Search by vertical name or description"
-      />
+      <PageSection>
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <ListTableToolbar
+              pageSize={pageSize}
+              pageSizeOptions={[15, 50]}
+              onPageSizeChange={(value) => {
+                setPageSize(value);
+                setPage(1);
+              }}
+              showingFrom={showingFrom}
+              showingTo={showingTo}
+              totalItems={totalItems}
+              tableFilter={search}
+              onTableFilterChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              filterPlaceholder="Name or description"
+              actions={
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                >
+                  Create Vertical
+                </button>
+              }
+            />
 
-      <PageSection
-        actions={
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
-          >
-            Create Vertical
-          </button>
-        }
-      >
-        <ListTableContainer
-          isInitialLoad={isInitialLoad}
-          isRefreshing={isRefreshing}
-          loadingMessage="Loading verticals..."
-        >
-          <DataTable<Vertical>
-            columns={columns}
-            rows={verticalRows}
-            emptyMessage="No verticals yet. Create your first vertical to get started."
+            <ListTableContainer
+              isInitialLoad={isInitialLoad}
+              isRefreshing={isRefreshing}
+              loadingMessage="Loading verticals..."
+            >
+              <DataTable<Vertical>
+                columns={columns}
+                rows={verticalRows}
+                emptyMessage="No verticals yet. Create your first vertical to get started."
+              />
+            </ListTableContainer>
+          </div>
+
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+            onPageChange={setPage}
           />
-        </ListTableContainer>
+        </div>
       </PageSection>
-
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        pageSize={pageSize}
-        onPageSizeChange={(value) => {
-          setPageSize(value);
-          setPage(1);
-        }}
-        onPageChange={setPage}
-      />
 
       <Modal
         open={isFormOpen}

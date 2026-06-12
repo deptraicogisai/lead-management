@@ -1,8 +1,9 @@
-import { getStatusBadgeClassName, type StatusBadgeVariant } from "@/lib/status-badge";
+import { getStatusBadgePresentation, getStatusDisplayLabel, type StatusBadgeVariant } from "@/lib/status-badge";
 import { cn } from "@/lib/utils";
 
 type StatusBadgeProps = {
   status: string;
+  label?: string;
   variant?: StatusBadgeVariant;
   className?: string;
   size?: "xs" | "sm";
@@ -16,21 +17,25 @@ const sizeClasses = {
 
 export function StatusBadge({
   status,
-  variant = "pill",
+  label,
+  variant = "outline",
   className,
   size = "sm",
   compact = false,
 }: StatusBadgeProps) {
+  const presentation = getStatusBadgePresentation(status, variant);
+  const displayLabel = label ?? getStatusDisplayLabel(status);
+
   return (
     <span
       className={cn(
-        "inline-flex items-center",
-        getStatusBadgeClassName(status, variant),
+        presentation.className,
         compact ? "px-2 py-0.5 text-[10px]" : sizeClasses[size],
         className
       )}
+      style={presentation.style}
     >
-      {status}
+      {displayLabel}
     </span>
   );
 }

@@ -8,7 +8,6 @@ import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/for
 type SellerFormValues = {
   name: string;
   email: string;
-  region: string;
   status: Seller["status"];
 };
 
@@ -22,7 +21,6 @@ type SellerFormProps = {
 const defaultValues: SellerFormValues = {
   name: "",
   email: "",
-  region: "",
   status: "Active",
 };
 
@@ -36,14 +34,12 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
 
     if (!form.name.trim()) newErrors.name = "Publisher name is required.";
     if (!form.email.includes("@")) newErrors.email = "A valid email is required.";
-    if (!form.region.trim()) newErrors.region = "Region is required.";
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length === 0) {
       await onSubmitSeller({
         name: form.name.trim(),
         email: form.email.trim(),
-        region: form.region.trim(),
         status: form.status,
       });
       if (!isEditing) {
@@ -75,17 +71,6 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
           placeholder="ops@northstar.com"
         />
         <FormError error={errors.email} />
-      </div>
-
-      <div>
-        <FieldLabel htmlFor="seller-region" label="Publisher Region" />
-        <Input
-          id="seller-region"
-          value={form.region}
-          onChange={(e) => setForm((prev) => ({ ...prev, region: e.target.value }))}
-          placeholder="US-East"
-        />
-        <FormError error={errors.region} />
       </div>
 
       <div>

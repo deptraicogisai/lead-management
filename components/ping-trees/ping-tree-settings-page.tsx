@@ -244,7 +244,7 @@ function ActiveCampaignCard({
       <div className="flex items-start gap-3 p-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start gap-2">
-            <StatusBadge status={card.status} variant="solid" />
+            <StatusBadge status={card.status} />
             <p className="text-sm leading-snug text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
           </div>
         </div>
@@ -324,7 +324,7 @@ function InactiveCampaignCard({
       <div className="flex items-start justify-between gap-2 p-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={card.status} variant="solid" compact />
+            <StatusBadge status={card.status} compact />
             <p className="truncate text-xs text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
           </div>
         </div>

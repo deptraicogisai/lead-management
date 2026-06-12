@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PrimaryButton } from "@/components/ui/form-controls";
-import { ListControls } from "@/components/ui/list-controls";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -115,6 +115,7 @@ export function LeadsList() {
     {
       key: "postedAt",
       label: "Posted At",
+      sortValue: (row) => new Date(row.postedAt).getTime(),
       render: (row) => (
         <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{row.postedAt ? formatPostedAt(row.postedAt) : ""}</span>
       ),
@@ -131,6 +132,7 @@ export function LeadsList() {
     {
       key: "reasons",
       label: "Reasons",
+      sortValue: (row) => row.reasons.join(", "),
       render: (row) =>
         row.reasons.length > 0 ? (
           <ul className="max-w-sm space-y-2 text-xs text-red-600 dark:text-red-200">
@@ -249,70 +251,89 @@ export function LeadsList() {
     await fetchLeads();
   };
 
+  const showingFrom = rows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
   return (
     <PageSection>
-      <ListControls
-        searchValue={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(1);
-          setSelectedIds([]);
-        }}
-        searchPlaceholder="Search by seller, status, user agent or validation error"
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={isInitialLoad || isRefreshing || isDeleting}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDelete("selected")}
-              disabled={selectedIds.length === 0 || isInitialLoad || isRefreshing || isDeleting}
-              className="rounded-xl border border-amber-300 px-4 py-2.5 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-            >
-              Delete Selected ({selectedIds.length})
-            </button>
-            <PrimaryButton
-              type="button"
-              onClick={() => void handleDelete("all")}
-              disabled={totalItems === 0 || isInitialLoad || isRefreshing || isDeleting}
-              className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400"
-            >
-              {isDeleting ? "Deleting..." : "Delete All"}
-            </PrimaryButton>
-          </>
-        }
-      />
-      <ListTableContainer
-        isInitialLoad={isInitialLoad}
-        isRefreshing={isRefreshing}
-        loadingMessage="Loading leads..."
-      >
-        <DataTable<LeadRow>
-          columns={columns}
-          rows={rows}
-          emptyMessage="No leads available yet."
-          selectedRowIds={selectedIds}
-          onToggleRow={toggleRowSelection}
-          onToggleAllRows={toggleAllVisibleRows}
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <ListTableToolbar
+            pageSize={pageSize}
+            pageSizeOptions={[15, 50]}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+            showingFrom={showingFrom}
+            showingTo={showingTo}
+            totalItems={totalItems}
+            tableFilter={search}
+            onTableFilterChange={(value) => {
+              setSearch(value);
+              setPage(1);
+              setSelectedIds([]);
+            }}
+            filterPlaceholder="Seller, status, agent..."
+            selectedCount={selectedIds.length}
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleRefresh()}
+                  disabled={isInitialLoad || isRefreshing || isDeleting}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete("selected")}
+                  disabled={selectedIds.length === 0 || isInitialLoad || isRefreshing || isDeleting}
+                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
+                >
+                  Delete Selected ({selectedIds.length})
+                </button>
+                <PrimaryButton
+                  type="button"
+                  onClick={() => void handleDelete("all")}
+                  disabled={totalItems === 0 || isInitialLoad || isRefreshing || isDeleting}
+                  className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400"
+                >
+                  {isDeleting ? "Deleting..." : "Delete All"}
+                </PrimaryButton>
+              </>
+            }
+          />
+
+          <ListTableContainer
+            isInitialLoad={isInitialLoad}
+            isRefreshing={isRefreshing}
+            loadingMessage="Loading leads..."
+          >
+            <DataTable<LeadRow>
+              columns={columns}
+              rows={rows}
+              emptyMessage="No leads available yet."
+              selectedRowIds={selectedIds}
+              onToggleRow={toggleRowSelection}
+              onToggleAllRows={toggleAllVisibleRows}
+            />
+          </ListTableContainer>
+        </div>
+
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPage(1);
+          }}
+          onPageChange={setPage}
         />
-      </ListTableContainer>
-      <PaginationControls
-        page={page}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        pageSize={pageSize}
-        onPageSizeChange={(value) => {
-          setPageSize(value);
-          setPage(1);
-        }}
-        onPageChange={setPage}
-      />
+      </div>
       <Modal
         open={selectedRawData !== null}
         title="Full Raw Data"

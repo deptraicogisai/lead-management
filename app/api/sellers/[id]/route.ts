@@ -47,7 +47,7 @@ export async function PATCH(req: Request, context: Params) {
   try {
     const { id } = await context.params;
     const body = (await req.json()) as SellerPayload;
-    if (!body.name?.trim() || !body.email?.trim() || !body.region?.trim() || !body.status) {
+    if (!body.name?.trim() || !body.email?.trim() || !body.status) {
       return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
     }
 
@@ -58,7 +58,7 @@ export async function PATCH(req: Request, context: Params) {
       {
         name: body.name.trim(),
         email: body.email.trim(),
-        region: body.region.trim(),
+        region: body.region?.trim() ?? "",
         status: body.status,
       },
       { new: true }

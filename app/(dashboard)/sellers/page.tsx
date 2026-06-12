@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleHelp, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { SellerForm } from "@/components/forms/seller-form";
 import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { IdBadge } from "@/components/ui/id-badge";
 import { Input } from "@/components/ui/form-controls";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
@@ -16,7 +16,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatBuyerCreated } from "@/lib/buyer";
 import type { Seller } from "@/lib/mock-data";
 import { useListLoadState } from "@/lib/use-list-load-state";
-import { cn } from "@/lib/utils";
 
 type SellerListResponse = {
   items: Seller[];
@@ -103,9 +102,7 @@ export default function SellersPage() {
       const matchesTableFilter = search
         ? row.name.toLowerCase().includes(search) ||
           row.email.toLowerCase().includes(search) ||
-          row.region.toLowerCase().includes(search) ||
-          row.status.toLowerCase().includes(search) ||
-          String(row.displayId ?? "").includes(search)
+          row.status.toLowerCase().includes(search)
         : true;
 
       return matchesStatus && matchesDateFrom && matchesDateTo && matchesTableFilter;
@@ -169,7 +166,7 @@ export default function SellersPage() {
     setIsFormOpen(false);
   };
 
-  const handleSubmitSeller = async (values: Omit<Seller, "id">) => {
+  const handleSubmitSeller = async (values: { name: string; email: string; status: Seller["status"] }) => {
     if (editingSellerId) {
       const response = await fetch(`/api/sellers/${encodeURIComponent(editingSellerId)}`, {
         method: "PATCH",
@@ -205,25 +202,6 @@ export default function SellersPage() {
 
   const columns: Column<Seller>[] = [
     {
-      key: "id",
-      label: (
-        <span className="inline-flex items-center gap-1.5">
-          <span>ID</span>
-          <span
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500"
-            title="Publisher record identifier"
-          >
-            <CircleHelp size={10} strokeWidth={2.5} />
-          </span>
-        </span>
-      ),
-      render: (row) => (
-        <Link href={apiConfigHref(row)} className="group inline-flex">
-          <IdBadge id={row.displayId ?? 0} interactive />
-        </Link>
-      ),
-    },
-    {
       key: "name",
       label: "Name",
       render: (row) => <DetailNameLink href={apiConfigHref(row)}>{row.name}</DetailNameLink>,
@@ -234,23 +212,20 @@ export default function SellersPage() {
       render: (row) => <span className="text-xs text-slate-700 dark:text-slate-200">{row.email}</span>,
     },
     {
-      key: "region",
-      label: "Region",
-      render: (row) => <span className="text-xs text-slate-700 dark:text-slate-200">{row.region}</span>,
-    },
-    {
       key: "createdAt",
       label: "Created",
+      sortValue: (row) => (row.createdAt ? new Date(row.createdAt).getTime() : 0),
       render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
     },
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} variant="outline" />,
+      render: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "actions",
       label: "Actions",
+      sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
           <Link
@@ -319,63 +294,32 @@ export default function SellersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                  {[15, 50].map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "px-3 py-2 text-sm font-medium transition",
-                        pageSize === size
-                          ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                          : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                      )}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-sm text-slate-600 dark:text-slate-300">
-                  Showing <span className="font-semibold text-slate-900 dark:text-slate-100">{showingFrom}</span> to{" "}
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{showingTo}</span> of{" "}
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{totalItems}</span> entries
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  <CircleHelp size={14} />
-                  <span>Filter:</span>
-                  <input
-                    type="text"
-                    value={tableFilter}
-                    onChange={(event) => setTableFilter(event.target.value)}
-                    className="w-28 border-none bg-transparent text-sm outline-none dark:text-slate-100"
-                    placeholder=""
-                  />
-                </div>
-                <ExportButton disabled />
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                >
-                  <Plus size={15} />
-                  Add New Publisher
-                </button>
-                {selectedIds.length > 0 ? (
-                  <span className="inline-flex items-center rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                    {selectedIds.length} selected
-                  </span>
-                ) : null}
-              </div>
-            </div>
+            <ListTableToolbar
+              pageSize={pageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              showingFrom={showingFrom}
+              showingTo={showingTo}
+              totalItems={totalItems}
+              tableFilter={tableFilter}
+              onTableFilterChange={setTableFilter}
+              selectedCount={selectedIds.length}
+              actions={
+                <>
+                  <ExportButton disabled />
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                  >
+                    <Plus size={15} />
+                    Add New Publisher
+                  </button>
+                </>
+              }
+            />
 
             <ListTableContainer
               isInitialLoad={isInitialLoad}
@@ -421,7 +365,6 @@ export default function SellersPage() {
               ? {
                   name: editingSeller.name,
                   email: editingSeller.email,
-                  region: editingSeller.region,
                   status: editingSeller.status,
                 }
               : undefined

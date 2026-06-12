@@ -48,7 +48,7 @@ type LoadingOverlayProps = {
   message?: string;
 };
 
-export function LoadingOverlay({ message }: LoadingOverlayProps) {
+export function LoadingOverlay({ message = "Loading data..." }: LoadingOverlayProps) {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/75 backdrop-blur-[2px] dark:bg-slate-900/75">
       <LoadingIndicator message={message} size="md" />

@@ -38,17 +38,16 @@ function isDuplicateRuleEnabled(period: string | undefined) {
 function describeDuplicateLines(duplicates: CampaignDuplicatesSettings): string[] {
   const lines: string[] = [];
   const byEmail = duplicates.duplicateMethod === "Email";
-  const identity = byEmail ? "email" : "SSN and email combination";
 
   if (isDuplicateRuleEnabled(duplicates.duplicatePosted)) {
-    lines.push(
-      `The same ${identity} must not be submitted more than once within ${duplicates.duplicatePosted}.`
-    );
+    lines.push(byEmail ? "Email cannot be duplicated." : "SSN and email cannot be duplicated.");
+  } else if (!byEmail) {
+    lines.push("SSN and email cannot be duplicated.");
   }
 
   if (isDuplicateRuleEnabled(duplicates.duplicateSold)) {
     lines.push(
-      `A lead that was already sold with the same ${identity} cannot be submitted again within ${duplicates.duplicateSold}.`
+      byEmail ? "Sold email cannot be duplicated." : "Sold SSN and email cannot be duplicated."
     );
   }
 
@@ -109,19 +108,8 @@ function describeScheduleLines(rules: CampaignScheduleRule[], timezone: string):
 }
 
 function describeFieldRequirement(field: DocumentationField): string | null {
-  const label = field.description?.trim() || field.fieldName;
-
-  if (field.type.trim().toLowerCase() === "email" && field.emailDuplicateRule) {
-    if (field.emailDuplicateRule.mode === "forever") {
-      return `${label} must be unique. The same email cannot be submitted more than once.`;
-    }
-
-    if (field.emailDuplicateRule.mode === "days" && typeof field.emailDuplicateRule.days === "number") {
-      return `${label} must not duplicate within ${field.emailDuplicateRule.days} day(s).`;
-    }
-  }
-
   if ((field.ignoreValues?.length ?? 0) > 0) {
+    const label = field.description?.trim() || field.fieldName;
     return `${label} cannot be: ${field.ignoreValues?.join(", ")}.`;
   }
 

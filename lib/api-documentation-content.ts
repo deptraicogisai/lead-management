@@ -181,16 +181,6 @@ function buildExampleValue(field: DocumentationField): unknown {
 }
 
 export function describeFieldCondition(field: DocumentationField) {
-  if (field.type.trim().toLowerCase() === "email") {
-    if (field.emailDuplicateRule?.mode === "forever") {
-      return "Email must be unique forever";
-    }
-
-    if (field.emailDuplicateRule?.mode === "days" && typeof field.emailDuplicateRule.days === "number") {
-      return `Email must be unique within ${field.emailDuplicateRule.days} day(s)`;
-    }
-  }
-
   if ((field.ignoreValues?.length ?? 0) > 0) {
     return `Ignore values: ${field.ignoreValues?.join(", ")}`;
   }

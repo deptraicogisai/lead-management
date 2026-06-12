@@ -78,14 +78,28 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function buildPayloadFieldValueMatch(fieldPath: string, value: string) {
+  const conditions: Record<string, unknown>[] = [
+    {
+      [fieldPath]: {
+        $regex: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i"),
+      },
+    },
+  ];
+
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    const numericValue = Number(value);
+    if (!Number.isNaN(numericValue)) {
+      conditions.push({ [fieldPath]: numericValue });
+    }
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $or: conditions };
+}
+
 export async function validateMappingFieldConfiguration(
   payload: Record<string, unknown>,
-  apiFields: MappingLeadFieldConfig[],
-  checkEmailDuplicate: (
-    fieldName: string,
-    value: unknown,
-    rule?: MappingLeadFieldConfig["emailDuplicateRule"]
-  ) => Promise<boolean>
+  apiFields: MappingLeadFieldConfig[]
 ) {
   const reasons: string[] = [];
 
@@ -120,23 +134,25 @@ export async function validateMappingFieldConfiguration(
       !isValueInFieldOptions(value, field.options ?? [])
     ) {
       reasons.push(`${label} must be one of the accepted values: ${formatAcceptedValuesList(field.options ?? [])}.`);
-      continue;
-    }
-
-    if (
-      normalizedType === "email" &&
-      isPresentValue(value) &&
-      (await checkEmailDuplicate(field.fieldName, value, field.emailDuplicateRule))
-    ) {
-      if (field.emailDuplicateRule?.mode === "days" && typeof field.emailDuplicateRule.days === "number") {
-        reasons.push(`${label} already exists within ${field.emailDuplicateRule.days} day(s).`);
-      } else {
-        reasons.push(`${label} already exists in the system.`);
-      }
     }
   }
 
   return reasons;
+}
+
+function buildSsnFieldValueMatch(fieldPath: string, normalizedDigits: string) {
+  const conditions: Record<string, unknown>[] = [buildPayloadFieldValueMatch(fieldPath, normalizedDigits)];
+
+  if (/^\d{9}$/.test(normalizedDigits)) {
+    const flexiblePattern = normalizedDigits.split("").join("\\D*");
+    conditions.push({
+      [fieldPath]: {
+        $regex: new RegExp(`^\\s*${flexiblePattern}\\s*$`, "i"),
+      },
+    });
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $or: conditions };
 }
 
 export function buildDuplicateExistsQuery(
@@ -147,34 +163,19 @@ export function buildDuplicateExistsQuery(
   const { emailField, ssnField } = resolveDuplicateFieldNames(payload, fields);
   const parts = duplicateKey.split("|").map((part) => part.trim());
 
-  if (parts.length === 2 && parts.some(Boolean)) {
+  if (parts.length === 2) {
     const [ssn, email] = parts;
-    const andConditions: Record<string, unknown>[] = [];
+    if (!ssn || !email) return null;
 
-    if (email) {
-      andConditions.push({
-        [`payload.${emailField}`]: {
-          $regex: new RegExp(`^\\s*${escapeRegExp(email)}\\s*$`, "i"),
-        },
-      });
-    }
-
-    if (ssn) {
-      andConditions.push({
-        [`payload.${ssnField}`]: {
-          $regex: new RegExp(`^\\s*${escapeRegExp(ssn)}\\s*$`, "i"),
-        },
-      });
-    }
-
-    return andConditions.length > 0 ? { $and: andConditions } : null;
+    return {
+      $and: [
+        buildPayloadFieldValueMatch(`payload.${emailField}`, email),
+        buildSsnFieldValueMatch(`payload.${ssnField}`, ssn),
+      ],
+    };
   }
 
-  return {
-    [`payload.${emailField}`]: {
-      $regex: new RegExp(`^\\s*${escapeRegExp(duplicateKey)}\\s*$`, "i"),
-    },
-  };
+  return buildPayloadFieldValueMatch(`payload.${emailField}`, duplicateKey);
 }
 
 export function buildLeadRejectResponse(reasons: string[]) {
@@ -195,7 +196,7 @@ export async function validateMappingIntakeSettings(
     checkDuplicate: (
       mappingId: string,
       duplicateKey: string,
-      periodDays: number,
+      periodDays: number | null,
       validationStatus?: "success" | "fail"
     ) => Promise<boolean>;
     countLeads: (

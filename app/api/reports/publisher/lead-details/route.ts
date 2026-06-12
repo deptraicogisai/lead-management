@@ -100,9 +100,10 @@ function buildMongoFilter(params: {
     andConditions.push({ sellerRef: new Types.ObjectId(params.publisherId) });
   }
 
-  if (params.status.toLowerCase() === "sold") {
+  const normalizedStatus = params.status.toLowerCase();
+  if (normalizedStatus === "accepted" || normalizedStatus === "sold") {
     andConditions.push({ validationStatus: "success" });
-  } else if (params.status.toLowerCase() === "reject") {
+  } else if (normalizedStatus === "reject") {
     andConditions.push({ validationStatus: "fail" });
   }
 

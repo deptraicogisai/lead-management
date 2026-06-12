@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Calendar, Copy, Filter, List, Pencil, Plus, Trash2 } from "lucide-react";
+import { Calendar, Copy, Filter, FlaskConical, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
+import { MappingTestLeadTab } from "@/components/api-config/mapping-test-lead-tab";
 import { useParams, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
@@ -70,8 +71,8 @@ const defaultNewFieldDraft: NewFieldDraft = {
   format: "",
   displayArrayMapping: false,
   dataTypeFilter: "",
-  emailDuplicateMode: "days",
-  emailDuplicateDays: "30",
+  emailDuplicateMode: "forever",
+  emailDuplicateDays: "",
   ignoreValues: [],
 };
 
@@ -103,14 +104,12 @@ function buildFieldPayload(field: ApiField) {
     displayArrayMapping: field.displayArrayMapping,
     dataTypeFilter: field.dataTypeFilter?.trim() || null,
     options: field.options,
-    emailDuplicateRule: isEmailType
-      ? field.emailDuplicateRule ?? { mode: "days" as const, days: 30 }
-      : undefined,
+    emailDuplicateRule: isEmailType ? field.emailDuplicateRule : undefined,
     ignoreValues: isEmailType ? [] : field.ignoreValues ?? [],
   };
 }
 
-type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule";
+type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule" | "test-lead";
 
 export function SellerFieldConfigurationPage() {
   const params = useParams<{ sellerId: string; mappingId: string }>();
@@ -241,7 +240,7 @@ export function SellerFieldConfigurationPage() {
         if (isEmailType) {
           next.format = "email";
           next.ignoreValues = [];
-          next.emailDuplicateRule = next.emailDuplicateRule ?? { mode: "days", days: 30 };
+          next.emailDuplicateRule = next.emailDuplicateRule ?? { mode: "forever" };
         } else {
           next.format = next.format === "email" ? "" : next.format;
           next.emailDuplicateRule = undefined;
@@ -593,21 +592,6 @@ export function SellerFieldConfigurationPage() {
         ),
     },
     {
-      key: "isCustom",
-      label: "Source",
-      render: (row) => (
-        <span
-          className={
-            row.isCustom
-              ? "rounded-full bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-              : "rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
-          }
-        >
-          {row.isCustom ? "Custom" : "Copied from Vertical"}
-        </span>
-      ),
-    },
-    {
       key: "type",
       label: "Data Type",
       render: (row) =>
@@ -633,15 +617,7 @@ export function SellerFieldConfigurationPage() {
       render: (row) =>
         renderFieldCell(
           row,
-          <span
-            className={
-              row.required
-                ? "rounded-full bg-rose-100 px-2 py-1 text-xs font-medium text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            }
-          >
-            {row.required ? "Yes" : "No"}
-          </span>,
+          <span className="text-slate-700 dark:text-slate-200">{row.required ? "Yes" : "No"}</span>,
           <select
             value={editDraft?.required ? "yes" : "no"}
             onChange={(event) => updateEditDraft({ required: event.target.value === "yes" })}
@@ -658,15 +634,7 @@ export function SellerFieldConfigurationPage() {
       render: (row) =>
         renderFieldCell(
           row,
-          <span
-            className={
-              row.displayArrayMapping
-                ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                : "rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-            }
-          >
-            {row.displayArrayMapping ? "Yes" : "No"}
-          </span>,
+          <span className="text-slate-700 dark:text-slate-200">{row.displayArrayMapping ? "Yes" : "No"}</span>,
           <select
             value={editDraft?.displayArrayMapping ? "yes" : "no"}
             onChange={(event) => updateEditDraft({ displayArrayMapping: event.target.value === "yes" })}
@@ -797,6 +765,7 @@ export function SellerFieldConfigurationPage() {
               { id: "duplicates" as const, label: "Duplicates", icon: Copy },
               { id: "filters" as const, label: "Filters", icon: Filter },
               { id: "schedule" as const, label: "Schedule", icon: Calendar },
+              { id: "test-lead" as const, label: "Test Lead", icon: FlaskConical },
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
@@ -819,7 +788,21 @@ export function SellerFieldConfigurationPage() {
           })}
         </div>
 
-        {activeTab === "fields" ? (
+        {activeTab === "test-lead" && sellerId && mappingId ? (
+          <MappingTestLeadTab
+            sellerId={sellerId}
+            mappingId={mappingId}
+            apiName={apiName}
+            fields={fields.map((field) => ({
+              fieldName: field.fieldName,
+              description: field.description,
+              type: field.type,
+              required: field.required,
+              format: field.format,
+              options: field.options,
+            }))}
+          />
+        ) : activeTab === "fields" ? (
         <>
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -863,7 +846,7 @@ export function SellerFieldConfigurationPage() {
           }}
         />
         </>
-        ) : sellerId && mappingId ? (
+        ) : sellerId && mappingId && (activeTab === "duplicates" || activeTab === "filters" || activeTab === "schedule") ? (
           <MappingIntakeSettingsTabs
             sellerId={sellerId}
             mappingId={mappingId}
@@ -873,7 +856,7 @@ export function SellerFieldConfigurationPage() {
               dataTypeFilter: field.dataTypeFilter,
               options: field.options,
             }))}
-            forcedTab={activeTab as Exclude<FieldConfigurationTab, "fields">}
+            forcedTab={activeTab}
             hideTabBar
           />
         ) : null}

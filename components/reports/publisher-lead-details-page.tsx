@@ -6,6 +6,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
@@ -19,7 +20,6 @@ import {
   type PublisherLeadFieldColumn,
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cn } from "@/lib/utils";
 
 type FilterOption = {
   id: string;
@@ -39,20 +39,11 @@ type PublisherLeadDetailsResponse = {
   };
 };
 
-const STATUS_OPTIONS = ["All", "Sold", "Reject"];
+const STATUS_OPTIONS = ["All", "Accepted", "Reject"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 
 function buildDefaultFilters(): PublisherLeadDetailsFilters {
   return { ...defaultPublisherLeadDetailsFilters };
-}
-
-function SortableHeader({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {label}
-      <span className="text-[10px] leading-none text-slate-400">▲▼</span>
-    </span>
-  );
 }
 
 function FilterSelect({
@@ -201,7 +192,8 @@ export function PublisherLeadDetailsPage() {
     const systemColumns: Column<PublisherLeadDetailsRow>[] = [
       {
         key: "displayCode",
-        label: <SortableHeader label="ID" />,
+        label: "ID",
+        sortValue: (row) => row.displayCode,
         render: (row) => (
           <div className="flex items-center gap-2 whitespace-nowrap">
             <button
@@ -218,7 +210,8 @@ export function PublisherLeadDetailsPage() {
       },
       {
         key: "postedAt",
-        label: <SortableHeader label="Date" />,
+        label: "Date Time",
+        sortValue: (row) => new Date(row.postedAt).getTime(),
         render: (row) => (
           <span className="whitespace-nowrap text-slate-700 dark:text-slate-200">
             {formatPublisherLeadTime(row.postedAt)}
@@ -227,34 +220,30 @@ export function PublisherLeadDetailsPage() {
       },
       {
         key: "statusLabel",
-        label: <SortableHeader label="Status" />,
+        label: "Status",
         render: (row) => <StatusBadge status={row.statusLabel} />,
       },
       {
-        key: "tier",
-        label: <SortableHeader label="Tier" />,
-        render: (row) => row.tier,
-      },
-      {
         key: "redirectLabel",
-        label: <SortableHeader label="Redirect" />,
-        render: (row) => <span className="whitespace-nowrap text-xs">{row.redirectLabel}</span>,
+        label: "Redirect",
+        render: (row) => <StatusBadge status={row.redirectLabel} size="xs" />,
       },
       {
         key: "productLabel",
-        label: <SortableHeader label="Product" />,
+        label: "Product",
         render: (row) => <span className="whitespace-nowrap">{row.productLabel}</span>,
       },
       {
         key: "publisherLabel",
-        label: <SortableHeader label="Publisher" />,
+        label: "Publisher",
         render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
       },
     ];
 
     const dynamicFieldColumns: Column<PublisherLeadDetailsRow>[] = fieldColumns.map((field) => ({
       key: `field:${field.fieldName}`,
-      label: <SortableHeader label={field.label} />,
+      label: field.label,
+      sortValue: (row) => formatPayloadFieldValue(row.rawPayload[field.fieldName]),
       render: (row) => (
         <span className="whitespace-nowrap">{formatPayloadFieldValue(row.rawPayload[field.fieldName])}</span>
       ),
@@ -263,10 +252,13 @@ export function PublisherLeadDetailsPage() {
     return [...systemColumns, ...dynamicFieldColumns];
   }, [fieldColumns]);
 
+  const showingFrom = rows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
   return (
     <PageSection>
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <FieldLabel htmlFor="lead-id" label="Lead ID" />
@@ -356,50 +348,27 @@ export function PublisherLeadDetailsPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <div className="flex flex-wrap items-center gap-1">
-                  {REPORT_PAGE_SIZE_OPTIONS.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "rounded-lg px-2.5 py-1 text-sm font-medium transition",
-                        pageSize === size
-                          ? "bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900"
-                          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                      )}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-
-                <span className="text-sm text-slate-600 dark:text-slate-300">
-                  Showing {rows.length} entries
-                </span>
-
-                <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <Input
-                    value={draftFilters.tableSearch}
-                    onChange={(event) => updateDraft({ tableSearch: event.target.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        handleSearch();
-                      }
-                    }}
-                    placeholder="Search table..."
-                    className="w-48"
-                  />
-
+              <ListTableToolbar
+                pageSize={pageSize}
+                pageSizeOptions={[...REPORT_PAGE_SIZE_OPTIONS]}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+                showingFrom={showingFrom}
+                showingTo={showingTo}
+                totalItems={totalItems}
+                tableFilter={draftFilters.tableSearch}
+                onTableFilterChange={(value) => updateDraft({ tableSearch: value })}
+                onTableFilterSubmit={handleSearch}
+                filterPlaceholder="Search table..."
+                selectedCount={selectedIds.length}
+                actions={
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setExportOpen((current) => !current)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
                     >
                       Export
                       <ChevronDown className="h-4 w-4" />
@@ -423,14 +392,8 @@ export function PublisherLeadDetailsPage() {
                       </div>
                     ) : null}
                   </div>
-
-                  {selectedIds.length > 0 ? (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {selectedIds.length} selected
-                    </span>
-                  ) : null}
-                </div>
-              </div>
+                }
+              />
 
               <ListTableContainer
                 isInitialLoad={isInitialLoad}

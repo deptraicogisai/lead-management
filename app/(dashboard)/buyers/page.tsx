@@ -9,9 +9,9 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Input } from "@/components/ui/form-controls";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
-import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   BUYER_MANAGER_OPTIONS,
@@ -20,7 +20,6 @@ import {
   type BuyerListRecord,
 } from "@/lib/buyer";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cn } from "@/lib/utils";
 
 type BuyerListResponse = {
   items: BuyerListRecord[];
@@ -170,6 +169,7 @@ export default function BuyersPage() {
           </span>
         </span>
       ),
+      sortValue: (row) => row.displayId,
       render: (row) => (
         <Link href={`/buyers/${encodeURIComponent(row.id)}`} className="group inline-flex">
           <IdBadge id={row.displayId} interactive />
@@ -186,16 +186,18 @@ export default function BuyersPage() {
     {
       key: "createdAt",
       label: "Created",
+      sortValue: (row) => (row.createdAt ? new Date(row.createdAt).getTime() : 0),
       render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
     },
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} variant="outline" />,
+      render: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "integrations",
       label: "Integrations",
+      sortValue: (row) => row.integrations.join(", "),
       render: (row) => (
         <div className="max-w-xs space-y-1 text-xs text-slate-700 dark:text-slate-200">
           {row.integrations.length > 0 ? row.integrations.map((item) => <p key={item}>{item}</p>) : <span>-</span>}
@@ -246,63 +248,32 @@ export default function BuyersPage() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                  {[15, 50].map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "px-3 py-2 text-sm font-medium transition",
-                        pageSize === size
-                          ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                          : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                      )}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-sm text-slate-600 dark:text-slate-300">
-                  Showing <span className="font-semibold text-slate-900 dark:text-slate-100">{showingFrom}</span> to{" "}
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{showingTo}</span> of{" "}
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{totalItems}</span> entries
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  <CircleHelp size={14} />
-                  <span>Filter:</span>
-                  <input
-                    type="text"
-                    value={tableFilter}
-                    onChange={(event) => setTableFilter(event.target.value)}
-                    className="w-28 border-none bg-transparent text-sm outline-none dark:text-slate-100"
-                    placeholder=""
-                  />
-                </div>
-                <ExportButton disabled />
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                >
-                  <Plus size={15} />
-                  Add New Buyer
-                </button>
-                {selectedIds.length > 0 ? (
-                  <span className="inline-flex items-center rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                    {selectedIds.length} selected
-                  </span>
-                ) : null}
-              </div>
-            </div>
+            <ListTableToolbar
+              pageSize={pageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              showingFrom={showingFrom}
+              showingTo={showingTo}
+              totalItems={totalItems}
+              tableFilter={tableFilter}
+              onTableFilterChange={setTableFilter}
+              selectedCount={selectedIds.length}
+              actions={
+                <>
+                  <ExportButton disabled />
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                  >
+                    <Plus size={15} />
+                    Add New Buyer
+                  </button>
+                </>
+              }
+            />
 
             <ListTableContainer
               isInitialLoad={isInitialLoad}

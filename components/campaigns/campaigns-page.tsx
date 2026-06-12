@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
 import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
+import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -139,6 +140,7 @@ export function CampaignsPage() {
     {
       key: "id",
       label: "ID",
+      sortValue: (row) => row.displayId,
       render: (row) => (
         <Link href={`/campaigns/${row.id}`} className="group inline-flex">
           <IdBadge id={row.displayId} interactive />
@@ -151,23 +153,33 @@ export function CampaignsPage() {
       render: (row) => <DetailNameLink href={`/campaigns/${row.id}`}>{row.name}</DetailNameLink>,
     },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
-    { key: "product", label: "Product", render: (row) => row.productLabel },
+    { key: "product", label: "Product", sortValue: (row) => row.productLabel, render: (row) => row.productLabel },
     {
       key: "price",
       label: "Price",
+      sortValue: (row) => row.minPrice,
       render: (row) => <span>${row.minPrice.toFixed(2)}</span>,
     },
-    { key: "integration", label: "Integration", render: (row) => row.integrationLabel },
+    { key: "integration", label: "Integration", sortValue: (row) => row.integrationLabel, render: (row) => row.integrationLabel },
     { key: "timezone", label: "Timezone", render: (row) => row.timezone },
-    { key: "buyer", label: "Buyer", render: (row) => row.buyerLabel },
-    { key: "type", label: "Campaign Type", render: (row) => row.campaignType },
-    { key: "created", label: "Created", render: (row) => formatCampaignDateTime(row.createdAt) },
+    { key: "buyer", label: "Buyer", sortValue: (row) => row.buyerLabel, render: (row) => row.buyerLabel },
+    { key: "type", label: "Campaign Type", sortValue: (row) => row.campaignType, render: (row) => row.campaignType },
+    {
+      key: "created",
+      label: "Created",
+      sortValue: (row) => new Date(row.createdAt).getTime(),
+      render: (row) => formatCampaignDateTime(row.createdAt),
+    },
   ];
+
+  const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = filteredRows.length > 0 ? Math.min((page - 1) * pageSize + filteredRows.length, totalItems) : 0;
 
   return (
     <div className="space-y-6">
       <PageSection>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+        <div className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div>
               <FieldLabel htmlFor="campaign-id-filter" label="ID" />
@@ -261,27 +273,31 @@ export function CampaignsPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-              placeholder="Filter campaigns..."
-              className="pl-9"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
-          >
-            <Plus size={16} />
-            Create New Campaign
-          </button>
-        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <ListTableToolbar
+            pageSize={pageSize}
+            pageSizeOptions={[15, 50]}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            showingFrom={showingFrom}
+            showingTo={showingTo}
+            totalItems={totalItems}
+            tableFilter={tableSearch}
+            onTableFilterChange={setTableSearch}
+            actions={
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+              >
+                <Plus size={15} />
+                Create New Campaign
+              </button>
+            }
+          />
 
-        <div className="mt-4">
           <ListTableContainer
             isInitialLoad={isInitialLoad}
             isRefreshing={isRefreshing}
@@ -303,6 +319,7 @@ export function CampaignsPage() {
           }}
           onPageChange={setPage}
         />
+        </div>
       </PageSection>
 
       <CampaignCreateModal
