@@ -590,7 +590,6 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
 
   const handlePrefill = () => {
     setFormValues(buildRandomTestLeadForm(fields, multiSelectFilters));
-    toast.success("Form prefilled with random sample values.");
   };
 
   const handleReset = () => {

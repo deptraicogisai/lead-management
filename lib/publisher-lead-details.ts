@@ -1,3 +1,5 @@
+import { buildDefaultLeadDetailsDateRange } from "@/lib/date-range";
+
 export type PublisherLeadFieldColumn = {
   fieldName: string;
   label: string;
@@ -40,10 +42,12 @@ export type PublisherLeadDetailsFilters = {
   tableSearch: string;
 };
 
+const defaultDateRange = buildDefaultLeadDetailsDateRange();
+
 export const defaultPublisherLeadDetailsFilters: PublisherLeadDetailsFilters = {
   leadId: "",
-  dateFrom: "",
-  dateTo: "",
+  dateFrom: defaultDateRange.from,
+  dateTo: defaultDateRange.to,
   productId: "",
   method: "All",
   status: "All",

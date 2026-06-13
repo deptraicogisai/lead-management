@@ -4,27 +4,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar, Copy, Filter, Pencil, Plus, Trash2 } from "lucide-react";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
+import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
-import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
-import { FilterTagInput } from "@/components/ui/filter-tag-input";
+import { FieldLabel, PrimaryButton } from "@/components/ui/form-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DUPLICATE_METHOD_OPTIONS,
   DUPLICATE_PERIOD_OPTIONS,
   TIMEZONE_OPTIONS,
   findScheduleRuleOverlap,
-  buildGeneralFilterEnabledPatch,
-  getMaxRangeOptions,
   getScheduleRuleOverlapMessage,
-  isGeneralFilterRangeValid,
+  groupGeneralFiltersForDisplay,
   normalizeGeneralFiltersForStorage,
+  patchGeneralFilter,
+  patchMultiSelectFilterPairEnabled,
   validateGeneralFilters,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
-import { resolveFieldOptionKey } from "@/lib/lead-field-value";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import type { VerticalFieldOption } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
@@ -129,9 +128,15 @@ export function MappingIntakeSettingsTabs({
     if (!settings) return;
     setSettings({
       ...settings,
-      generalFilters: settings.generalFilters.map((filter) =>
-        filter.fieldId === fieldId ? { ...filter, ...patch } : filter
-      ),
+      generalFilters: patchGeneralFilter(settings.generalFilters, fieldId, patch),
+    });
+  };
+
+  const setMultiSelectPairEnabled = (fieldName: string, enabled: boolean) => {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      generalFilters: patchMultiSelectFilterPairEnabled(settings.generalFilters, fieldName, enabled),
     });
   };
 
@@ -241,8 +246,9 @@ export function MappingIntakeSettingsTabs({
           <p className="text-sm text-slate-600 dark:text-slate-300">
             These duplicate rules are evaluated when a publisher posts a lead to this API.
             {duplicatesForm.duplicateMethod === "SSN + Email"
-              ? " SSN + Email rejects a lead when both SSN and email match a previous lead. Duplicate Posted OFF still checks all historical leads."
-              : " Duplicate Posted must be enabled to reject duplicate emails."}
+              ? " SSN + Email rejects a lead when both SSN and email match a previous lead."
+              : " Email rejects a lead when the same email was posted before."}
+            {" Duplicate Posted OFF checks all historical leads; set a period to limit the lookback window."}
           </p>
           <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-duplicate-method" label="Duplicate Method" />
@@ -255,21 +261,6 @@ export function MappingIntakeSettingsTabs({
               className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
             >
               {DUPLICATE_METHOD_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
-            <FieldLabel htmlFor="mapping-duplicate-sold" label="Duplicate Sold" />
-            <select
-              id="mapping-duplicate-sold"
-              value={duplicatesForm.duplicateSold}
-              onChange={(event) => setDuplicatesForm({ ...duplicatesForm, duplicateSold: event.target.value })}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            >
-              {DUPLICATE_PERIOD_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -294,7 +285,13 @@ export function MappingIntakeSettingsTabs({
           <PrimaryButton
             type="button"
             disabled={isSaving}
-            onClick={() => void saveSection("duplicates", { duplicates: duplicatesForm }, "Duplicates settings saved successfully.")}
+            onClick={() =>
+              void saveSection(
+                "duplicates",
+                { duplicates: { ...duplicatesForm, duplicateSold: "OFF" } },
+                "Duplicates settings saved successfully."
+              )
+            }
             className="bg-emerald-800 hover:bg-emerald-700"
           >
             {isSaving ? "Saving..." : "Save Duplicates Settings"}
@@ -304,7 +301,7 @@ export function MappingIntakeSettingsTabs({
 
       {activeTab === "filters" ? (
         <DualSaveBar
-          dual={shouldUseDualSaveBar(settings.generalFilters.length)}
+          dual={shouldUseDualSaveBar(groupGeneralFiltersForDisplay(settings.generalFilters).length)}
           renderActions={() => (
             <PrimaryButton
               type="button"
@@ -320,146 +317,12 @@ export function MappingIntakeSettingsTabs({
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Enabled general filters are applied to incoming publisher leads before they are accepted.
           </p>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {settings.generalFilters.map((filter) => {
-              const options = fieldOptionsListByName.get(filter.fieldName) ?? [];
-              const isInteractive = filter.enabled;
-
-              return (
-                <div
-                  key={filter.fieldId}
-                  className={cn(
-                    "rounded-2xl border border-slate-200 bg-white p-4 transition-opacity dark:border-slate-700 dark:bg-slate-900",
-                    !isInteractive && "opacity-90"
-                  )}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{filter.description}</p>
-                    <ToggleSwitch
-                      checked={filter.enabled}
-                      onChange={(enabled) =>
-                        updateGeneralFilter(filter.fieldId, buildGeneralFilterEnabledPatch(filter, enabled))
-                      }
-                    />
-                  </div>
-
-                  {filter.dataTypeFilter === "Range" ? (
-                    (() => {
-                      const maxOptions = getMaxRangeOptions(filter.minValue ?? "", options);
-                      const rangeInvalid =
-                        isInteractive &&
-                        Boolean(filter.minValue && filter.maxValue) &&
-                        !isGeneralFilterRangeValid(filter.minValue ?? "", filter.maxValue ?? "", options);
-
-                      return (
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <FieldLabel htmlFor={`${filter.fieldId}-min`} label="Min" />
-                              <Select
-                                id={`${filter.fieldId}-min`}
-                                value={filter.minValue ?? ""}
-                                disabled={!isInteractive}
-                                onChange={(event) => {
-                                  const nextMin = event.target.value;
-                                  const patch: Partial<CampaignGeneralFilter> = { minValue: nextMin };
-                                  if (
-                                    filter.maxValue &&
-                                    !isGeneralFilterRangeValid(nextMin, filter.maxValue, options)
-                                  ) {
-                                    patch.maxValue = "";
-                                  }
-                                  updateGeneralFilter(filter.fieldId, patch);
-                                }}
-                              >
-                                <option value="">Select min</option>
-                                {options.map((option) => (
-                                  <option key={`min-${option.value}`} value={option.value}>
-                                    {option.value}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
-                            <div>
-                              <FieldLabel htmlFor={`${filter.fieldId}-max`} label="Max" />
-                              <Select
-                                id={`${filter.fieldId}-max`}
-                                value={filter.maxValue ?? ""}
-                                disabled={!isInteractive || !filter.minValue}
-                                onChange={(event) => updateGeneralFilter(filter.fieldId, { maxValue: event.target.value })}
-                              >
-                                <option value="">Select max</option>
-                                {maxOptions.map((option) => (
-                                  <option key={`max-${option.value}`} value={option.value ?? ""}>
-                                    {option.value}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
-                          </div>
-                          {rangeInvalid ? <FormError error="Max cannot be less than Min." /> : null}
-                        </div>
-                      );
-                    })()
-                  ) : null}
-
-                  {filter.dataTypeFilter === "Checkbox" ? (
-                    <div
-                      className={cn(
-                        "rounded-xl border border-slate-100 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-800/40",
-                        !isInteractive && "pointer-events-none opacity-60"
-                      )}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        {options.map((option) => {
-                          const optionKey = resolveFieldOptionKey(option);
-                          const selected = filter.selectedValues?.includes(optionKey) ?? false;
-                          return (
-                            <Checkbox
-                              key={optionKey}
-                              id={`${filter.fieldId}-${optionKey}`}
-                              checked={selected}
-                              disabled={!isInteractive}
-                              label={option.label}
-                              onChange={(checked) => {
-                                const current = new Set(filter.selectedValues ?? []);
-                                if (checked) current.add(optionKey);
-                                else current.delete(optionKey);
-                                updateGeneralFilter(filter.fieldId, { selectedValues: Array.from(current) });
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {filter.dataTypeFilter === "Multi Select" ? (
-                    <FilterTagInput
-                      id={`${filter.fieldId}-multi-select`}
-                      values={filter.selectedValues ?? []}
-                      disabled={!isInteractive}
-                      placeholder="Type a value and press Enter"
-                      onChange={(selectedValues) => updateGeneralFilter(filter.fieldId, { selectedValues })}
-                    />
-                  ) : null}
-
-                  {filter.dataTypeFilter === "Text" ? (
-                    <Input
-                      id={`${filter.fieldId}-text`}
-                      value={filter.textValue ?? ""}
-                      disabled={!isInteractive}
-                      onChange={(event) => updateGeneralFilter(filter.fieldId, { textValue: event.target.value })}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          {settings.generalFilters.length === 0 ? (
-            <p className="text-sm text-slate-500">No filterable fields yet. Add fields with Text, Range, Checkbox, or Multi Select filters.</p>
-          ) : null}
+          <GeneralFiltersGrid
+            filters={settings.generalFilters}
+            fieldOptionsListByName={fieldOptionsListByName}
+            onPatchFilter={updateGeneralFilter}
+            onSetMultiSelectPairEnabled={setMultiSelectPairEnabled}
+          />
         </div>
         </DualSaveBar>
       ) : null}

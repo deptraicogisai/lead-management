@@ -7,7 +7,9 @@ import { SellerForm } from "@/components/forms/seller-form";
 import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
-import { Input } from "@/components/ui/form-controls";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { FieldLabel } from "@/components/ui/form-controls";
+import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
@@ -27,12 +29,7 @@ type SellerListResponse = {
 };
 
 const STATUS_FILTER_OPTIONS = ["All", "Active", "Inactive"] as const;
-
-function parseDateInput(value: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+const emptyDateRange = buildEmptySearchDateRange();
 
 function apiConfigHref(row: Seller) {
   return `/api-config?sellerId=${encodeURIComponent(row.id)}&sellerName=${encodeURIComponent(row.name)}`;
@@ -53,13 +50,13 @@ export default function SellersPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>("All");
-  const [dateFrom, setDateFrom] = useState("2000-01-01");
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dateFrom, setDateFrom] = useState(emptyDateRange.from);
+  const [dateTo, setDateTo] = useState(emptyDateRange.to);
 
   const [appliedFilters, setAppliedFilters] = useState({
     statusFilter: "All" as (typeof STATUS_FILTER_OPTIONS)[number],
-    dateFrom: "2000-01-01",
-    dateTo: new Date().toISOString().slice(0, 10),
+    dateFrom: emptyDateRange.from,
+    dateTo: emptyDateRange.to,
   });
 
   const editingSeller = sellerRows.find((seller) => seller.id === editingSellerId) ?? null;
@@ -88,8 +85,8 @@ export default function SellersPage() {
   }, [page, pageSize, reloadKey]);
 
   const filteredRows = useMemo(() => {
-    const fromDate = parseDateInput(appliedFilters.dateFrom);
-    const toDate = parseDateInput(appliedFilters.dateTo);
+    const fromDate = parseDateTimeValue(appliedFilters.dateFrom);
+    const toDate = parseDateTimeValue(appliedFilters.dateTo);
 
     return sellerRows.filter((row) => {
       const matchesStatus =
@@ -97,7 +94,7 @@ export default function SellersPage() {
 
       const createdAt = row.createdAt ? new Date(row.createdAt) : null;
       const matchesDateFrom = !fromDate || !createdAt ? true : createdAt >= fromDate;
-      const matchesDateTo = !toDate || !createdAt ? true : createdAt <= new Date(`${appliedFilters.dateTo}T23:59:59`);
+      const matchesDateTo = !toDate || !createdAt ? true : createdAt <= toDate;
 
       const search = tableFilter.trim().toLowerCase();
       const matchesTableFilter = search
@@ -121,15 +118,15 @@ export default function SellersPage() {
   };
 
   const clearFilters = () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const resetDateRange = buildEmptySearchDateRange();
     setStatusFilter("All");
-    setDateFrom("2000-01-01");
-    setDateTo(today);
+    setDateFrom(resetDateRange.from);
+    setDateTo(resetDateRange.to);
     setTableFilter("");
     setAppliedFilters({
       statusFilter: "All",
-      dateFrom: "2000-01-01",
-      dateTo: today,
+      dateFrom: resetDateRange.from,
+      dateTo: resetDateRange.to,
     });
     setSelectedIds([]);
     setPage(1);
@@ -290,12 +287,15 @@ export default function SellersPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Date Range</label>
-                <div className="flex items-center gap-2">
-                  <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-                  <span className="text-sm text-slate-500">-</span>
-                  <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-                </div>
+                <FieldLabel htmlFor="publisher-date-range" label="Date" />
+                <DateRangePicker
+                  id="publisher-date-range"
+                  value={{ from: dateFrom, to: dateTo }}
+                  onChange={(range) => {
+                    setDateFrom(range.from);
+                    setDateTo(range.to);
+                  }}
+                />
               </div>
             </div>
 

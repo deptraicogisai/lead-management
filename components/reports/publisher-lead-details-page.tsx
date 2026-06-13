@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Eye } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
@@ -10,6 +11,7 @@ import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
+import { downloadCsv } from "@/lib/csv-export";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   defaultPublisherLeadDetailsFilters,
@@ -40,6 +42,7 @@ type PublisherLeadDetailsResponse = {
 };
 
 const STATUS_OPTIONS = ["All", "Accepted", "Reject"];
+const METHOD_OPTIONS = ["All"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 
 function buildDefaultFilters(): PublisherLeadDetailsFilters {
@@ -93,6 +96,7 @@ export function PublisherLeadDetailsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewLead, setViewLead] = useState<PublisherLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const updateDraft = (patch: Partial<PublisherLeadDetailsFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
@@ -176,6 +180,78 @@ export function PublisherLeadDetailsPage() {
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
     setPage(1);
+  };
+
+  const buildExportMatrix = (
+    exportRows: PublisherLeadDetailsRow[],
+    exportFieldColumns: PublisherLeadFieldColumn[]
+  ) => {
+    const headers = [
+      "ID",
+      "Date Time",
+      "Status",
+      "Redirect",
+      "Product",
+      "Publisher",
+      ...exportFieldColumns.map((field) => field.label),
+    ];
+
+    const matrix = exportRows.map((row) => [
+      row.displayCode,
+      formatPublisherLeadTime(row.postedAt),
+      row.statusLabel,
+      row.redirectLabel,
+      row.productLabel,
+      row.publisherLabel,
+      ...exportFieldColumns.map((field) => formatPayloadFieldValue(row.rawPayload[field.fieldName])),
+    ]);
+
+    return { headers, matrix };
+  };
+
+  const fetchAllRows = async () => {
+    if (totalItems === 0) {
+      return { items: [] as PublisherLeadDetailsRow[], fieldColumns };
+    }
+
+    const maxPageSize = 1000;
+    const pages = Math.ceil(totalItems / maxPageSize);
+    const allRows: PublisherLeadDetailsRow[] = [];
+    let mergedFieldColumns = fieldColumns;
+
+    for (let nextPage = 1; nextPage <= pages; nextPage += 1) {
+      const response = await fetch(`/api/reports/publisher/lead-details?${buildQuery(appliedFilters, nextPage, maxPageSize)}`);
+      if (!response.ok) {
+        throw new Error("Failed to export all lead details.");
+      }
+
+      const data = (await response.json()) as PublisherLeadDetailsResponse;
+      allRows.push(...data.items);
+      mergedFieldColumns = data.fieldColumns ?? mergedFieldColumns;
+    }
+
+    return { items: allRows, fieldColumns: mergedFieldColumns };
+  };
+
+  const handleExport = async (mode: "current-page" | "all-pages") => {
+    setIsExporting(true);
+    setExportOpen(false);
+
+    try {
+      if (mode === "all-pages") {
+        const result = await fetchAllRows();
+        const { headers, matrix } = buildExportMatrix(result.items, result.fieldColumns);
+        downloadCsv("publisher-lead-details-all.csv", headers, matrix);
+        return;
+      }
+
+      const { headers, matrix } = buildExportMatrix(rows, fieldColumns);
+      downloadCsv("publisher-lead-details-current-page.csv", headers, matrix);
+    } catch {
+      // Ignore export errors for now.
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const toggleRowSelection = (rowId: string) => {
@@ -271,21 +347,12 @@ export function PublisherLeadDetailsPage() {
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="date-from" label="Date" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      id="date-from"
-                      type="datetime-local"
-                      value={draftFilters.dateFrom}
-                      onChange={(event) => updateDraft({ dateFrom: event.target.value })}
-                    />
-                    <Input
-                      id="date-to"
-                      type="datetime-local"
-                      value={draftFilters.dateTo}
-                      onChange={(event) => updateDraft({ dateTo: event.target.value })}
-                    />
-                  </div>
+                  <FieldLabel htmlFor="lead-date-range" label="Date" />
+                  <DateRangePicker
+                    id="lead-date-range"
+                    value={{ from: draftFilters.dateFrom, to: draftFilters.dateTo }}
+                    onChange={(range) => updateDraft({ dateFrom: range.from, dateTo: range.to })}
+                  />
                 </div>
 
                 <FilterSelect
@@ -294,6 +361,14 @@ export function PublisherLeadDetailsPage() {
                   value={draftFilters.productId}
                   onChange={(value) => updateDraft({ productId: value })}
                   options={products.map((product) => ({ value: product.id, label: product.label }))}
+                />
+
+                <FilterSelect
+                  id="method"
+                  label="Method"
+                  value={draftFilters.method}
+                  onChange={(value) => updateDraft({ method: value })}
+                  options={METHOD_OPTIONS.map((option) => ({ value: option, label: option }))}
                 />
 
                 <FilterSelect
@@ -368,26 +443,27 @@ export function PublisherLeadDetailsPage() {
                     <button
                       type="button"
                       onClick={() => setExportOpen((current) => !current)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                      disabled={isExporting}
+                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60 dark:border-emerald-500 dark:bg-emerald-600"
                     >
-                      Export
+                      {isExporting ? "Exporting..." : "Export"}
                       <ChevronDown className="h-4 w-4" />
                     </button>
                     {exportOpen ? (
-                      <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
                         <button
                           type="button"
                           className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                          onClick={() => setExportOpen(false)}
+                          onClick={() => void handleExport("current-page")}
                         >
-                          Export CSV
+                          Current Page to csv
                         </button>
                         <button
                           type="button"
                           className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                          onClick={() => setExportOpen(false)}
+                          onClick={() => void handleExport("all-pages")}
                         >
-                          Export Excel
+                          All page to csv
                         </button>
                       </div>
                     ) : null}

@@ -46,17 +46,14 @@ function isDuplicateRuleEnabled(period: string | undefined) {
 function describeDuplicateLines(duplicates: CampaignDuplicatesSettings): string[] {
   const lines: string[] = [];
   const byEmail = duplicates.duplicateMethod === "Email";
+  const identityLabel = byEmail ? "email" : "SSN and email";
+
+  lines.push(`Duplicate method: ${duplicates.duplicateMethod}.`);
 
   if (isDuplicateRuleEnabled(duplicates.duplicatePosted)) {
-    lines.push(byEmail ? "Email cannot be duplicated." : "SSN and email cannot be duplicated.");
-  } else if (!byEmail) {
-    lines.push("SSN and email cannot be duplicated.");
-  }
-
-  if (isDuplicateRuleEnabled(duplicates.duplicateSold)) {
-    lines.push(
-      byEmail ? "Sold email cannot be duplicated." : "Sold SSN and email cannot be duplicated."
-    );
+    lines.push(`Posted ${identityLabel} cannot be duplicated within ${duplicates.duplicatePosted.trim()}.`);
+  } else {
+    lines.push(`Posted ${identityLabel} cannot be duplicated (all historical leads).`);
   }
 
   return lines;
@@ -78,6 +75,10 @@ function describeFilterLine(filter: CampaignGeneralFilter): string | null {
   }
 
   if (filter.dataTypeFilter === "Multi Select" && (filter.selectedValues?.length ?? 0) > 0) {
+    if (filter.multiSelectMode === "excluded") {
+      return `${name} must not contain: ${filter.selectedValues?.join(", ")}.`;
+    }
+
     return `${name} must contain one of: ${filter.selectedValues?.join(", ")}.`;
   }
 
@@ -124,11 +125,13 @@ function buildFieldRequirementText(field: DocumentationField, settings: MappingI
   const fieldRequirement = describeFieldRequirement(field);
   if (fieldRequirement) lines.push(fieldRequirement);
 
-  const filter = settings.generalFilters.find(
+  const filters = settings.generalFilters.filter(
     (item) => item.enabled && item.fieldName === field.fieldName
   );
-  const filterLine = filter ? describeFilterLine(filter) : null;
-  if (filterLine) lines.push(filterLine);
+  filters
+    .map(describeFilterLine)
+    .filter((line): line is string => Boolean(line))
+    .forEach((filterLine) => lines.push(filterLine));
 
   return lines.length > 0 ? lines.join("\n") : "-";
 }

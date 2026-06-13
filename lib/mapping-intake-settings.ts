@@ -4,6 +4,7 @@ import {
   isGeneralFilterRangeValid,
   resolveCampaignTimezone,
   SCHEDULE_DAY_OPTIONS,
+  syncGeneralFiltersWithFields as syncGeneralFiltersWithVerticalFields,
   type CampaignDuplicatesSettings,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
@@ -12,6 +13,7 @@ import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
   buildRangeFilterRejectMessage,
   isValueInCheckboxFilter,
+  isValueExcludedFromMultiSelectFilter,
   isValueInMultiSelectFilter,
   normalizeMultiSelectPayloadValues,
   isValueInRangeFilter,
@@ -29,7 +31,8 @@ type MappingIntakeDoc = {
   timezone?: string | null;
   duplicates?: Partial<CampaignDuplicatesSettings> | null;
   generalFilters?: Array<
-    Omit<CampaignGeneralFilter, "minValue" | "maxValue" | "textValue" | "selectedValues"> & {
+    Omit<CampaignGeneralFilter, "minValue" | "maxValue" | "textValue" | "selectedValues" | "multiSelectMode"> & {
+      multiSelectMode?: CampaignGeneralFilter["multiSelectMode"] | null;
       minValue?: string | null;
       maxValue?: string | null;
       textValue?: string | null;
@@ -77,29 +80,14 @@ export function syncGeneralFiltersWithFields(
   existing: CampaignGeneralFilter[],
   fields: MappingFieldDoc[]
 ): CampaignGeneralFilter[] {
-  const built = buildGeneralFiltersFromMappingFields(fields);
-  const existingByFieldName = new Map(existing.map((filter) => [filter.fieldName, filter]));
-
-  return built.map((filter) => {
-    const previous = existingByFieldName.get(filter.fieldName);
-    if (!previous) return filter;
-
-    return {
-      ...filter,
-      enabled: previous.enabled,
-      minValue: previous.minValue,
-      maxValue: previous.maxValue,
-      textValue: previous.textValue,
-      selectedValues: previous.selectedValues,
-    };
-  }).concat(
-    existing.filter((filter) => {
-      if (built.some((item) => item.fieldName === filter.fieldName)) {
-        return false;
-      }
-
-      return Boolean(filter.enabled);
-    })
+  return syncGeneralFiltersWithVerticalFields(
+    existing,
+    fields.map((field) => ({
+      id: field._id?.toString(),
+      fieldName: field.fieldName,
+      description: field.description,
+      dataTypeFilter: field.dataTypeFilter,
+    }))
   );
 }
 
@@ -113,6 +101,7 @@ export function toMappingIntakeSettings(
         fieldName: filter.fieldName,
         description: filter.description,
         dataTypeFilter: filter.dataTypeFilter,
+        multiSelectMode: filter.multiSelectMode ?? undefined,
         enabled: Boolean(filter.enabled),
         minValue: filter.minValue ?? undefined,
         maxValue: filter.maxValue ?? undefined,
@@ -191,6 +180,17 @@ export function evaluateGeneralFiltersForPayload(
 
     if (filter.dataTypeFilter === "Multi Select" && (filter.selectedValues?.length ?? 0) > 0) {
       const submitted = normalizeMultiSelectPayloadValues(value);
+      const mode = filter.multiSelectMode ?? "included";
+
+      if (mode === "excluded") {
+        if (!isValueExcludedFromMultiSelectFilter(value, filter.selectedValues ?? [], options)) {
+          reasons.push(
+            `${label} filter rejected. Must not contain: ${(filter.selectedValues ?? []).join(", ")}. Received: ${formatPayloadValueForMessage(value)}.`
+          );
+        }
+        continue;
+      }
+
       if (submitted.length === 0) {
         reasons.push(`${label} is required.`);
         continue;
@@ -393,27 +393,11 @@ export async function evaluateDuplicateRules(
 
   const duplicateMessage = buildDuplicateRejectMessage(normalizedDuplicates.duplicateMethod);
 
-  const soldDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicateSold);
-  if (soldDays !== null) {
-    const exists = await checkDuplicate(mappingId, duplicateKey, soldDays, "success");
-    if (exists) {
-      reasons.push(duplicateMessage);
-    }
-  }
-
   const postedDays = parseDuplicatePeriodDays(normalizedDuplicates.duplicatePosted);
-  const postedCheckPeriod =
-    postedDays !== null
-      ? postedDays
-      : normalizedDuplicates.duplicateMethod === "SSN + Email"
-        ? null
-        : undefined;
-
-  if (postedCheckPeriod !== undefined) {
-    const exists = await checkDuplicate(mappingId, duplicateKey, postedCheckPeriod);
-    if (exists) {
-      reasons.push(duplicateMessage);
-    }
+  const postedCheckPeriod = postedDays !== null ? postedDays : null;
+  const postedDuplicateExists = await checkDuplicate(mappingId, duplicateKey, postedCheckPeriod);
+  if (postedDuplicateExists) {
+    reasons.push(duplicateMessage);
   }
 
   return reasons;

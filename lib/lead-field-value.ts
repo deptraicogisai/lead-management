@@ -314,6 +314,23 @@ export function isValueInMultiSelectFilter(
   });
 }
 
+export function isValueExcludedFromMultiSelectFilter(
+  value: unknown,
+  excludedValues: string[],
+  _options: FieldOptionLike[] = []
+) {
+  const tokens = excludedValues.map((item) => item.trim()).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const submitted = normalizeMultiSelectPayloadValues(value);
+  if (submitted.length === 0) return true;
+
+  return !submitted.some((item) => {
+    const comparable = normalizeComparableValue(item);
+    return tokens.some((token) => comparable.includes(token.trim().toLowerCase()));
+  });
+}
+
 export function formatMultiSelectFilterAllowedList(selectedValues: string[]) {
   return selectedValues.map((item) => item.trim()).filter(Boolean).join(", ");
 }

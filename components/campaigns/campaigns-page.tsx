@@ -6,7 +6,9 @@ import { Plus } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
 import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
+import { buildEmptySearchDateRange } from "@/lib/date-range";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -34,6 +36,20 @@ type CampaignListResponse = {
 
 const PAGE_SIZE_OPTIONS = [15, 50, 100, 500] as const;
 
+function createDefaultCampaignFilters() {
+  const emptyDateRange = buildEmptySearchDateRange();
+  return {
+    id: "",
+    name: "",
+    status: "All",
+    productId: "",
+    buyerId: "",
+    type: "All",
+    dateFrom: emptyDateRange.from,
+    dateTo: emptyDateRange.to,
+  };
+}
+
 export function CampaignsPage() {
   const [rows, setRows] = useState<CampaignListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
@@ -44,17 +60,8 @@ export function CampaignsPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [tableSearch, setTableSearch] = useState("");
-  const [draftFilters, setDraftFilters] = useState({
-    id: "",
-    name: "",
-    status: "All",
-    productId: "",
-    buyerId: "",
-    type: "All",
-    dateFrom: "",
-    dateTo: "",
-  });
-  const [appliedFilters, setAppliedFilters] = useState(draftFilters);
+  const [draftFilters, setDraftFilters] = useState(createDefaultCampaignFilters);
+  const [appliedFilters, setAppliedFilters] = useState(createDefaultCampaignFilters);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -246,12 +253,14 @@ export function CampaignsPage() {
               </select>
             </div>
             <div>
-              <FieldLabel htmlFor="campaign-date-from" label="Created From" />
-              <Input id="campaign-date-from" type="datetime-local" value={draftFilters.dateFrom} onChange={(e) => setDraftFilters((c) => ({ ...c, dateFrom: e.target.value }))} />
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-date-to" label="Created To" />
-              <Input id="campaign-date-to" type="datetime-local" value={draftFilters.dateTo} onChange={(e) => setDraftFilters((c) => ({ ...c, dateTo: e.target.value }))} />
+              <FieldLabel htmlFor="campaign-date-range" label="Date" />
+              <DateRangePicker
+                id="campaign-date-range"
+                value={{ from: draftFilters.dateFrom, to: draftFilters.dateTo }}
+                onChange={(range) =>
+                  setDraftFilters((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
+                }
+              />
             </div>
           </div>
 
@@ -264,7 +273,7 @@ export function CampaignsPage() {
             />
             <ClearButton
               onClick={() => {
-                const cleared = { id: "", name: "", status: "All", productId: "", buyerId: "", type: "All", dateFrom: "", dateTo: "" };
+                const cleared = createDefaultCampaignFilters();
                 setDraftFilters(cleared);
                 setAppliedFilters(cleared);
                 setPage(1);

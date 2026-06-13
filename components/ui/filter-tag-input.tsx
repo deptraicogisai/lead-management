@@ -11,6 +11,7 @@ type FilterTagInputProps = {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  blockedValues?: string[];
 };
 
 function normalizeTag(value: string) {
@@ -24,6 +25,7 @@ export function FilterTagInput({
   disabled = false,
   placeholder = "Type a value and press Enter",
   className,
+  blockedValues = [],
 }: FilterTagInputProps) {
   const [draft, setDraft] = useState("");
 
@@ -33,6 +35,12 @@ export function FilterTagInput({
 
     const exists = values.some((value) => value.toLowerCase() === next.toLowerCase());
     if (exists) {
+      setDraft("");
+      return;
+    }
+
+    const blocked = blockedValues.some((value) => value.toLowerCase() === next.toLowerCase());
+    if (blocked) {
       setDraft("");
       return;
     }

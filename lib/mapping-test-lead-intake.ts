@@ -23,6 +23,7 @@ export function buildTestLeadMultiSelectFilters(settings: MappingIntakeSettingsR
     if (
       filter.enabled &&
       filter.dataTypeFilter === "Multi Select" &&
+      filter.multiSelectMode !== "excluded" &&
       (filter.selectedValues?.length ?? 0) > 0
     ) {
       filters[filter.fieldName] = filter.selectedValues ?? [];

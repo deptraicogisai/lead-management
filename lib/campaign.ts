@@ -9,12 +9,14 @@ export type DuplicateMethod = "Email" | "SSN + Email";
 export type ScheduleAction = "Post" | "Do not post";
 
 export type DataTypeFilterKind = "Text" | "Range" | "Checkbox" | "Multi Select";
+export type MultiSelectFilterMode = "included" | "excluded";
 
 export type CampaignGeneralFilter = {
   fieldId: string;
   fieldName: string;
   description: string;
   dataTypeFilter: DataTypeFilterKind;
+  multiSelectMode?: MultiSelectFilterMode;
   enabled: boolean;
   minValue?: string;
   maxValue?: string;
@@ -22,7 +24,8 @@ export type CampaignGeneralFilter = {
   textValue?: string;
 };
 
-type CampaignGeneralFilterDoc = Omit<CampaignGeneralFilter, "minValue" | "maxValue" | "textValue" | "selectedValues"> & {
+type CampaignGeneralFilterDoc = Omit<CampaignGeneralFilter, "minValue" | "maxValue" | "textValue" | "selectedValues" | "multiSelectMode"> & {
+  multiSelectMode?: MultiSelectFilterMode | null;
   minValue?: string | null;
   maxValue?: string | null;
   textValue?: string | null;
@@ -203,7 +206,36 @@ export function clearDisabledGeneralFilterValues(filter: CampaignGeneralFilter):
 }
 
 export function normalizeGeneralFiltersForStorage(filters: CampaignGeneralFilter[]) {
-  return filters.map(clearDisabledGeneralFilterValues);
+  const cleared = filters.map(clearDisabledGeneralFilterValues);
+  return syncMultiSelectFilterPairEnabled(cleared);
+}
+
+function syncMultiSelectFilterPairEnabled(filters: CampaignGeneralFilter[]): CampaignGeneralFilter[] {
+  const enabledByField = new Map<string, boolean>();
+
+  for (const filter of filters) {
+    if (filter.dataTypeFilter !== "Multi Select") continue;
+
+    const isIncluded = (filter.multiSelectMode ?? "included") === "included";
+    if (isIncluded) {
+      enabledByField.set(filter.fieldName, filter.enabled);
+    } else if (!enabledByField.has(filter.fieldName)) {
+      enabledByField.set(filter.fieldName, filter.enabled);
+    }
+  }
+
+  return filters.map((filter) => {
+    if (filter.dataTypeFilter !== "Multi Select") {
+      return filter;
+    }
+
+    const enabled = enabledByField.get(filter.fieldName) ?? false;
+    if (enabled) {
+      return { ...filter, enabled: true };
+    }
+
+    return clearDisabledGeneralFilterValues({ ...filter, enabled: false });
+  });
 }
 
 export function buildGeneralFilterEnabledPatch(
@@ -377,6 +409,7 @@ export function toCampaignRecord(
           fieldName: filter.fieldName,
           description: filter.description,
           dataTypeFilter: filter.dataTypeFilter,
+          multiSelectMode: filter.multiSelectMode ?? undefined,
           enabled: Boolean(filter.enabled),
           minValue: filter.minValue ?? undefined,
           maxValue: filter.maxValue ?? undefined,
@@ -431,6 +464,221 @@ type VerticalFieldLike = {
   dataTypeFilter?: string | null;
 };
 
+export function buildMultiSelectFilterId(baseFieldId: string, mode: MultiSelectFilterMode) {
+  return `${baseFieldId}:${mode}`;
+}
+
+function stripMultiSelectModeSuffix(description: string) {
+  return description.replace(/\s+\((Included|Excluded)\)$/i, "").trim();
+}
+
+export function getMultiSelectFilterFieldLabel(description: string) {
+  return stripMultiSelectModeSuffix(description);
+}
+
+export type GeneralFilterDisplayItem =
+  | { kind: "single"; filter: CampaignGeneralFilter }
+  | {
+      kind: "multi-select";
+      fieldName: string;
+      label: string;
+      included: CampaignGeneralFilter;
+      excluded: CampaignGeneralFilter;
+    };
+
+export function groupGeneralFiltersForDisplay(filters: CampaignGeneralFilter[]): GeneralFilterDisplayItem[] {
+  const items: GeneralFilterDisplayItem[] = [];
+  const groupedMultiSelect = new Set<string>();
+
+  for (const filter of filters) {
+    if (filter.dataTypeFilter !== "Multi Select") {
+      items.push({ kind: "single", filter });
+      continue;
+    }
+
+    if (groupedMultiSelect.has(filter.fieldName)) {
+      continue;
+    }
+
+    const pair = filters.filter(
+      (item) => item.fieldName === filter.fieldName && item.dataTypeFilter === "Multi Select"
+    );
+    const included = pair.find((item) => (item.multiSelectMode ?? "included") === "included");
+    const excluded = pair.find((item) => item.multiSelectMode === "excluded");
+
+    if (included && excluded) {
+      groupedMultiSelect.add(filter.fieldName);
+      items.push({
+        kind: "multi-select",
+        fieldName: filter.fieldName,
+        label: getMultiSelectFilterFieldLabel(included.description),
+        included,
+        excluded,
+      });
+      continue;
+    }
+
+    items.push({ kind: "single", filter });
+  }
+
+  return items;
+}
+
+export function patchMultiSelectFilterPairEnabled(
+  filters: CampaignGeneralFilter[],
+  fieldName: string,
+  enabled: boolean
+): CampaignGeneralFilter[] {
+  return filters.map((filter) => {
+    if (filter.fieldName !== fieldName || filter.dataTypeFilter !== "Multi Select") {
+      return filter;
+    }
+
+    if (enabled) {
+      return { ...filter, enabled: true };
+    }
+
+    return clearDisabledGeneralFilterValues({ ...filter, enabled: false });
+  });
+}
+
+export function getMultiSelectSiblingSelectedValues(
+  filters: CampaignGeneralFilter[],
+  filter: CampaignGeneralFilter
+) {
+  if (filter.dataTypeFilter !== "Multi Select") return [];
+
+  const mode = filter.multiSelectMode ?? "included";
+  const siblingMode: MultiSelectFilterMode = mode === "excluded" ? "included" : "excluded";
+
+  return (
+    filters.find(
+      (item) =>
+        item.fieldName === filter.fieldName &&
+        item.dataTypeFilter === "Multi Select" &&
+        (item.multiSelectMode ?? "included") === siblingMode
+    )?.selectedValues ?? []
+  );
+}
+
+export function applyMultiSelectFilterValuesChange(
+  filters: CampaignGeneralFilter[],
+  fieldId: string,
+  selectedValues: string[]
+) {
+  const target = filters.find((filter) => filter.fieldId === fieldId);
+  if (!target || target.dataTypeFilter !== "Multi Select") {
+    return filters.map((filter) => (filter.fieldId === fieldId ? { ...filter, selectedValues } : filter));
+  }
+
+  const normalizedSelected = selectedValues.map((value) => value.trim()).filter(Boolean);
+  const siblingMode: MultiSelectFilterMode = target.multiSelectMode === "excluded" ? "included" : "excluded";
+
+  return filters.map((filter) => {
+    if (filter.fieldId === fieldId) {
+      return { ...filter, selectedValues: normalizedSelected };
+    }
+
+    if (
+      filter.fieldName === target.fieldName &&
+      filter.dataTypeFilter === "Multi Select" &&
+      filter.multiSelectMode === siblingMode
+    ) {
+      const blocked = new Set(normalizedSelected.map((value) => value.toLowerCase()));
+      const nextValues = (filter.selectedValues ?? []).filter((value) => !blocked.has(value.trim().toLowerCase()));
+      if (nextValues.length === (filter.selectedValues ?? []).length) {
+        return filter;
+      }
+
+      return { ...filter, selectedValues: nextValues };
+    }
+
+    return filter;
+  });
+}
+
+export function patchGeneralFilter(
+  filters: CampaignGeneralFilter[],
+  fieldId: string,
+  patch: Partial<CampaignGeneralFilter>
+) {
+  if (patch.selectedValues !== undefined) {
+    return applyMultiSelectFilterValuesChange(filters, fieldId, patch.selectedValues);
+  }
+
+  return filters.map((filter) => (filter.fieldId === fieldId ? { ...filter, ...patch } : filter));
+}
+
+function resolveStoredGeneralFilter(
+  existing: CampaignGeneralFilter[],
+  built: CampaignGeneralFilter
+) {
+  const byId = existing.find((filter) => filter.fieldId === built.fieldId);
+  if (byId) return byId;
+
+  if (built.dataTypeFilter === "Multi Select" && built.multiSelectMode === "included") {
+    const legacy = existing.find(
+      (filter) =>
+        filter.fieldName === built.fieldName &&
+        filter.dataTypeFilter === "Multi Select" &&
+        !filter.multiSelectMode
+    );
+    if (legacy) return legacy;
+  }
+
+  if (built.dataTypeFilter === "Multi Select" && built.multiSelectMode === "excluded") {
+    return existing.find(
+      (filter) =>
+        filter.fieldName === built.fieldName &&
+        filter.dataTypeFilter === "Multi Select" &&
+        filter.multiSelectMode === "excluded"
+    );
+  }
+
+  return existing.find((filter) => filter.fieldName === built.fieldName && filter.dataTypeFilter === built.dataTypeFilter);
+}
+
+export function syncGeneralFiltersWithFields(
+  existing: CampaignGeneralFilter[],
+  fields: VerticalFieldLike[]
+): CampaignGeneralFilter[] {
+  const built = buildGeneralFiltersFromVerticalFields(fields);
+
+  return built
+    .map((filter) => {
+      const previous = resolveStoredGeneralFilter(existing, filter);
+      if (!previous) return filter;
+
+      return {
+        ...filter,
+        enabled: previous.enabled,
+        minValue: previous.minValue,
+        maxValue: previous.maxValue,
+        textValue: previous.textValue,
+        selectedValues: previous.selectedValues,
+      };
+    })
+    .concat(
+      existing.filter((filter) => {
+        if (built.some((item) => item.fieldId === filter.fieldId)) {
+          return false;
+        }
+
+        if (
+          filter.dataTypeFilter === "Multi Select" &&
+          !filter.multiSelectMode &&
+          built.some(
+            (item) => item.fieldName === filter.fieldName && item.dataTypeFilter === "Multi Select"
+          )
+        ) {
+          return false;
+        }
+
+        return Boolean(filter.enabled);
+      })
+    );
+}
+
 export function buildGeneralFiltersFromVerticalFields(fields: VerticalFieldLike[]): CampaignGeneralFilter[] {
   const allowed = new Set<DataTypeFilterKind>(["Text", "Range", "Checkbox", "Multi Select"]);
 
@@ -439,15 +687,51 @@ export function buildGeneralFiltersFromVerticalFields(fields: VerticalFieldLike[
       (field): field is VerticalFieldLike & { dataTypeFilter: DataTypeFilterKind } =>
         Boolean(field.dataTypeFilter && allowed.has(field.dataTypeFilter as DataTypeFilterKind))
     )
-    .map((field) => ({
-      fieldId: field.id ?? field._id?.toString() ?? field.fieldName,
-      fieldName: field.fieldName,
-      description: field.description,
-      dataTypeFilter: field.dataTypeFilter,
-      enabled: false,
-      minValue: "",
-      maxValue: "",
-      selectedValues: [],
-      textValue: "",
-    }));
+    .flatMap((field): CampaignGeneralFilter[] => {
+      const baseFieldId = field.id ?? field._id?.toString() ?? field.fieldName;
+      const label = stripMultiSelectModeSuffix(field.description);
+
+      if (field.dataTypeFilter === "Multi Select") {
+        return [
+          {
+            fieldId: buildMultiSelectFilterId(baseFieldId, "included"),
+            fieldName: field.fieldName,
+            description: `${label} (Included)`,
+            dataTypeFilter: "Multi Select" as const,
+            multiSelectMode: "included" as const,
+            enabled: false,
+            minValue: "",
+            maxValue: "",
+            selectedValues: [],
+            textValue: "",
+          },
+          {
+            fieldId: buildMultiSelectFilterId(baseFieldId, "excluded"),
+            fieldName: field.fieldName,
+            description: `${label} (Excluded)`,
+            dataTypeFilter: "Multi Select" as const,
+            multiSelectMode: "excluded" as const,
+            enabled: false,
+            minValue: "",
+            maxValue: "",
+            selectedValues: [],
+            textValue: "",
+          },
+        ];
+      }
+
+      return [
+        {
+          fieldId: baseFieldId,
+          fieldName: field.fieldName,
+          description: field.description,
+          dataTypeFilter: field.dataTypeFilter,
+          enabled: false,
+          minValue: "",
+          maxValue: "",
+          selectedValues: [],
+          textValue: "",
+        },
+      ];
+    });
 }

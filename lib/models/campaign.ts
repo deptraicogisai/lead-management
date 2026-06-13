@@ -6,6 +6,7 @@ const campaignGeneralFilterSchema = new Schema(
     fieldName: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     dataTypeFilter: { type: String, enum: ["Text", "Range", "Checkbox", "Multi Select"], required: true },
+    multiSelectMode: { type: String, enum: ["included", "excluded"], required: false },
     enabled: { type: Boolean, default: false },
     minValue: { type: String, trim: true },
     maxValue: { type: String, trim: true },
