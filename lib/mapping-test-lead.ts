@@ -1,4 +1,4 @@
-import { buildFieldExampleRequest, type LeadFieldValueSource } from "@/lib/lead-field-value";
+import { buildFieldExampleRequest, formatMultiSelectFilterAllowedList, isValueInMultiSelectFilter, type LeadFieldValueSource } from "@/lib/lead-field-value";
 import type { VerticalFieldOption } from "@/lib/vertical-field";
 
 export type MappingTestLeadField = {
@@ -50,13 +50,26 @@ function buildFieldContext(field: MappingTestLeadField) {
   };
 }
 
-function buildRandomFieldValue(field: MappingTestLeadField): string {
+function buildRandomFieldValue(field: MappingTestLeadField, multiSelectFilters: Record<string, string[]> = {}): string {
   if (field.options.length > 0) {
     const option = randomItem(field.options);
     return formatTestLeadOptionSelectValue(option, field);
   }
 
   const { fieldName, normalizedType, normalizedFormat, haystack } = buildFieldContext(field);
+  const allowedTokens = multiSelectFilters[field.fieldName] ?? [];
+
+  if (allowedTokens.length > 0) {
+    const token = randomItem(allowedTokens);
+    const normalizedToken = token.startsWith("@") ? token.slice(1) : token;
+
+    if (normalizedType === "email" || normalizedFormat === "email" || haystack.includes("email")) {
+      const localPart = `${randomItem(RANDOM_FIRST_NAMES).toLowerCase()}.${randomLetters(5)}${randomInt(1, 999)}`;
+      return `${localPart}@${normalizedToken}`;
+    }
+
+    return normalizedToken;
+  }
 
   if (normalizedType === "email" || normalizedFormat === "email" || haystack.includes("email")) {
     const localPart = `${randomItem(RANDOM_FIRST_NAMES).toLowerCase()}.${randomLetters(5)}${randomInt(1, 999)}`;
@@ -141,11 +154,37 @@ function buildRandomFieldValue(field: MappingTestLeadField): string {
   return `${fieldName}_${randomLetters(6)}`;
 }
 
-export function buildRandomTestLeadForm(fields: MappingTestLeadField[]) {
+export function buildRandomTestLeadForm(
+  fields: MappingTestLeadField[],
+  multiSelectFilters: Record<string, string[]> = {}
+) {
   return fields.reduce<Record<string, string>>((form, field) => {
-    form[field.fieldName] = buildRandomFieldValue(field);
+    form[field.fieldName] = buildRandomFieldValue(field, multiSelectFilters);
     return form;
   }, {});
+}
+
+export function validateTestLeadMultiSelectFilters(
+  form: Record<string, string>,
+  multiSelectFilters: Record<string, string[]>,
+  fields: MappingTestLeadField[]
+) {
+  const errors: Record<string, string> = {};
+
+  for (const field of fields) {
+    const allowedTokens = multiSelectFilters[field.fieldName];
+    if (!allowedTokens?.length) continue;
+
+    const raw = form[field.fieldName] ?? "";
+    if (!raw.trim()) continue;
+
+    if (!isValueInMultiSelectFilter(raw, allowedTokens)) {
+      const label = field.description?.trim() || field.fieldName;
+      errors[field.fieldName] = `${label} must contain one of: ${formatMultiSelectFilterAllowedList(allowedTokens)}.`;
+    }
+  }
+
+  return errors;
 }
 
 export function buildEmptyTestLeadForm(fields: MappingTestLeadField[]) {

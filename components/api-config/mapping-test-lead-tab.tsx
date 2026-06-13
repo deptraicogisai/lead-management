@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox, FieldLabel, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
+import { FilterTagBadges } from "@/components/ui/filter-tag-input";
 import { Spinner } from "@/components/ui/state";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import type { MappingTestLeadLogRecord } from "@/lib/mapping-test-lead-log";
@@ -42,10 +43,12 @@ function TestLeadFieldControl({
   field,
   value,
   onChange,
+  allowedTokens,
 }: {
   field: MappingTestLeadField;
   value: string;
   onChange: (value: string) => void;
+  allowedTokens?: string[];
 }) {
   const inputId = `test-lead-${field.fieldName}`;
   const label = field.description?.trim() || field.fieldName;
@@ -86,6 +89,12 @@ function TestLeadFieldControl({
   return (
     <div>
       <FieldLabel htmlFor={inputId} label={label} required={field.required} />
+      {allowedTokens && allowedTokens.length > 0 ? (
+        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          Must contain one of:
+        </p>
+      ) : null}
+      {allowedTokens && allowedTokens.length > 0 ? <FilterTagBadges values={allowedTokens} className="mb-2" /> : null}
       <Input
         id={inputId}
         type={getFieldInputType(field)}
@@ -522,6 +531,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   const [endpointUrl, setEndpointUrl] = useState("/api/lead");
   const [timezone, setTimezone] = useState("");
   const [intakeRules, setIntakeRules] = useState<TestLeadIntakeRuleGroup[]>([]);
+  const [multiSelectFilters, setMultiSelectFilters] = useState<Record<string, string[]>>({});
   const [logs, setLogs] = useState<MappingTestLeadLogRecord[]>([]);
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(true);
@@ -542,6 +552,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
         | {
             endpointUrl?: string;
             intakeRules?: TestLeadIntakeRuleGroup[];
+            multiSelectFilters?: Record<string, string[]>;
             timezone?: string;
             logs?: MappingTestLeadLogRecord[];
           }
@@ -555,6 +566,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
 
       setEndpointUrl((result as { endpointUrl?: string }).endpointUrl ?? "/api/lead");
       setIntakeRules((result as { intakeRules?: TestLeadIntakeRuleGroup[] }).intakeRules ?? []);
+      setMultiSelectFilters((result as { multiSelectFilters?: Record<string, string[]> }).multiSelectFilters ?? {});
       setTimezone((result as { timezone?: string }).timezone ?? "");
       const nextLogs = (result as { logs?: MappingTestLeadLogRecord[] }).logs ?? [];
       setLogs(nextLogs);
@@ -569,15 +581,15 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   }, [loadContext]);
 
   useEffect(() => {
-    setFormValues(buildRandomTestLeadForm(fields));
-  }, [fields]);
+    setFormValues(buildRandomTestLeadForm(fields, multiSelectFilters));
+  }, [fields, multiSelectFilters]);
 
   const updateFieldValue = (fieldName: string, value: string) => {
     setFormValues((current) => ({ ...current, [fieldName]: value }));
   };
 
   const handlePrefill = () => {
-    setFormValues(buildRandomTestLeadForm(fields));
+    setFormValues(buildRandomTestLeadForm(fields, multiSelectFilters));
     toast.success("Form prefilled with random sample values.");
   };
 
@@ -603,13 +615,16 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
       const result = (await response.json().catch(() => null)) as
         | {
             passed?: boolean;
+            checks?: TestLeadValidationCheck[];
             log?: MappingTestLeadLogRecord;
             responseBody?: unknown;
             message?: string;
+            leadSaved?: boolean;
+            saveLead?: boolean;
           }
         | null;
 
-      if (!response.ok || !result?.log) {
+      if (!result?.log) {
         toast.error(result?.message ?? "Failed to submit test lead.");
         return;
       }
@@ -617,24 +632,6 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
       setLogs((current) => [result.log!, ...current.filter((log) => log.id !== result.log!.id)]);
       setSelectedLogId(result.log.id);
       setActiveView("log");
-
-      const isSuccess = result.log.status >= 200 && result.log.status < 300;
-      if (isSuccess) {
-        toast.success(saveLead ? "Test lead saved successfully." : "Test lead validated successfully.");
-      } else {
-        const message =
-          typeof result.responseBody === "object" &&
-          result.responseBody !== null &&
-          "reasons" in result.responseBody &&
-          Array.isArray((result.responseBody as { reasons?: Array<{ message?: string }> }).reasons)
-            ? (result.responseBody as { reasons: Array<{ message?: string }> }).reasons
-                .map((reason) => reason.message?.trim())
-                .filter(Boolean)
-                .join(" | ")
-            : "Test lead validation failed.";
-
-        toast.error(message);
-      }
     } catch {
       toast.error("Failed to submit test lead.");
     } finally {
@@ -731,6 +728,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
                       field={field}
                       value={formValues[field.fieldName] ?? ""}
                       onChange={(value) => updateFieldValue(field.fieldName, value)}
+                      allowedTokens={multiSelectFilters[field.fieldName]}
                     />
                   ))}
                 </div>

@@ -25,6 +25,7 @@ import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-sched
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
+import { FilterTagInput } from "@/components/ui/filter-tag-input";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
@@ -603,6 +604,16 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                             })}
                           </div>
                         </div>
+                      ) : null}
+
+                      {filter.dataTypeFilter === "Multi Select" ? (
+                        <FilterTagInput
+                          id={`${filter.fieldId}-multi-select`}
+                          values={filter.selectedValues ?? []}
+                          disabled={!isInteractive}
+                          placeholder="Type a value and press Enter"
+                          onChange={(selectedValues) => updateGeneralFilter(filter.fieldId, { selectedValues })}
+                        />
                       ) : null}
 
                       {filter.dataTypeFilter === "Text" ? (

@@ -37,8 +37,17 @@ export type DocumentationContext = {
   apiKey: string;
   method: string;
   sellerName?: string;
-  baseUrl?: string;
 };
+
+export function buildFullEndpointUrl(baseUrl: string, endpointPath: string) {
+  const trimmedPath = endpointPath.trim();
+  if (!trimmedPath) return baseUrl.trim();
+  if (/^https?:\/\//i.test(trimmedPath)) return trimmedPath;
+
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  const path = trimmedPath.startsWith("/") ? trimmedPath : `/${trimmedPath}`;
+  return `${base}${path}`;
+}
 
 export type DocumentationErrorRow = {
   status: string;

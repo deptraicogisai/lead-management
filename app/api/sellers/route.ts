@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { parsePageParam, parsePageSizeParam } from "@/lib/pagination";
+import { resolveNewestFirstDisplayId, sortNewestFirst } from "@/lib/list-sort";
 
 type SellerPayload = {
   name?: string;
@@ -58,20 +59,27 @@ export async function GET(req: Request) {
     await connectToDatabase();
     await ensureSellerCollectionMigrated();
     if (!hasListParams) {
-      const sellers = await SellerModel.find().sort({ createdAt: 1 }).lean();
-      return NextResponse.json(sellers.map((seller) => toSellerResponse(seller)));
+      const sellers = await SellerModel.find().sort(sortNewestFirst).lean();
+      const totalItems = sellers.length;
+      return NextResponse.json(
+        sellers.map((seller, index) =>
+          toSellerResponse(seller, { displayId: resolveNewestFirstDisplayId(totalItems, 0, index) })
+        )
+      );
     }
 
     const totalItems = await SellerModel.countDocuments();
     const skip = (page - 1) * pageSize;
     const sellers = await SellerModel.find()
-      .sort({ createdAt: 1 })
+      .sort(sortNewestFirst)
       .skip(skip)
       .limit(pageSize)
       .lean();
 
     return NextResponse.json({
-      items: sellers.map((seller, index) => toSellerResponse(seller, { displayId: skip + index + 1001 })),
+      items: sellers.map((seller, index) =>
+        toSellerResponse(seller, { displayId: resolveNewestFirstDisplayId(totalItems, skip, index) })
+      ),
       page,
       pageSize,
       totalItems,
@@ -98,7 +106,12 @@ export async function POST(req: Request) {
       status: body.status,
     });
 
-    return NextResponse.json(toSellerResponse(seller), { status: 201 });
+    const totalItems = await SellerModel.countDocuments();
+
+    return NextResponse.json(
+      toSellerResponse(seller, { displayId: resolveNewestFirstDisplayId(totalItems, 0, 0) }),
+      { status: 201 }
+    );
   } catch {
     return NextResponse.json({ message: "Failed to create seller." }, { status: 500 });
   }

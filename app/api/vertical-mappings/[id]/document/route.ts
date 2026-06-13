@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { generateApiDocumentationPdfBuffer } from "@/lib/api-documentation";
+import { buildFullEndpointUrl } from "@/lib/api-documentation-content";
 import { toDocumentationField } from "@/lib/api-documentation-field";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { ensureMappingApiRequest } from "@/lib/mapping-api-request";
@@ -85,8 +86,7 @@ export async function GET(req: Request, context: Params) {
         sellerName: seller.name,
         verticalId: vertical.name,
         verticalName,
-        baseUrl: requestUrl.origin,
-        endpointUrl: apiRequest.url,
+        endpointUrl: buildFullEndpointUrl(requestUrl.origin, apiRequest.url),
         apiKey: apiRequest.apiKey,
         method: apiRequest.method,
       },

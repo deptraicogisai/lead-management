@@ -8,11 +8,13 @@ export type CampaignType = "Redirect" | "Silent";
 export type DuplicateMethod = "Email" | "SSN + Email";
 export type ScheduleAction = "Post" | "Do not post";
 
+export type DataTypeFilterKind = "Text" | "Range" | "Checkbox" | "Multi Select";
+
 export type CampaignGeneralFilter = {
   fieldId: string;
   fieldName: string;
   description: string;
-  dataTypeFilter: "Text" | "Range" | "Checkbox";
+  dataTypeFilter: DataTypeFilterKind;
   enabled: boolean;
   minValue?: string;
   maxValue?: string;
@@ -193,7 +195,7 @@ export function clearDisabledGeneralFilterValues(filter: CampaignGeneralFilter):
     return { ...filter, minValue: "", maxValue: "" };
   }
 
-  if (filter.dataTypeFilter === "Checkbox") {
+  if (filter.dataTypeFilter === "Checkbox" || filter.dataTypeFilter === "Multi Select") {
     return { ...filter, selectedValues: [] };
   }
 
@@ -430,15 +432,18 @@ type VerticalFieldLike = {
 };
 
 export function buildGeneralFiltersFromVerticalFields(fields: VerticalFieldLike[]): CampaignGeneralFilter[] {
-  const allowed = new Set(["Text", "Range", "Checkbox"]);
+  const allowed = new Set<DataTypeFilterKind>(["Text", "Range", "Checkbox", "Multi Select"]);
 
   return fields
-    .filter((field) => field.dataTypeFilter && allowed.has(field.dataTypeFilter))
+    .filter(
+      (field): field is VerticalFieldLike & { dataTypeFilter: DataTypeFilterKind } =>
+        Boolean(field.dataTypeFilter && allowed.has(field.dataTypeFilter as DataTypeFilterKind))
+    )
     .map((field) => ({
       fieldId: field.id ?? field._id?.toString() ?? field.fieldName,
       fieldName: field.fieldName,
       description: field.description,
-      dataTypeFilter: field.dataTypeFilter as "Text" | "Range" | "Checkbox",
+      dataTypeFilter: field.dataTypeFilter,
       enabled: false,
       minValue: "",
       maxValue: "",

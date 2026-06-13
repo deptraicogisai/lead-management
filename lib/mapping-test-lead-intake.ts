@@ -16,6 +16,22 @@ export function buildTestLeadIntakeRuleGroups(settings: MappingIntakeSettingsRec
   }));
 }
 
+export function buildTestLeadMultiSelectFilters(settings: MappingIntakeSettingsRecord): Record<string, string[]> {
+  const filters: Record<string, string[]> = {};
+
+  for (const filter of settings.generalFilters) {
+    if (
+      filter.enabled &&
+      filter.dataTypeFilter === "Multi Select" &&
+      (filter.selectedValues?.length ?? 0) > 0
+    ) {
+      filters[filter.fieldName] = filter.selectedValues ?? [];
+    }
+  }
+
+  return filters;
+}
+
 export type TestLeadValidationCheck = {
   category: "Fields" | "Duplicates" | "Filters" | "Schedule";
   passed: boolean;

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import {
-  resolveManagerOption,
   toBuyerListRecord,
   type BuyerDoc,
   type BuyerStatus,
 } from "@/lib/buyer";
+import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 import { BuyerModel, ensureBuyerFieldsMigrated } from "@/lib/models/buyer";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import {
@@ -32,10 +32,8 @@ type LegacyBuyerPayload = {
 
 type CreateBuyerPayload = {
   name?: string;
+  email?: string;
   status?: "Active" | "Inactive";
-  personalManagerId?: string;
-  label?: string;
-  buyerType?: string;
 };
 
 function sanitizeMappings(payloadMappings: LegacyBuyerPayload["mappings"]) {
@@ -108,7 +106,7 @@ export async function GET(req: Request) {
 
     const totalItems = hasListParams ? await BuyerModel.countDocuments(filter) : 0;
     const buyers = await BuyerModel.find(filter)
-      .sort({ displayId: -1, createdAt: -1 })
+      .sort(sortNewestDisplayIdFirst)
       .skip(hasListParams ? (page - 1) * pageSize : 0)
       .limit(hasListParams ? pageSize : 0)
       .lean();
@@ -189,7 +187,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
     }
 
-    const manager = body.personalManagerId ? resolveManagerOption(body.personalManagerId) : null;
     const latest = await BuyerModel.findOne().sort({ displayId: -1 }).select({ displayId: 1 }).lean();
     const nextDisplayId = (latest?.displayId ?? 0) + 1;
     const trimmedName = body.name.trim();
@@ -198,11 +195,12 @@ export async function POST(req: Request) {
       displayId: nextDisplayId,
       name: trimmedName,
       company: trimmedName,
+      email: body.email?.trim() ?? "",
       status: body.status ?? "Active",
-      buyerLabel: body.label?.trim() || "-",
-      buyerType: body.buyerType?.trim() || "-",
-      personalManagerId: manager?.id ?? "",
-      personalManagerName: manager?.name ?? "",
+      buyerLabel: "-",
+      buyerType: "-",
+      personalManagerId: "",
+      personalManagerName: "",
       questionnaireStatus: "Pending",
       quality: "M",
     });

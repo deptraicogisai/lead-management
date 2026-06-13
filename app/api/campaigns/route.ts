@@ -14,6 +14,7 @@ import { BuyerModel, ensureBuyerFieldsMigrated } from "@/lib/models/buyer";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { connectToDatabase } from "@/lib/mongodb";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
+import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 type CampaignPayload = {
   name?: string;
   verticalId?: string;
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
     const [totalItems, campaigns] = await Promise.all([
       CampaignModel.countDocuments(filter),
       CampaignModel.find(filter)
-        .sort({ createdAt: -1 })
+        .sort(sortNewestDisplayIdFirst)
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean(),

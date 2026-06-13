@@ -12,6 +12,8 @@ import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
   buildRangeFilterRejectMessage,
   isValueInCheckboxFilter,
+  isValueInMultiSelectFilter,
+  normalizeMultiSelectPayloadValues,
   isValueInRangeFilter,
   type FieldOptionLike,
 } from "@/lib/lead-field-value";
@@ -182,6 +184,21 @@ export function evaluateGeneralFiltersForPayload(
       if (!isValueInCheckboxFilter(value, filter.selectedValues ?? [], options)) {
         reasons.push(
           `${label} filter rejected. Allowed: ${(filter.selectedValues ?? []).join(", ")}. Received: ${formatPayloadValueForMessage(value)}.`
+        );
+      }
+      continue;
+    }
+
+    if (filter.dataTypeFilter === "Multi Select" && (filter.selectedValues?.length ?? 0) > 0) {
+      const submitted = normalizeMultiSelectPayloadValues(value);
+      if (submitted.length === 0) {
+        reasons.push(`${label} is required.`);
+        continue;
+      }
+
+      if (!isValueInMultiSelectFilter(value, filter.selectedValues ?? [], options)) {
+        reasons.push(
+          `${label} filter rejected. Must contain one of: ${(filter.selectedValues ?? []).join(", ")}. Received: ${formatPayloadValueForMessage(value)}.`
         );
       }
       continue;

@@ -6,7 +6,7 @@ import { ensureVerticalMappingReferencesMigrated } from "@/lib/models/vertical-m
 import { ensureMappingApiRequest, PUBLISHER_LEAD_ENDPOINT_PATH } from "@/lib/mapping-api-request";
 import { runMappingTestLeadSubmit } from "@/lib/mapping-lead-intake";
 import { listMappingTestLeadLogs } from "@/lib/mapping-test-lead-log";
-import { buildTestLeadIntakeRuleGroups } from "@/lib/mapping-test-lead-intake";
+import { buildTestLeadIntakeRuleGroups, buildTestLeadMultiSelectFilters } from "@/lib/mapping-test-lead-intake";
 import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import { ensureSellerVerticalMappingFieldsSeededById } from "@/lib/seller-vertical-mapping";
@@ -36,6 +36,7 @@ async function loadMappingContext(sellerId: string, mappingId: string) {
   const vertical = verticalRefId ? await VerticalModel.findById(verticalRefId).lean() : null;
   const intakeSettings = toMappingIntakeSettings(mapping.toObject(), mappingFields);
   const intakeRules = buildTestLeadIntakeRuleGroups(intakeSettings);
+  const multiSelectFilters = buildTestLeadMultiSelectFilters(intakeSettings);
 
   const seller = Types.ObjectId.isValid(sellerId) ? await SellerModel.findById(sellerId).lean() : null;
 
@@ -45,6 +46,7 @@ async function loadMappingContext(sellerId: string, mappingId: string) {
     vertical,
     intakeSettings,
     intakeRules,
+    multiSelectFilters,
     seller,
   };
 }
@@ -70,6 +72,7 @@ export async function GET(_: Request, context: Params) {
       apiKey: apiRequest.apiKey,
       method: apiRequest.method,
       intakeRules: loaded.intakeRules,
+      multiSelectFilters: loaded.multiSelectFilters,
       timezone: loaded.intakeSettings.timezone,
       logs,
     });

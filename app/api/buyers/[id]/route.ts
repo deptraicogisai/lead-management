@@ -8,7 +8,6 @@ import {
 import {
   normalizeBuyerStatus,
   resolveBuyerName,
-  resolveManagerOption,
   toBuyerListRecord,
   type BuyerDoc,
   type BuyerUpdatePayload,
@@ -65,6 +64,20 @@ async function mapBuyerResponse(buyer: BuyerDoc) {
 
 function sanitizeIntegrationIds(integrationIds?: string[]) {
   return (integrationIds ?? []).filter((id) => Types.ObjectId.isValid(id));
+}
+
+function sanitizePublisherSourceIds(allowedPublisherIds?: string[], blockedPublisherIds?: string[]) {
+  const blocked = (blockedPublisherIds ?? []).filter((id) => Types.ObjectId.isValid(id));
+  const blockedSet = new Set(blocked);
+  const allowed = (allowedPublisherIds ?? [])
+    .filter((id) => Types.ObjectId.isValid(id))
+    .filter((id) => !blockedSet.has(id));
+  const allowedSet = new Set(allowed);
+
+  return {
+    allowedPublisherRefs: allowed.map((id) => new Types.ObjectId(id)),
+    blockedPublisherRefs: blocked.filter((id) => !allowedSet.has(id)).map((id) => new Types.ObjectId(id)),
+  };
 }
 
 export async function GET(_req: Request, context: Params) {
@@ -148,6 +161,26 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
     }
 
+    if (
+      body.allowedPublisherIds !== undefined &&
+      body.blockedPublisherIds !== undefined &&
+      body.name === undefined &&
+      body.integrationIds === undefined
+    ) {
+      const publisherSources = sanitizePublisherSourceIds(
+        body.allowedPublisherIds,
+        body.blockedPublisherIds
+      );
+
+      const buyer = await BuyerModel.findByIdAndUpdate(id, publisherSources, { new: true }).lean();
+
+      if (!buyer) {
+        return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
+    }
+
     if (body.integrationIds !== undefined && body.name === undefined) {
       const integrationRefs = sanitizeIntegrationIds(body.integrationIds);
 
@@ -168,16 +201,12 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
     }
 
-    const manager = body.personalManagerId ? resolveManagerOption(body.personalManagerId) : null;
     const trimmedName = body.name.trim();
     const updatePayload: Record<string, unknown> = {
       name: trimmedName,
       company: trimmedName,
+      email: body.email?.trim() ?? "",
       status: body.status ? normalizeBuyerStatus(body.status) : "Active",
-      buyerLabel: body.label?.trim() || "-",
-      buyerType: body.buyerType?.trim() || "-",
-      personalManagerId: manager?.id ?? "",
-      personalManagerName: manager?.name ?? "",
     };
 
     if (body.integrationIds !== undefined) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureDefaultPingTrees, getNextPingTreeDisplayId, PingTreeModel } from "@/lib/models/ping-tree";
 import { connectToDatabase } from "@/lib/mongodb";
 import { toPingTreeRecord, type PingTreeCampaignType } from "@/lib/ping-tree";
+import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 
 function parseCampaignType(value: string | null): PingTreeCampaignType | null {
   if (value === "Redirect" || value === "Silent") {
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const campaignType = parseCampaignType(searchParams.get("campaignType"));
 
-    const trees = await PingTreeModel.find(campaignType ? { campaignType } : {}).sort({ createdAt: 1 }).lean();
+    const trees = await PingTreeModel.find(campaignType ? { campaignType } : {}).sort(sortNewestDisplayIdFirst).lean();
 
     return NextResponse.json(trees.map((tree) => toPingTreeRecord(tree)));
   } catch {

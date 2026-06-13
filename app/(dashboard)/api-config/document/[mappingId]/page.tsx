@@ -12,9 +12,9 @@ import {
   buildErrorRows,
   buildExampleRequest,
   buildOverviewParagraphs,
+  formatAcceptedValues,
   getCodeTokenClassName,
   LEAD_RESPONSE_STATUS_DEFINITIONS,
-  prettyType,
   tokenizeCode,
   tokenizeJson,
   type CodeLanguage,
@@ -22,8 +22,8 @@ import {
   type DocumentationField,
 } from "@/lib/api-documentation-content";
 import {
-  buildDocumentationRequirementRows,
-  type DocumentationRequirementRow,
+  buildDocumentationRequestTableRows,
+  type DocumentationRequestTableRow,
 } from "@/lib/api-documentation-requirements";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import { PageSection, Spinner } from "@/components/ui/state";
@@ -37,7 +37,6 @@ type DocumentContentResponse = {
   apiKey: string;
   method: string;
   sellerName: string;
-  baseUrl: string;
   fields: DocumentationField[];
   intakeSettings: MappingIntakeSettingsRecord;
 };
@@ -65,41 +64,18 @@ function AcceptedValuesDisplay({ field }: { field: DocumentationField }) {
   );
 }
 
-function RequirementsSection({ rows }: { rows: DocumentationRequirementRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-        No requirements are configured for this API.
-      </p>
-    );
+function RequirementCell({ value }: { value: string }) {
+  if (value === "-") {
+    return <span className="text-slate-400">-</span>;
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200">
-      <table className="w-full border-separate border-spacing-0 text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="w-44 border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Category</th>
-            <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Requirement</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={`${row.category}-${index}`} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-              <td className="border-b border-slate-100 px-4 py-3 align-top font-medium text-slate-900">{row.category}</td>
-              <td className="border-b border-slate-100 px-4 py-3 align-top text-slate-700">
-                <div className="space-y-1">
-                  {row.requirements.map((requirement, requirementIndex) => (
-                    <p key={`${row.category}-${requirementIndex}`} className="leading-6">
-                      {requirement}
-                    </p>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-1 whitespace-pre-line text-slate-700">
+      {value.split("\n").map((line, index) => (
+        <p key={`${line}-${index}`} className="leading-6">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
@@ -217,10 +193,14 @@ export default function ApiDocumentPreviewPage() {
     [documentContent, exampleRequest]
   );
   const errorRows: DocumentationErrorRow[] = documentContent ? buildErrorRows(documentContent.fields) : [];
-  const requirementRows = useMemo(
+  const requestTableRows = useMemo(
     () =>
       documentContent
-        ? buildDocumentationRequirementRows(documentContent.intakeSettings, documentContent.fields)
+        ? buildDocumentationRequestTableRows(
+            documentContent.intakeSettings,
+            documentContent.fields,
+            formatAcceptedValues
+          )
         : [],
     [documentContent]
   );
@@ -309,10 +289,6 @@ export default function ApiDocumentPreviewPage() {
                   <span className="font-medium text-slate-900">HTTP Method:</span> {documentContent.method}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-slate-900">Base URL:</span>
-                  <CopyableValue value={documentContent.baseUrl} copyLabel="Copy base URL" />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-slate-900">Endpoint URL:</span>
                   <CopyableValue value={documentContent.endpointUrl} copyLabel="Copy endpoint URL" />
                 </div>
@@ -334,28 +310,36 @@ export default function ApiDocumentPreviewPage() {
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Required</th>
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Description</th>
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Accepted Values</th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Requirement</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {documentContent.fields.map((field, index) => (
-                      <tr key={field.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <td className="border-b border-slate-100 px-4 py-3 font-mono text-xs text-slate-700">{field.fieldName}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">{prettyType(field.type)}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">{field.required ? "Yes" : "No"}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">{field.description}</td>
+                    {requestTableRows.map((row: DocumentationRequestTableRow, index) => (
+                      <tr key={`${row.parameter}-${index}`} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="border-b border-slate-100 px-4 py-3 font-mono text-xs text-slate-700">{row.parameter}</td>
+                        <td className="border-b border-slate-100 px-4 py-3">{row.type}</td>
+                        <td className="border-b border-slate-100 px-4 py-3">{row.required}</td>
+                        <td className="border-b border-slate-100 px-4 py-3">{row.description}</td>
                         <td className="border-b border-slate-100 px-4 py-3">
-                          <AcceptedValuesDisplay field={field} />
+                          {(() => {
+                            const field = documentContent.fields.find((item) => item.fieldName === row.parameter);
+                            if (field && (field.options?.length ?? 0) > 0) {
+                              return <AcceptedValuesDisplay field={field} />;
+                            }
+                            if (row.acceptedValues === "-") {
+                              return <span className="text-slate-400">-</span>;
+                            }
+                            return row.acceptedValues;
+                          })()}
+                        </td>
+                        <td className="border-b border-slate-100 px-4 py-3">
+                          <RequirementCell value={row.requirement} />
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </section>
-
-            <section className="space-y-3">
-              <DocumentSectionHeading label={outline.requirements.label} />
-              <RequirementsSection rows={requirementRows} />
             </section>
 
             <section className="space-y-3">

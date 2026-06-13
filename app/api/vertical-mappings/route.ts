@@ -6,6 +6,7 @@ import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@
 import { getCustomMappingFields } from "@/lib/mapping-fields";
 import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
+import { sortNewestFirst } from "@/lib/list-sort";
 
 type VerticalMappingPayload = {
   verticalId?: string;
@@ -97,7 +98,7 @@ export async function GET(req: Request) {
 
     const totalItems = hasListParams ? await VerticalMappingModel.countDocuments(filter) : 0;
     const mappings = await VerticalMappingModel.find(filter)
-      .sort({ createdAt: 1 })
+      .sort(sortNewestFirst)
       .skip(hasListParams ? (page - 1) * pageSize : 0)
       .limit(hasListParams ? pageSize : 0)
       .lean();

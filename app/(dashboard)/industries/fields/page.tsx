@@ -29,7 +29,7 @@ const dataTypeOptions = [
   { value: "date", label: "Date" },
 ];
 
-const dataTypeFilterOptions = ["", "Text", "Range", "Checkbox"];
+const dataTypeFilterOptions = ["", "Text", "Range", "Checkbox", "Multi Select"];
 
 type NewFieldDraft = {
   fieldName: string;

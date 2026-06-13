@@ -12,9 +12,14 @@ import {
   List,
   Megaphone,
   Plug,
+  Share2,
   X,
 } from "lucide-react";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import {
+  SearchableMultiSelect,
+  type SearchableMultiSelectOption,
+} from "@/components/ui/searchable-multi-select";
 import { toast } from "@/lib/toast";
 import {
   normalizeBuyerStatus,
@@ -27,7 +32,17 @@ import { cn } from "@/lib/utils";
 const buyerTabs = [
   { id: "global", label: "Global", icon: Globe },
   { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "sources", label: "Sources", icon: Share2 },
 ] as const;
+
+type BuyerTabId = (typeof buyerTabs)[number]["id"];
+
+type PublisherOption = SearchableMultiSelectOption & {
+  name: string;
+  email: string;
+  status: "Active" | "Inactive";
+  displayId: number;
+};
 
 const rightHeaderActions = [
   { label: "Lead Details", icon: List, href: "/reports/buyer/lead-details" },
@@ -66,17 +81,25 @@ type BuyerDetailProps = {
 export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTabId, setActiveTabId] = useState<(typeof buyerTabs)[number]["id"]>(() => {
+  const [activeTabId, setActiveTabId] = useState<BuyerTabId>(() => {
     const tab = searchParams.get("tab");
-    return tab === "integrations" ? "integrations" : "global";
+    if (tab === "integrations") return "integrations";
+    if (tab === "sources") return "sources";
+    return "global";
   });
   const [name, setName] = useState(buyer.name);
+  const [email, setEmail] = useState(buyer.email);
   const [status, setStatus] = useState<"Active" | "Inactive">(normalizeBuyerStatus(buyer.status));
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
   const [integrationPickerValue, setIntegrationPickerValue] = useState("");
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
+  const [allowedPublisherIds, setAllowedPublisherIds] = useState<string[]>(buyer.allowedPublisherIds);
+  const [blockedPublisherIds, setBlockedPublisherIds] = useState<string[]>(buyer.blockedPublisherIds);
+  const [publisherOptions, setPublisherOptions] = useState<PublisherOption[]>([]);
+  const [isLoadingPublishers, setIsLoadingPublishers] = useState(true);
+  const [isSavingSources, setIsSavingSources] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -88,8 +111,11 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
   useEffect(() => {
     setName(buyer.name);
+    setEmail(buyer.email);
     setStatus(normalizeBuyerStatus(buyer.status));
     setSelectedIntegrationIds(buyer.integrationIds);
+    setAllowedPublisherIds(buyer.allowedPublisherIds);
+    setBlockedPublisherIds(buyer.blockedPublisherIds);
   }, [buyer]);
 
   useEffect(() => {
@@ -124,6 +150,43 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     void fetchIntegrationOptions();
   }, []);
 
+  useEffect(() => {
+    const fetchPublishers = async () => {
+      setIsLoadingPublishers(true);
+      try {
+        const response = await fetch("/api/sellers");
+        if (!response.ok) return;
+
+        const records = (await response.json()) as Array<{
+          id: string;
+          displayId?: number;
+          name: string;
+          email: string;
+          status: "Active" | "Inactive";
+        }>;
+
+        setPublisherOptions(
+          records.map((record, index) => {
+            const displayId = record.displayId ?? index + 1001;
+            return {
+              id: record.id,
+              displayId,
+              name: record.name,
+              email: record.email,
+              status: record.status,
+              label: record.name,
+              description: `${record.email} · ${record.status}`,
+            };
+          })
+        );
+      } finally {
+        setIsLoadingPublishers(false);
+      }
+    };
+
+    void fetchPublishers();
+  }, []);
+
   const selectedIntegrations = useMemo(
     () =>
       selectedIntegrationIds
@@ -136,6 +199,26 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     () => integrationOptions.filter((option) => !selectedIntegrationIds.includes(option.id)),
     [integrationOptions, selectedIntegrationIds]
   );
+
+  const allowPublisherOptions = useMemo(
+    () => publisherOptions.filter((publisher) => !blockedPublisherIds.includes(publisher.id)),
+    [blockedPublisherIds, publisherOptions]
+  );
+
+  const blockPublisherOptions = useMemo(
+    () => publisherOptions.filter((publisher) => !allowedPublisherIds.includes(publisher.id)),
+    [allowedPublisherIds, publisherOptions]
+  );
+
+  const handleAllowedPublishersChange = (ids: string[]) => {
+    setAllowedPublisherIds(ids);
+    setBlockedPublisherIds((current) => current.filter((id) => !ids.includes(id)));
+  };
+
+  const handleBlockedPublishersChange = (ids: string[]) => {
+    setBlockedPublisherIds(ids);
+    setAllowedPublisherIds((current) => current.filter((id) => !ids.includes(id)));
+  };
 
   const renderDetailRow = (labelText: string, control: ReactNode, showLinkIcon = false) => (
     <div className="grid gap-2 py-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center sm:gap-6">
@@ -152,10 +235,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
     const payload: BuyerUpdatePayload = {
       name: name.trim(),
+      email: email.trim(),
       status,
-      personalManagerId: buyer.personalManagerId,
-      label: buyer.label,
-      buyerType: buyer.buyerType,
     };
 
     setIsSaving(true);
@@ -205,6 +286,34 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
       toast.error("Failed to save integrations.");
     } finally {
       setIsSavingIntegrations(false);
+    }
+  };
+
+  const handleSaveSources = async () => {
+    setIsSavingSources(true);
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allowedPublisherIds,
+          blockedPublisherIds,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(result?.message ?? "Failed to save sources.");
+        return;
+      }
+
+      toast.success("Sources saved successfully.");
+      router.refresh();
+    } catch {
+      toast.error("Failed to save sources.");
+    } finally {
+      setIsSavingSources(false);
     }
   };
 
@@ -266,6 +375,18 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
+                if (saveError) setSaveError("");
+              }}
+            />
+          )}
+          {renderDetailRow(
+            "Email",
+            <Input
+              id="buyer-email"
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
                 if (saveError) setSaveError("");
               }}
             />
@@ -374,6 +495,58 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     </div>
   );
 
+  const renderSourcesTab = () => (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="px-6 py-8">
+        <div className="mx-auto w-full max-w-4xl space-y-1">
+          {renderDetailRow(
+            "Allow Publishers",
+            <SearchableMultiSelect
+              id="buyer-allow-publishers"
+              selectedIds={allowedPublisherIds}
+              onChange={handleAllowedPublishersChange}
+              options={allowPublisherOptions}
+              labelOptions={publisherOptions}
+              isLoading={isLoadingPublishers}
+              placeholder="Select allowed publishers..."
+              searchPlaceholder="Search publishers..."
+              emptyMessage="No publishers available."
+            />
+          )}
+
+          {renderDetailRow(
+            "Block Publishers",
+            <SearchableMultiSelect
+              id="buyer-block-publishers"
+              selectedIds={blockedPublisherIds}
+              onChange={handleBlockedPublishersChange}
+              options={blockPublisherOptions}
+              labelOptions={publisherOptions}
+              isLoading={isLoadingPublishers}
+              placeholder="Select blocked publishers..."
+              searchPlaceholder="Search publishers..."
+              emptyMessage="No publishers available."
+            />
+          )}
+
+          <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
+            <div aria-hidden />
+            <div className="space-y-2">
+              <PrimaryButton
+                type="button"
+                disabled={isSavingSources}
+                onClick={() => void handleSaveSources()}
+                className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+              >
+                {isSavingSources ? "Saving..." : "Save"}
+              </PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderPlaceholderTab = () => (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-start gap-4">
@@ -460,7 +633,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           ? renderGlobalTab()
           : activeTab.id === "integrations"
             ? renderIntegrationsTab()
-            : renderPlaceholderTab()}
+            : activeTab.id === "sources"
+              ? renderSourcesTab()
+              : renderPlaceholderTab()}
       </section>
     </div>
   );

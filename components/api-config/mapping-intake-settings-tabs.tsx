@@ -8,6 +8,7 @@ import { IconActionButton } from "@/components/ui/action-buttons";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
+import { FilterTagInput } from "@/components/ui/filter-tag-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DUPLICATE_METHOD_OPTIONS,
@@ -433,6 +434,16 @@ export function MappingIntakeSettingsTabs({
                     </div>
                   ) : null}
 
+                  {filter.dataTypeFilter === "Multi Select" ? (
+                    <FilterTagInput
+                      id={`${filter.fieldId}-multi-select`}
+                      values={filter.selectedValues ?? []}
+                      disabled={!isInteractive}
+                      placeholder="Type a value and press Enter"
+                      onChange={(selectedValues) => updateGeneralFilter(filter.fieldId, { selectedValues })}
+                    />
+                  ) : null}
+
                   {filter.dataTypeFilter === "Text" ? (
                     <Input
                       id={`${filter.fieldId}-text`}
@@ -447,7 +458,7 @@ export function MappingIntakeSettingsTabs({
           </div>
 
           {settings.generalFilters.length === 0 ? (
-            <p className="text-sm text-slate-500">No filterable fields yet. Add fields with Text, Range, or Checkbox filters.</p>
+            <p className="text-sm text-slate-500">No filterable fields yet. Add fields with Text, Range, Checkbox, or Multi Select filters.</p>
           ) : null}
         </div>
         </DualSaveBar>

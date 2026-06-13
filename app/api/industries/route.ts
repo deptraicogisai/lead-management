@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
+import { sortNewestFirst } from "@/lib/list-sort";
 
 type VerticalPayload = {
   name?: string;
@@ -69,13 +70,13 @@ export async function GET(req: Request) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     if (!hasListParams) {
-      const verticals = await VerticalModel.find().sort({ createdAt: 1 }).lean();
+      const verticals = await VerticalModel.find().sort(sortNewestFirst).lean();
       return NextResponse.json(verticals.map((vertical) => toVerticalResponse(vertical)));
     }
 
     const totalItems = await VerticalModel.countDocuments(filter);
     const verticals = await VerticalModel.find(filter)
-      .sort({ createdAt: 1 })
+      .sort(sortNewestFirst)
       .skip((page - 1) * pageSize)
       .limit(pageSize)
       .lean();

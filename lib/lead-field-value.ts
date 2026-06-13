@@ -264,6 +264,60 @@ export function isValueInCheckboxFilter(
   return buildAllowedCheckboxFilterValues(selectedValues, options).has(comparable);
 }
 
+export function normalizeMultiSelectPayloadValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item).trim()).filter(Boolean);
+        }
+      } catch {
+        // Fall through to single/comma-separated parsing.
+      }
+    }
+
+    if (trimmed.includes(",")) {
+      return trimmed.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+
+    return [trimmed];
+  }
+
+  if (value !== null && value !== undefined && typeof value !== "object") {
+    const text = String(value).trim();
+    return text ? [text] : [];
+  }
+
+  return [];
+}
+
+export function isValueInMultiSelectFilter(
+  value: unknown,
+  selectedValues: string[],
+  _options: FieldOptionLike[] = []
+) {
+  const tokens = selectedValues.map((item) => item.trim()).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const submitted = normalizeMultiSelectPayloadValues(value);
+  if (submitted.length === 0) return false;
+
+  return submitted.every((item) => {
+    const comparable = normalizeComparableValue(item);
+    return tokens.some((token) => comparable.includes(token.trim().toLowerCase()));
+  });
+}
+
+export function formatMultiSelectFilterAllowedList(selectedValues: string[]) {
+  return selectedValues.map((item) => item.trim()).filter(Boolean).join(", ");
+}
+
 function pickOptionExampleValue(field: LeadFieldValueSource) {
   const values = getFieldOptionValues(field.options ?? []);
   if (values.length === 0) return null;

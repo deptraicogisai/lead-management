@@ -5,6 +5,7 @@ import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
 import { buildCopiedFieldsFromVertical } from "@/lib/mapping-fields";
+import { sortNewestFirst } from "@/lib/list-sort";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -48,7 +49,7 @@ export async function GET(_: Request, context: Params) {
       return NextResponse.json({ message: "Seller not found." }, { status: 404 });
     }
 
-    const mappings = await VerticalMappingModel.find({ sellerRef: seller._id }).sort({ createdAt: 1 }).lean();
+    const mappings = await VerticalMappingModel.find({ sellerRef: seller._id }).sort(sortNewestFirst).lean();
     const verticalRefs = mappings.map((mapping) => mapping.verticalRef).filter(Boolean);
 
     if (verticalRefs.length === 0) {

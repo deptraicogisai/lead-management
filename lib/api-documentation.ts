@@ -16,10 +16,8 @@ import {
   type DocumentationErrorRow,
 } from "@/lib/api-documentation-content";
 import {
-  buildDocumentationRequirementRows,
-  buildDocumentationRequirementsMarkdown,
-  formatRequirementCell,
-  type DocumentationRequirementRow,
+  buildDocumentationRequestTableRows,
+  type DocumentationRequestTableRow,
 } from "@/lib/api-documentation-requirements";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import { buildFieldExampleRequest, buildFieldExampleValue } from "@/lib/lead-field-value";
@@ -47,7 +45,6 @@ export type DocumentationContext = {
   apiKey: string;
   method: string;
   sellerName?: string;
-  baseUrl?: string;
 };
 
 // Use PDFKit's built-in fonts so PDF generation works on serverless
@@ -74,15 +71,18 @@ export function buildExampleRequest(fields: DocumentationField[]) {
   return buildFieldExampleRequest(fields);
 }
 
-function buildRequestFieldTable(fields: DocumentationField[]) {
+function buildRequestFieldTable(
+  settings: MappingIntakeSettingsRecord,
+  fields: DocumentationField[]
+) {
   const header = [
-    "| Parameter | Type | Required | Description | Accepted Values | Sample Value |",
+    "| Parameter | Type | Required | Description | Accepted Values | Requirement |",
     "| --- | --- | --- | --- | --- | --- |",
   ];
 
-  const rows = fields.map((field) => {
-    const exampleValue = buildExampleValue(field);
-    return `| \`${field.fieldName}\` | \`${prettyType(field.type)}\` | ${field.required ? "Yes" : "No"} | ${field.description || "-"} | ${formatAcceptedValues(field) ?? "-"} | \`${JSON.stringify(exampleValue)}\` |`;
+  const rows = buildDocumentationRequestTableRows(settings, fields, formatAcceptedValues).map((row) => {
+    const requirement = row.requirement.replace(/\n/g, "<br>").replace(/\|/g, "\\|");
+    return `| \`${row.parameter}\` | \`${row.type}\` | ${row.required} | ${row.description} | ${row.acceptedValues} | ${requirement} |`;
   });
 
   return [...header, ...rows].join("\n");
@@ -95,12 +95,6 @@ export function buildApiDocumentationMarkdown(
 ) {
   const exampleRequest = buildExampleRequest(fields);
   const outline = buildDocumentationOutline();
-  const requirementRows = buildDocumentationRequirementRows(intakeSettings, fields);
-  const requirementsSection = `## ${outline.requirements.label}
-
-${buildDocumentationRequirementsMarkdown(requirementRows)}
-
-`;
   const errorResponse = {
     status: "error",
     reasons: [{ message: `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.` }],
@@ -122,9 +116,9 @@ In a real-world workflow, this endpoint is used by partner systems, landing page
 
 ## ${outline.requestBody.label}
 
-${buildRequestFieldTable(fields)}
+${buildRequestFieldTable(intakeSettings, fields)}
 
-${requirementsSection}## ${outline.exampleJsonRequest.label}
+## ${outline.exampleJsonRequest.label}
 
 \`\`\`json
 ${JSON.stringify(exampleRequest, null, 2)}
@@ -379,86 +373,18 @@ function writeTintedCodeBlock(doc: PDFKit.PDFDocument, title: string, code: stri
   }
 }
 
-function writeRequirementsTable(doc: PDFKit.PDFDocument, rows: DocumentationRequirementRow[]) {
-  if (rows.length === 0) {
-    writeParagraph(doc, "No requirements are configured for this API.");
-    return;
-  }
-
+function writeRequestBodyTable(doc: PDFKit.PDFDocument, rows: DocumentationRequestTableRow[]) {
   const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const startX = doc.page.margins.left;
-  const columnWidths = [120, tableWidth - 120];
-  const headers = ["Category", "Requirement"];
-  const tableRows = rows.map((row) => [row.category, formatRequirementCell(row.requirements)]);
-
-  const getRowHeight = (values: string[], isHeader = false) => {
-    const paddingY = isHeader ? 8 : 7;
-    const fontSize = isHeader ? 9.5 : 9;
-    doc.font(isHeader ? FONT_BOLD : FONT_REGULAR).fontSize(fontSize);
-
-    const contentHeight = values.reduce((max, value, index) => {
-      const height = doc.heightOfString(value, {
-        width: columnWidths[index] - 12,
-        lineGap: 2,
-      });
-      return Math.max(max, height);
-    }, 0);
-
-    return contentHeight + paddingY * 2;
-  };
-
-  const drawRow = (values: string[], y: number, isHeader = false, index = 0) => {
-    const rowHeight = getRowHeight(values, isHeader);
-    let currentX = startX;
-
-    values.forEach((value, cellIndex) => {
-      doc
-        .rect(currentX, y, columnWidths[cellIndex], rowHeight)
-        .fillAndStroke(isHeader ? "#E2E8F0" : index % 2 === 0 ? "#FFFFFF" : "#F8FAFC", "#E2E8F0");
-
-      doc
-        .font(isHeader ? FONT_BOLD : FONT_REGULAR)
-        .fontSize(isHeader ? 9.5 : 9)
-        .fillColor(isHeader ? "#0F172A" : "#334155")
-        .text(value, currentX + 6, y + (isHeader ? 8 : 7), {
-          width: columnWidths[cellIndex] - 12,
-          lineGap: 2,
-        });
-
-      currentX += columnWidths[cellIndex];
-    });
-
-    return rowHeight;
-  };
-
-  let cursorY = doc.y;
-  ensureSpace(doc, getRowHeight(headers, true));
-  cursorY = doc.y;
-  cursorY += drawRow(headers, cursorY, true);
-
-  tableRows.forEach((row, index) => {
-    const rowHeight = getRowHeight(row);
-    ensureSpace(doc, rowHeight);
-    cursorY = doc.y;
-    cursorY += drawRow(row, cursorY, false, index);
-    doc.y = cursorY;
-  });
-
-  doc.y = cursorY + 5;
-  resetTextCursor(doc);
-}
-
-function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationField[]) {
-  const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const startX = doc.page.margins.left;
-  const columnWidths = [84, 52, 46, 130, tableWidth - 84 - 52 - 46 - 130];
-  const headers = ["Parameter", "Type", "Required", "Description", "Accepted Values"];
-  const rows = fields.map((field) => [
-    field.fieldName,
-    prettyType(field.type),
-    field.required ? "Yes" : "No",
-    field.description || "-",
-    formatAcceptedValues(field) ?? "-",
+  const columnWidths = [72, 44, 40, 96, 84, tableWidth - 72 - 44 - 40 - 96 - 84];
+  const headers = ["Parameter", "Type", "Required", "Description", "Accepted Values", "Requirement"];
+  const tableRows = rows.map((row) => [
+    row.parameter,
+    row.type,
+    row.required,
+    row.description,
+    row.acceptedValues,
+    row.requirement,
   ]);
 
   const getRowHeight = (values: string[], isHeader = false) => {
@@ -507,7 +433,7 @@ function writeRequestBodyTable(doc: PDFKit.PDFDocument, fields: DocumentationFie
   cursorY = doc.y;
   cursorY += drawRow(headers, cursorY, true);
 
-  rows.forEach((row, index) => {
+  tableRows.forEach((row, index) => {
     const rowHeight = getRowHeight(row);
     ensureSpace(doc, rowHeight);
     cursorY = doc.y;
@@ -613,7 +539,7 @@ export async function generateApiDocumentationPdfBuffer(
   const errorRows = buildErrorRows(fields);
   const overviewParagraphs = buildOverviewParagraphs(context.verticalName);
   const outline = buildDocumentationOutline();
-  const requirementRows = buildDocumentationRequirementRows(intakeSettings, fields);
+  const requestTableRows = buildDocumentationRequestTableRows(intakeSettings, fields, formatAcceptedValues);
 
   const doc = new PDFDocument({
     size: "A4",
@@ -648,15 +574,11 @@ export async function generateApiDocumentationPdfBuffer(
 
   writeSectionHeading(doc, outline.endpointInformation.label);
   writeBullet(doc, `HTTP Method: ${context.method}`);
-  writeBullet(doc, `Base URL: ${context.baseUrl ?? "-"}`);
   writeBullet(doc, `Endpoint URL: ${context.endpointUrl}`);
   writeBullet(doc, `API Key: ${context.apiKey}`);
 
   writeSectionHeading(doc, outline.requestBody.label);
-  writeRequestBodyTable(doc, fields);
-
-  writeSectionHeading(doc, outline.requirements.label);
-  writeRequirementsTable(doc, requirementRows);
+  writeRequestBodyTable(doc, requestTableRows);
 
   writeSectionHeading(doc, outline.exampleJsonRequest.label);
   writeTintedCodeBlock(doc, "JSON — Example Request", JSON.stringify(exampleRequest, null, 2), "json");

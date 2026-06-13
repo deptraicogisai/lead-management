@@ -4,7 +4,7 @@ import type {
   CampaignScheduleRule,
 } from "@/lib/campaign";
 import type { DocumentationField } from "@/lib/api-documentation-content";
-import { getFieldsWithConditions } from "@/lib/api-documentation-content";
+import { getFieldsWithConditions, prettyType } from "@/lib/api-documentation-content";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 
 export type DocumentationRequirementRow = {
@@ -12,6 +12,14 @@ export type DocumentationRequirementRow = {
   requirements: string[];
 };
 
+export type DocumentationRequestTableRow = {
+  parameter: string;
+  type: string;
+  required: string;
+  description: string;
+  acceptedValues: string;
+  requirement: string;
+};
 function groupRequirementsByCategory(items: Array<{ category: string; requirement: string }>) {
   const grouped = new Map<string, string[]>();
   const order: string[] = [];
@@ -69,6 +77,10 @@ function describeFilterLine(filter: CampaignGeneralFilter): string | null {
     return `${name} must be one of: ${filter.selectedValues?.join(", ")}.`;
   }
 
+  if (filter.dataTypeFilter === "Multi Select" && (filter.selectedValues?.length ?? 0) > 0) {
+    return `${name} must contain one of: ${filter.selectedValues?.join(", ")}.`;
+  }
+
   return null;
 }
 
@@ -105,6 +117,62 @@ function describeScheduleLines(rules: CampaignScheduleRule[], timezone: string):
   }
 
   return lines;
+}
+
+function buildFieldRequirementText(field: DocumentationField, settings: MappingIntakeSettingsRecord) {
+  const lines: string[] = [];
+  const fieldRequirement = describeFieldRequirement(field);
+  if (fieldRequirement) lines.push(fieldRequirement);
+
+  const filter = settings.generalFilters.find(
+    (item) => item.enabled && item.fieldName === field.fieldName
+  );
+  const filterLine = filter ? describeFilterLine(filter) : null;
+  if (filterLine) lines.push(filterLine);
+
+  return lines.length > 0 ? lines.join("\n") : "-";
+}
+
+export function buildDocumentationRequestTableRows(
+  settings: MappingIntakeSettingsRecord,
+  fields: DocumentationField[],
+  formatAcceptedValues: (field: DocumentationField) => string | null
+): DocumentationRequestTableRow[] {
+  const rows: DocumentationRequestTableRow[] = fields.map((field) => ({
+    parameter: field.fieldName,
+    type: prettyType(field.type),
+    required: field.required ? "Yes" : "No",
+    description: field.description || "-",
+    acceptedValues: formatAcceptedValues(field) ?? "-",
+    requirement: buildFieldRequirementText(field, settings),
+  }));
+
+  describeDuplicateLines(settings.duplicates).forEach((requirement) => {
+    rows.push({
+      parameter: "Duplicates",
+      type: "-",
+      required: "-",
+      description: "-",
+      acceptedValues: "-",
+      requirement,
+    });
+  });
+
+  describeScheduleLines(
+    settings.scheduleRules.filter((rule) => rule.active),
+    settings.timezone
+  ).forEach((requirement) => {
+    rows.push({
+      parameter: "Schedule",
+      type: "-",
+      required: "-",
+      description: "-",
+      acceptedValues: "-",
+      requirement,
+    });
+  });
+
+  return rows;
 }
 
 function describeFieldRequirement(field: DocumentationField): string | null {
@@ -163,9 +231,11 @@ export function buildDocumentationRequirementsMarkdown(rows: DocumentationRequir
     return "No requirements are configured for this API.";
   }
 
-  const header = "| Category | Requirement |\n| --- | --- |";
-  const body = rows
-    .map((row) => `| ${row.category} | ${formatRequirementCell(row.requirements).replace(/\n/g, "<br>")} |`)
-    .join("\n");
+  const flattened = rows.flatMap((row) =>
+    row.requirements.map((requirement) => `[${row.category}] ${requirement}`)
+  );
+
+  const header = "| Requirement |\n| --- |";
+  const body = flattened.map((requirement) => `| ${requirement.replace(/\|/g, "\\|")} |`).join("\n");
   return `${header}\n${body}`;
 }

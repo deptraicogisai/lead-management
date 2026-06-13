@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { SellerForm } from "@/components/forms/seller-form";
 import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { IdBadge } from "@/components/ui/id-badge";
 import { Input } from "@/components/ui/form-controls";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -102,7 +103,8 @@ export default function SellersPage() {
       const matchesTableFilter = search
         ? row.name.toLowerCase().includes(search) ||
           row.email.toLowerCase().includes(search) ||
-          row.status.toLowerCase().includes(search)
+          row.status.toLowerCase().includes(search) ||
+          String(row.displayId ?? "").includes(search)
         : true;
 
       return matchesStatus && matchesDateFrom && matchesDateTo && matchesTableFilter;
@@ -201,6 +203,16 @@ export default function SellersPage() {
   };
 
   const columns: Column<Seller>[] = [
+    {
+      key: "id",
+      label: "ID",
+      sortValue: (row) => row.displayId ?? 0,
+      render: (row) => (
+        <Link href={apiConfigHref(row)} className="group inline-flex">
+          <IdBadge id={row.displayId ?? "-"} interactive />
+        </Link>
+      ),
+    },
     {
       key: "name",
       label: "Name",

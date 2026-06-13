@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { toDocumentationField } from "@/lib/api-documentation-field";
+import { buildFullEndpointUrl } from "@/lib/api-documentation-content";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { ensureMappingApiRequest } from "@/lib/mapping-api-request";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
@@ -72,8 +73,7 @@ export async function GET(req: Request, context: Params) {
     return NextResponse.json({
       sellerName: seller.name,
       verticalName: vertical.name,
-      baseUrl,
-      endpointUrl: apiRequest.url,
+      endpointUrl: buildFullEndpointUrl(baseUrl, apiRequest.url),
       apiKey: apiRequest.apiKey,
       method: apiRequest.method,
       fields,

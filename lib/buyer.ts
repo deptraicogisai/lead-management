@@ -4,6 +4,7 @@ export type BuyerListRecord = {
   id: string;
   displayId: number;
   name: string;
+  email: string;
   label: string;
   createdAt: string;
   lastTrafficLabel: string;
@@ -13,6 +14,8 @@ export type BuyerListRecord = {
   status: BuyerStatus;
   integrationIds: string[];
   integrations: string[];
+  allowedPublisherIds: string[];
+  blockedPublisherIds: string[];
   questionnaireStatus: "Pending" | "Completed";
   quality: string;
   prepaid: boolean;
@@ -20,14 +23,14 @@ export type BuyerListRecord = {
 
 export type BuyerCreatePayload = {
   name: string;
+  email: string;
   status: "Active" | "Inactive";
-  personalManagerId: string;
-  label: string;
-  buyerType: string;
 };
 
 export type BuyerUpdatePayload = BuyerCreatePayload & {
   integrationIds?: string[];
+  allowedPublisherIds?: string[];
+  blockedPublisherIds?: string[];
 };
 
 export function normalizeBuyerStatus(status?: BuyerStatus) {
@@ -92,6 +95,7 @@ export type BuyerDoc = {
   company?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  email?: string | null;
   buyerLabel?: string | null;
   buyerType?: string | null;
   personalManagerId?: string | null;
@@ -102,6 +106,8 @@ export type BuyerDoc = {
   quality?: string | null;
   status?: BuyerStatus;
   integrationRefs?: Array<{ toString(): string } | string> | null;
+  allowedPublisherRefs?: Array<{ toString(): string } | string> | null;
+  blockedPublisherRefs?: Array<{ toString(): string } | string> | null;
   createdAt?: Date | string;
 };
 
@@ -109,6 +115,12 @@ export function resolveBuyerName(doc: BuyerDoc) {
   if (doc.name?.trim()) return doc.name.trim();
   if (doc.company?.trim()) return doc.company.trim();
   return `${doc.firstName ?? ""} ${doc.lastName ?? ""}`.trim() || "Unnamed Buyer";
+}
+
+export function resolvePublisherRefIds(
+  refs?: Array<{ toString(): string } | string> | null
+) {
+  return (refs ?? []).map((ref) => (typeof ref === "string" ? ref : ref.toString()));
 }
 
 export function toBuyerListRecord(
@@ -127,6 +139,7 @@ export function toBuyerListRecord(
     id: doc._id?.toString() ?? "",
     displayId: doc.displayId ?? 0,
     name: resolveBuyerName(doc),
+    email: doc.email?.trim() ?? "",
     label: doc.buyerLabel?.trim() || "-",
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",
     lastTrafficLabel: formatLastTraffic(doc.lastTrafficAt),
@@ -136,6 +149,8 @@ export function toBuyerListRecord(
     status,
     integrationIds: resolvedIntegrationIds,
     integrations: integrationLabels,
+    allowedPublisherIds: resolvePublisherRefIds(doc.allowedPublisherRefs),
+    blockedPublisherIds: resolvePublisherRefIds(doc.blockedPublisherRefs),
     questionnaireStatus: doc.questionnaireStatus ?? "Pending",
     quality: doc.quality?.trim() || "M",
     prepaid: Boolean(doc.prepaid),

@@ -6,6 +6,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { getNextPresentListDisplayId, PresentListModel } from "@/lib/models/present-list";
 import { toPresentListRecord, type PresentListType } from "@/lib/present-list";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
+import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 
 type PresentListPayload = {
   name?: string;
@@ -61,7 +62,7 @@ export async function GET(req: Request) {
     const [totalItems, lists] = await Promise.all([
       PresentListModel.countDocuments(filter),
       PresentListModel.find(filter)
-        .sort({ createdAt: -1 })
+        .sort(sortNewestDisplayIdFirst)
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean(),

@@ -9,6 +9,7 @@ import {
   type IntegrationBuilderPostingType,
   type IntegrationBuilderStatus,
 } from "@/lib/integration-builder";
+import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 
 type IntegrationBuilderPayload = {
   name?: string;
@@ -43,7 +44,7 @@ export async function GET() {
     await ensureVerticalCollectionMigrated();
 
     const [records, { verticalNameById, verticalIndexById }] = await Promise.all([
-      IntegrationBuilderModel.find().sort({ createdAt: -1 }).lean(),
+      IntegrationBuilderModel.find().sort(sortNewestDisplayIdFirst).lean(),
       getVerticalMaps(),
     ]);
 

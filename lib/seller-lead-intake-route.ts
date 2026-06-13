@@ -62,7 +62,7 @@ type SellerMapping = {
     fieldId: string;
     fieldName: string;
     description: string;
-    dataTypeFilter: "Text" | "Range" | "Checkbox";
+    dataTypeFilter: "Text" | "Range" | "Checkbox" | "Multi Select";
     enabled?: boolean;
     minValue?: string | null;
     maxValue?: string | null;

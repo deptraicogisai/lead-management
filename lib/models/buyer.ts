@@ -30,6 +30,8 @@ const buyerSchema = new Schema(
     postLeadUrl: { type: String, default: "", trim: true },
     status: { type: String, enum: ["Active", "Inactive", "Disabled", "Paused"], required: true, default: "Active" },
     integrationRefs: [{ type: Schema.Types.ObjectId, ref: "IntegrationBuilder", default: [] }],
+    allowedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],
+    blockedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],
     mappings: { type: [buyerMappingSchema], default: [] },
   },
   { timestamps: true }
