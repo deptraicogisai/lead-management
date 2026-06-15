@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BriefcaseBusiness,
   ChevronDown,
+  FileText,
   LayoutDashboard,
   LayoutList,
   Users,
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/verticals", label: "Vertical", icon: BriefcaseBusiness },
   { href: "/buyers", label: "Buyer List", icon: LayoutList },
   { href: "/sellers", label: "Publisher List", icon: Users },
+  { href: "/documents", label: "Documents", icon: FileText },
 ];
 
 function NavLink({
