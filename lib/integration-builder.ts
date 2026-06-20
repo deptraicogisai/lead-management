@@ -11,6 +11,15 @@ export type IntegrationBuilderArrayMappingEntry = {
   }>;
 };
 
+type IntegrationBuilderArrayMappingEntryInput = {
+  fieldName: string;
+  slug: string;
+  mappings?: Array<{
+    label: string;
+    mapping?: string | null;
+  }> | null;
+};
+
 export type IntegrationBuilderRequestMappingHeader = {
   key: string;
   value: string;
@@ -71,10 +80,10 @@ type IntegrationBuilderDoc = {
   name: string;
   status: IntegrationBuilderStatus;
   verticalRef?: { toString(): string } | string | null;
-  arrayMappings?: IntegrationBuilderArrayMappingEntry[] | null;
-  requestMapping?: IntegrationBuilderRequestMapping | null;
-  responseMapping?: IntegrationBuilderResponseMapping | null;
-  configFields?: IntegrationBuilderConfigField[] | null;
+  arrayMappings?: unknown;
+  requestMapping?: unknown;
+  responseMapping?: unknown;
+  configFields?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 };
@@ -181,20 +190,27 @@ export function toIntegrationBuilderRecord(
     product,
     productLabel: formatProductLabel(product, verticalIndex),
     arrayMappings: Array.isArray(doc.arrayMappings)
-      ? doc.arrayMappings.map((entry) => ({
-          fieldName: entry.fieldName,
-          slug: entry.slug,
-          mappings: Array.isArray(entry.mappings)
-            ? entry.mappings.map((row) => ({
-                label: row.label,
-                mapping: row.mapping ?? "",
-              }))
-            : [],
-        }))
+      ? doc.arrayMappings.map((entry) => {
+          const row = entry as IntegrationBuilderArrayMappingEntryInput;
+          return {
+            fieldName: row.fieldName,
+            slug: row.slug,
+            mappings: Array.isArray(row.mappings)
+              ? row.mappings.map((mappingRow) => ({
+                  label: mappingRow.label,
+                  mapping: mappingRow.mapping ?? "",
+                }))
+              : [],
+          };
+        })
       : [],
-    requestMapping: normalizeRequestMapping(doc.requestMapping as IntegrationBuilderRequestMapping | null),
-    responseMapping: normalizeResponseMapping(doc.responseMapping as IntegrationBuilderResponseMapping | null),
-    configFields: normalizeConfigFields(doc.configFields as IntegrationBuilderConfigField[] | null),
+    requestMapping: normalizeRequestMapping(
+      doc.requestMapping as IntegrationBuilderRequestMapping | null | undefined
+    ),
+    responseMapping: normalizeResponseMapping(
+      doc.responseMapping as IntegrationBuilderResponseMapping | null | undefined
+    ),
+    configFields: normalizeConfigFields(doc.configFields as IntegrationBuilderConfigField[] | null | undefined),
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : "",
   };
