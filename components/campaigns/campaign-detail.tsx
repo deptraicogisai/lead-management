@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Ban,
@@ -8,17 +9,16 @@ import {
   Copy,
   ExternalLink,
   Filter,
-  LayoutGrid,
   Pencil,
   Plug,
   Plus,
   Settings,
   Settings2,
-  Shield,
   Trash2,
 } from "lucide-react";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { IconActionButton } from "@/components/ui/action-buttons";
+import { CampaignIntegrationConfigForm } from "@/components/campaigns/campaign-integration-config-form";
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
@@ -47,25 +47,43 @@ import {
   type CampaignRecord,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
+import {
+  buildIntegrationConfigDefaults,
+  collectIntegrationConfigFieldErrors,
+} from "@/lib/campaign-integration-config";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
 import type { PresentListRecord } from "@/lib/present-list";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 type CampaignTab = "general" | "duplicates" | "filters" | "schedule" | "integration";
-type FilterSubTab = "general-filters" | "pl-dnpl" | "filter-by-publishers" | "iclear-filter";
+type FilterSubTab = "general-filters" | "pl-dnpl";
+
+const campaignTabIds: CampaignTab[] = ["general", "duplicates", "filters", "schedule", "integration"];
+const filterSubTabIds: FilterSubTab[] = ["general-filters", "pl-dnpl"];
+
+function resolveCampaignTab(tab: string | null): CampaignTab {
+  return campaignTabIds.includes(tab as CampaignTab) ? (tab as CampaignTab) : "general";
+}
+
+function resolveFilterSubTab(tab: string | null): FilterSubTab {
+  return filterSubTabIds.includes(tab as FilterSubTab) ? (tab as FilterSubTab) : "general-filters";
+}
 type CampaignDetailProps = {
   campaignId: string;
 };
 
 export function CampaignDetail({ campaignId }: CampaignDetailProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeTab = resolveCampaignTab(searchParams.get("tab"));
+  const filterSubTab = resolveFilterSubTab(searchParams.get("filterTab"));
   const [campaign, setCampaign] = useState<CampaignRecord | null>(null);
   useBreadcrumbLabel(campaign ? `[${campaign.displayId}] ${campaign.name}` : null);
   const [verticalFields, setVerticalFields] = useState<ApiFieldConfig[]>([]);
   const [presentLists, setPresentLists] = useState<PresentListRecord[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationBuilderRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<CampaignTab>("general");
-  const [filterSubTab, setFilterSubTab] = useState<FilterSubTab>("general-filters");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [generalForm, setGeneralForm] = useState({
@@ -78,14 +96,43 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [duplicatesForm, setDuplicatesForm] = useState(campaign?.duplicates);
   const [selectedPlDnplIds, setSelectedPlDnplIds] = useState<string[]>([]);
   const [copyPlDnplToOtherCampaigns, setCopyPlDnplToOtherCampaigns] = useState(false);
+  const [buyerPlDnplListIds, setBuyerPlDnplListIds] = useState<string[]>([]);
+  const [buyerIntegrationIds, setBuyerIntegrationIds] = useState<string[]>([]);
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [integrationForm, setIntegrationForm] = useState({
     integrationId: "",
-    postUrl: "",
-    postTimeout: "90",
+    configValues: {} as Record<string, string>,
   });
+  const [integrationSelectError, setIntegrationSelectError] = useState("");
+  const [integrationFieldErrors, setIntegrationFieldErrors] = useState<Record<string, string>>({});
+
+  const updateSearchParams = (updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const handleTabChange = (tabId: CampaignTab) => {
+    updateSearchParams({
+      tab: tabId === "general" ? null : tabId,
+    });
+  };
+
+  const handleFilterSubTabChange = (subTabId: FilterSubTab) => {
+    updateSearchParams({
+      tab: "filters",
+      filterTab: subTabId === "general-filters" ? null : subTabId,
+    });
+  };
 
   const loadCampaign = useCallback(async () => {
     setIsLoading(true);
@@ -102,17 +149,17 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       });
       setIntegrationForm({
         integrationId: data.integrationId ?? "",
-        postUrl: data.integrationSettings?.postUrl ?? "",
-        postTimeout: String(data.integrationSettings?.postTimeout ?? 90),
+        configValues: data.integrationSettings?.configValues ?? {},
       });
       setDuplicatesForm(data.duplicates);
       setSelectedPlDnplIds(data.plDnplListIds);
       setCopyPlDnplToOtherCampaigns(data.copyPlDnplToOtherCampaigns);
 
-      const [fieldsRes, listsRes, integrationsRes] = await Promise.all([
+      const [fieldsRes, listsRes, integrationsRes, buyerRes] = await Promise.all([
         fetch(`/api/industries/${encodeURIComponent(data.verticalId)}/fields`),
         fetch(`/api/present-lists?productId=${encodeURIComponent(data.verticalId)}&pageSize=1000`),
         fetch("/api/integration-builder"),
+        fetch(`/api/buyers/${encodeURIComponent(data.buyerId)}`),
       ]);
 
       if (fieldsRes.ok) {
@@ -142,6 +189,18 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       if (integrationsRes.ok) {
         setIntegrations((await integrationsRes.json()) as IntegrationBuilderRecord[]);
       }
+
+      if (buyerRes.ok) {
+        const buyer = (await buyerRes.json()) as {
+          plDnplListIds?: string[];
+          integrationIds?: string[];
+        };
+        setBuyerPlDnplListIds(buyer.plDnplListIds ?? []);
+        setBuyerIntegrationIds(buyer.integrationIds ?? []);
+      } else {
+        setBuyerPlDnplListIds([]);
+        setBuyerIntegrationIds([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +214,94 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const fieldOptionsListByName = useMemo(() => {
     return new Map(verticalFields.map((field) => [field.fieldName, field.options ?? []]));
   }, [verticalFields]);
+
+  const selectedIntegration = useMemo(
+    () => integrations.find((item) => item.id === integrationForm.integrationId) ?? null,
+    [integrationForm.integrationId, integrations]
+  );
+
+  const integrationConfigFields = selectedIntegration?.configFields ?? [];
+
+  const availableBuyerIntegrations = useMemo(() => {
+    if (!campaign) return [];
+
+    const allowedIds = new Set(buyerIntegrationIds);
+    return integrations.filter((item) => allowedIds.has(item.id));
+  }, [buyerIntegrationIds, campaign, integrations]);
+
+  useEffect(() => {
+    if (!selectedIntegration) return;
+
+    setIntegrationForm((current) => {
+      if (current.integrationId !== selectedIntegration.id) return current;
+
+      return {
+        ...current,
+        configValues: buildIntegrationConfigDefaults(
+          selectedIntegration.configFields,
+          current.configValues
+        ),
+      };
+    });
+  }, [selectedIntegration]);
+
+  const handleIntegrationChange = (nextId: string) => {
+    const match = availableBuyerIntegrations.find((item) => item.id === nextId) ?? null;
+    setIntegrationSelectError("");
+    setIntegrationFieldErrors({});
+    setIntegrationForm({
+      integrationId: nextId,
+      configValues: buildIntegrationConfigDefaults(
+        match?.configFields ?? [],
+        nextId === campaign?.integrationId ? integrationForm.configValues : undefined
+      ),
+    });
+  };
+
+  const handleIntegrationConfigValueChange = (variableName: string, value: string) => {
+    setIntegrationFieldErrors((current) => {
+      if (!current[variableName]) return current;
+      const next = { ...current };
+      delete next[variableName];
+      return next;
+    });
+    setIntegrationForm((current) => ({
+      ...current,
+      configValues: {
+        ...current.configValues,
+        [variableName]: value,
+      },
+    }));
+  };
+
+  const handleSaveIntegration = () => {
+    if (!selectedIntegration) {
+      setIntegrationSelectError("Please select an integration.");
+      return;
+    }
+
+    const fieldErrors = collectIntegrationConfigFieldErrors(
+      selectedIntegration.configFields,
+      integrationForm.configValues
+    );
+    if (Object.keys(fieldErrors).length > 0) {
+      setIntegrationSelectError("");
+      setIntegrationFieldErrors(fieldErrors);
+      return;
+    }
+
+    setIntegrationSelectError("");
+    setIntegrationFieldErrors({});
+
+    void saveSection(
+      "integration",
+      {
+        integrationId: integrationForm.integrationId,
+        configValues: integrationForm.configValues,
+      },
+      "Integration settings saved successfully."
+    );
+  };
 
   const saveSection = async (
     section: CampaignTab,
@@ -177,6 +324,15 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       }
 
       setCampaign(result as CampaignRecord);
+      if (section === "integration") {
+        const data = result as CampaignRecord;
+        setIntegrationForm({
+          integrationId: data.integrationId ?? "",
+          configValues: data.integrationSettings?.configValues ?? {},
+        });
+        setIntegrationSelectError("");
+        setIntegrationFieldErrors({});
+      }
       toast.success(successMessage);
       return true;
     } catch {
@@ -318,7 +474,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
                   activeTab === tab.id
@@ -455,8 +611,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                 [
                   { id: "general-filters" as const, label: "General Filters", icon: Filter },
                   { id: "pl-dnpl" as const, label: "PL/DNPL", icon: Ban },
-                  { id: "filter-by-publishers" as const, label: "Filter by Publishers", icon: LayoutGrid },
-                  { id: "iclear-filter" as const, label: "iClear Filter", icon: Shield },
                 ] as const
               ).map((tab) => {
                 const Icon = tab.icon;
@@ -464,7 +618,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setFilterSubTab(tab.id)}
+                    onClick={() => handleFilterSubTabChange(tab.id)}
                     className={cn(
                       "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium",
                       filterSubTab === tab.id
@@ -499,26 +653,27 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               )}
             >
             {filterSubTab === "general-filters" ? (
-              <GeneralFiltersGrid
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Enabled general filters are applied before a lead is posted to the buyer. Multi Select fields use Included and Excluded lists.
+                </p>
+                <GeneralFiltersGrid
                 filters={campaign.generalFilters}
                 fieldOptionsListByName={fieldOptionsListByName}
                 onPatchFilter={updateGeneralFilter}
                 onSetMultiSelectPairEnabled={setMultiSelectPairEnabled}
               />
-            ) : filterSubTab === "pl-dnpl" ? (
+              </>
+            ) : (
               <CampaignPlDnplSettings
                 buyerId={campaign.buyerId}
                 presentLists={presentLists}
-                buyerPlDnplListIds={[]}
+                buyerPlDnplListIds={buyerPlDnplListIds}
                 selectedIds={selectedPlDnplIds}
                 copyToOtherCampaigns={copyPlDnplToOtherCampaigns}
                 onSelectedIdsChange={setSelectedPlDnplIds}
                 onCopyToOtherCampaignsChange={setCopyPlDnplToOtherCampaigns}
               />
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                Coming soon.
-              </div>
             )}
             </DualSaveBar>
           </div>
@@ -618,32 +773,22 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
         {activeTab === "integration" ? (
           <div className="mt-6 max-w-4xl space-y-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
-                  <FieldLabel htmlFor="integration-select" label="Integration" />
-                  <div className="flex min-w-0 items-center gap-2">
+                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-start">
+                  <FieldLabel htmlFor="integration-select" label="Integration" required />
+                  <div>
+                    <div className="flex min-w-0 items-center gap-2">
                     <select
                       id="integration-select"
                       value={integrationForm.integrationId}
-                      onChange={(e) => {
-                        const nextId = e.target.value;
-                        const match = integrations.find((item) => item.id === nextId);
-                        const suggestedUrl = match?.requestMapping?.requestUrl ?? "";
-                        setIntegrationForm((c) => ({
-                          ...c,
-                          integrationId: nextId,
-                          postUrl: c.postUrl || suggestedUrl,
-                        }));
-                      }}
+                      onChange={(e) => handleIntegrationChange(e.target.value)}
                       className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
                     >
                       <option value="">Please select integration</option>
-                      {integrations
-                        .filter((item) => item.verticalId === campaign.verticalId)
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            [{item.displayId}] {item.name} ({item.postingType})
-                          </option>
-                        ))}
+                      {availableBuyerIntegrations.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          [{item.displayId}] {item.name} ({item.productLabel})
+                        </option>
+                      ))}
                     </select>
                     <Link
                       href={`/buyers/${encodeURIComponent(campaign.buyerId)}?tab=integrations`}
@@ -671,50 +816,30 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                         <Settings2 size={16} />
                       </span>
                     )}
+                    </div>
+                    <FormError error={integrationSelectError} />
+                    {availableBuyerIntegrations.length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        No integrations are assigned to this buyer. Configure them in Buyer Integrations.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
-                  <FieldLabel htmlFor="integration-url" label="URL" />
-                  <Input
-                    id="integration-url"
-                    value={integrationForm.postUrl}
-                    onChange={(e) => setIntegrationForm((c) => ({ ...c, postUrl: e.target.value }))}
-                    placeholder="https://example.com/post"
+                {integrationForm.integrationId ? (
+                  <CampaignIntegrationConfigForm
+                    fields={integrationConfigFields}
+                    values={integrationForm.configValues}
+                    errors={integrationFieldErrors}
+                    onChange={handleIntegrationConfigValueChange}
                   />
-                </div>
-
-                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
-                  <FieldLabel htmlFor="integration-timeout" label="Post Timeout" />
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="integration-timeout"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={integrationForm.postTimeout}
-                      onChange={(e) => setIntegrationForm((c) => ({ ...c, postTimeout: e.target.value }))}
-                      className="max-w-[8rem]"
-                    />
-                    <span className="text-sm text-slate-500">s</span>
-                  </div>
-                </div>
+                ) : null}
 
             <div className="flex flex-wrap gap-3">
               <PrimaryButton
                 type="button"
                 disabled={isSaving}
-                onClick={() =>
-                  void saveSection(
-                    "integration",
-                    {
-                      integrationId: integrationForm.integrationId,
-                      postUrl: integrationForm.postUrl,
-                      postTimeout: integrationForm.postTimeout,
-                    },
-                    "Integration settings saved successfully."
-                  )
-                }
+                onClick={handleSaveIntegration}
                 className="bg-emerald-800 hover:bg-emerald-700"
               >
                 {isSaving ? "Saving..." : "Save Integration Settings"}

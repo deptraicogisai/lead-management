@@ -141,6 +141,23 @@ function normalizeComparableValue(value: unknown) {
   return "";
 }
 
+function readPayloadFieldValue(payload: Record<string, unknown>, fieldName: string) {
+  const trimmed = fieldName.trim();
+  if (!trimmed) return undefined;
+  if (Object.prototype.hasOwnProperty.call(payload, trimmed)) {
+    return payload[trimmed];
+  }
+
+  const target = trimmed.toLowerCase();
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.trim().toLowerCase() === target) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 export function evaluateGeneralFiltersForPayload(
   payload: Record<string, unknown>,
   filters: CampaignGeneralFilter[],
@@ -151,7 +168,7 @@ export function evaluateGeneralFiltersForPayload(
   for (const filter of filters) {
     if (!filter.enabled) continue;
 
-    const value = payload[filter.fieldName];
+    const value = readPayloadFieldValue(payload, filter.fieldName);
     const label = filter.description?.trim() || filter.fieldName;
     const options = optionsByFieldName.get(filter.fieldName) ?? [];
 

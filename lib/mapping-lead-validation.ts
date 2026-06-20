@@ -186,6 +186,52 @@ export function buildLeadRejectResponse(reasons: string[]) {
   };
 }
 
+export function formatLeadRejectResponseBody(body: Record<string, unknown> | null | undefined) {
+  if (!body) {
+    return buildLeadRejectResponse([]);
+  }
+
+  return {
+    status: typeof body.status === "number" ? body.status : 2,
+    status_text: typeof body.status_text === "string" ? body.status_text : "reject",
+    reasons: Array.isArray(body.reasons) ? body.reasons : [],
+  };
+}
+
+export function formatBuyerPostResponseBody(params: {
+  buyerStatus: string;
+  price?: number | null;
+  redirectUrl?: string | null;
+  rejectReason?: string | null;
+  errorReason?: string | null;
+}) {
+  if (params.buyerStatus === "Accept") {
+    const response: Record<string, unknown> = {
+      status: 1,
+      status_text: "Sold",
+    };
+
+    if (params.price !== null && params.price !== undefined) {
+      response.price = params.price;
+    }
+
+    const redirectUrl = params.redirectUrl?.trim() ?? "";
+    if (redirectUrl) {
+      response.redirect_url = redirectUrl;
+    }
+
+    return response;
+  }
+
+  const reasons = [params.rejectReason, params.errorReason]
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean);
+
+  return formatLeadRejectResponseBody(
+    buildLeadRejectResponse(reasons.length > 0 ? reasons : ["Buyer rejected the lead."]) as Record<string, unknown>
+  );
+}
+
 export async function validateMappingIntakeSettings(
   params: {
     mappingId: string;

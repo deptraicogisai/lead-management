@@ -12,6 +12,7 @@ const pingTreeSchema = new Schema(
     activeCampaignIds: { type: [String], default: [] },
     inactiveCampaignIds: { type: [String], default: [] },
     campaignPriorities: { type: Map, of: Number, default: {} },
+    campaignTestMocks: { type: Map, of: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

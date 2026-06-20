@@ -9,8 +9,11 @@ import {
   Crosshair,
   Filter,
   Search,
+  Settings2,
 } from "lucide-react";
 import { Input } from "@/components/ui/form-controls";
+import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
+import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import { LoadingOverlay } from "@/components/ui/loading-indicator";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
@@ -220,6 +223,7 @@ function ActiveCampaignCard({
   onRemove,
   onMoveUp,
   onMoveDown,
+  onConfigureMock,
 }: {
   card: PingTreeCampaignCard;
   index: number;
@@ -233,6 +237,7 @@ function ActiveCampaignCard({
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onConfigureMock: () => void;
 }) {
   return (
     <div
@@ -273,6 +278,14 @@ function ActiveCampaignCard({
             </button>
             <button
               type="button"
+              onClick={onConfigureMock}
+              title="Configure test lead mock response"
+              className={cn("inline-flex h-8 w-8 items-center justify-center rounded", greenControlClass)}
+            >
+              <Settings2 size={16} />
+            </button>
+            <button
+              type="button"
               onClick={onRemove}
               className={cn("rounded px-2.5 py-1.5 text-xs font-medium", greenControlClass)}
             >
@@ -302,6 +315,7 @@ function InactiveCampaignCard({
   onSetPriority,
   onMoveToTop,
   onMoveToBottom,
+  onConfigureMock,
 }: {
   card: PingTreeCampaignCard;
   priority: number;
@@ -313,6 +327,7 @@ function InactiveCampaignCard({
   onSetPriority: () => void;
   onMoveToTop: () => void;
   onMoveToBottom: () => void;
+  onConfigureMock: () => void;
 }) {
   return (
     <div
@@ -333,6 +348,13 @@ function InactiveCampaignCard({
 
       <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2 py-1.5 dark:border-slate-800">
         <DragHandle onPointerDown={onGripPointerDown} compact />
+        <button
+          type="button"
+          onClick={onConfigureMock}
+          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
+        >
+          Test mock
+        </button>
         <button
           type="button"
           disabled={!canMoveToTop}
@@ -376,6 +398,8 @@ export function PingTreeSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTabRefreshing, setIsTabRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [mockModalCard, setMockModalCard] = useState<PingTreeCampaignCard | null>(null);
+  const [isSavingMock, setIsSavingMock] = useState(false);
 
   const pingTreeListRef = useRef(pingTreeList);
   const notInPingTreeRef = useRef(notInPingTree);
@@ -513,6 +537,78 @@ export function PingTreeSettingsPage() {
     dropTargetRef.current = null;
     setActiveTab(tab);
   };
+
+  const updateCardTestMock = useCallback((campaignId: string, mock: CampaignTestMockResponse | null) => {
+    const apply = (cards: PingTreeCampaignCard[]) =>
+      cards.map((card) => (card.id === campaignId ? { ...card, testMock: mock } : card));
+
+    setPingTreeList((current) => apply(current));
+    setNotInPingTree((current) => apply(current));
+    pingTreeListRef.current = apply(pingTreeListRef.current);
+    notInPingTreeRef.current = apply(notInPingTreeRef.current);
+  }, []);
+
+  const saveCampaignTestMock = useCallback(
+    async (campaignId: string, mock: CampaignTestMockResponse) => {
+      if (!tree) return;
+
+      setIsSavingMock(true);
+      try {
+        const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignTestMocks: {
+              [campaignId]: mock,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          toast.error("Failed to save test mock.");
+          return;
+        }
+
+        updateCardTestMock(campaignId, mock);
+        toast.success("Test mock saved.");
+        setMockModalCard(null);
+      } finally {
+        setIsSavingMock(false);
+      }
+    },
+    [tree, updateCardTestMock]
+  );
+
+  const clearCampaignTestMock = useCallback(
+    async (campaignId: string) => {
+      if (!tree) return;
+
+      setIsSavingMock(true);
+      try {
+        const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignTestMocks: {
+              [campaignId]: null,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          toast.error("Failed to clear test mock.");
+          return;
+        }
+
+        updateCardTestMock(campaignId, null);
+        toast.success("Test mock cleared.");
+        setMockModalCard(null);
+      } finally {
+        setIsSavingMock(false);
+      }
+    },
+    [tree, updateCardTestMock]
+  );
 
   const saveTree = useCallback(
     async (nextActiveIds: string[], nextInactiveIds: string[], nextPriorities: Record<string, number>) => {
@@ -907,6 +1003,7 @@ export function PingTreeSettingsPage() {
                         onRemove={() => insertIntoInactive(card.id, 0)}
                         onMoveUp={() => moveActiveByStep(card.id, "up")}
                         onMoveDown={() => moveActiveByStep(card.id, "down")}
+                        onConfigureMock={() => setMockModalCard(card)}
                       />
                     </div>
                   );
@@ -980,6 +1077,7 @@ export function PingTreeSettingsPage() {
                               }
                               onMoveToTop={() => moveInactiveToEdge(card.id, "top")}
                               onMoveToBottom={() => moveInactiveToEdge(card.id, "bottom")}
+                              onConfigureMock={() => setMockModalCard(card)}
                             />
                           </div>
                         );
@@ -1011,6 +1109,15 @@ export function PingTreeSettingsPage() {
           <p className="text-xs text-slate-500">${draggedCard.minPrice.toFixed(2)}</p>
         </div>
       ) : null}
+
+      <CampaignTestMockModal
+        open={Boolean(mockModalCard)}
+        card={mockModalCard}
+        isSaving={isSavingMock}
+        onClose={() => setMockModalCard(null)}
+        onSave={saveCampaignTestMock}
+        onClear={clearCampaignTestMock}
+      />
     </div>
   );
 }

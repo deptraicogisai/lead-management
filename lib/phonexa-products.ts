@@ -24,6 +24,11 @@ export type PhonexaProductDocument = {
   pingpostData: PhonexaProductField[];
   requestSamples: Record<string, Record<string, string>> | null;
   responseSamples: Record<string, string> | null;
+  codeSnippets: Array<{
+    language: string;
+    request: string | null;
+    response: string | null;
+  }>;
   syncedAt: string;
   fromCache: boolean;
 };
@@ -45,10 +50,72 @@ type RawPhonexaResponse = {
     requestLinks?: Record<string, string>;
     requestSamples?: Record<string, Record<string, string>>;
     responseSamples?: Record<string, string>;
+    requestSample?: Record<string, Record<string, string>> | Record<string, string> | string;
+    responseSample?: Record<string, string> | string;
   };
   code?: number;
   status?: number;
 };
+
+function normalizeRequestSamples(value: unknown): Record<string, Record<string, string>> | null {
+  if (!value || typeof value !== "object") return null;
+
+  const input = value as Record<string, unknown>;
+  const normalized: Record<string, Record<string, string>> = {};
+
+  for (const [language, sample] of Object.entries(input)) {
+    if (!sample) continue;
+
+    if (typeof sample === "string") {
+      normalized[language] = { sample };
+      continue;
+    }
+
+    if (typeof sample !== "object") continue;
+
+    const sampleObject = sample as Record<string, unknown>;
+    const entries = Object.entries(sampleObject).filter(([, content]) => typeof content === "string");
+    if (entries.length === 0) continue;
+    normalized[language] = Object.fromEntries(entries) as Record<string, string>;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function normalizeResponseSamples(value: unknown): Record<string, string> | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    return { default: value };
+  }
+
+  if (typeof value !== "object") return null;
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, content]) => typeof content === "string");
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function buildCodeSnippets(
+  requestSamples: Record<string, Record<string, string>> | null,
+  responseSamples: Record<string, string> | null
+) {
+  const languages = new Set<string>([
+    ...Object.keys(requestSamples ?? {}),
+    ...Object.keys(responseSamples ?? {}),
+  ]);
+
+  return [...languages]
+    .sort((left, right) => left.localeCompare(right))
+    .map((language) => ({
+      language,
+      request: requestSamples?.[language]
+        ? Object.entries(requestSamples[language])
+            .map(([key, value]) => `${key}:\n${value}`)
+            .join("\n\n")
+        : null,
+      response: responseSamples?.[language] ?? null,
+    }));
+}
 
 function parseFieldList(source: Record<string, RawPhonexaField> | RawPhonexaField[] | undefined) {
   if (!source) return [];
@@ -94,6 +161,7 @@ function toDocumentResponse(
     pingpostData: doc.pingpostData ?? [],
     requestSamples: doc.requestSamples ?? null,
     responseSamples: doc.responseSamples ?? null,
+    codeSnippets: buildCodeSnippets(doc.requestSamples ?? null, doc.responseSamples ?? null),
     syncedAt: doc.syncedAt.toISOString(),
     fromCache,
   };
@@ -137,6 +205,8 @@ export async function getPhonexaProductDocument(
 
   const remote = await fetchFromPhonexaApi(productId);
   const syncedAt = new Date();
+  const requestSamples = normalizeRequestSamples(remote.requestSamples ?? remote.requestSample ?? null);
+  const responseSamples = normalizeResponseSamples(remote.responseSamples ?? remote.responseSample ?? null);
   const document = {
     productId,
     name: catalogProduct.name,
@@ -146,8 +216,8 @@ export async function getPhonexaProductDocument(
     fields: parseFieldList(remote.data),
     pingData: parseFieldList(remote.pingData),
     pingpostData: parseFieldList(remote.pingpostData),
-    requestSamples: remote.requestSamples ?? null,
-    responseSamples: remote.responseSamples ?? null,
+    requestSamples,
+    responseSamples,
     syncedAt,
   };
 

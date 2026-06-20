@@ -45,7 +45,6 @@ export default function IntegrationBuilderPage() {
   const [idFilter, setIdFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [postingTypeFilter, setPostingTypeFilter] = useState("All");
   const [productFilter, setProductFilter] = useState("All");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -113,20 +112,19 @@ export default function IntegrationBuilderPage() {
         : true;
       const matchesName = nameFilter.trim() ? record.name.toLowerCase().includes(nameFilter.trim().toLowerCase()) : true;
       const matchesStatus = statusFilter === "All" ? true : record.status === statusFilter;
-      const matchesPostingType = postingTypeFilter === "All" ? true : record.postingType === postingTypeFilter;
       const matchesProduct = productFilter === "All" ? true : record.verticalId === productFilter;
 
       const search = tableFilter.trim().toLowerCase();
       const matchesTableFilter = search
-        ? [String(record.displayId), record.name, record.productLabel, record.product, record.postingType, record.status]
+        ? [String(record.displayId), record.name, record.productLabel, record.product, record.status]
             .join(" ")
             .toLowerCase()
             .includes(search)
         : true;
 
-      return matchesId && matchesName && matchesStatus && matchesPostingType && matchesProduct && matchesTableFilter;
+      return matchesId && matchesName && matchesStatus && matchesProduct && matchesTableFilter;
     });
-  }, [records, idFilter, nameFilter, statusFilter, postingTypeFilter, productFilter, tableFilter]);
+  }, [records, idFilter, nameFilter, statusFilter, productFilter, tableFilter]);
 
   const columns: Column<IntegrationBuilderRecord>[] = [
     {
@@ -165,11 +163,6 @@ export default function IntegrationBuilderPage() {
       key: "status",
       label: "Status",
       render: (row) => <StatusBadge status={row.status} />,
-    },
-    {
-      key: "postingType",
-      label: "Posting Type",
-      render: (row) => <StatusBadge status={row.postingType} />,
     },
     {
       key: "product",
@@ -232,7 +225,6 @@ export default function IntegrationBuilderPage() {
     setIdFilter("");
     setNameFilter("");
     setStatusFilter("All");
-    setPostingTypeFilter("All");
     setProductFilter("All");
     setTableFilter("");
     setSelectedIds([]);
@@ -374,18 +366,6 @@ export default function IntegrationBuilderPage() {
                   <option value="Active">Active</option>
                   <option value="Draft">Draft</option>
                   <option value="Paused">Paused</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Posting Type</label>
-                <select
-                  value={postingTypeFilter}
-                  onChange={(event) => setPostingTypeFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                >
-                  <option value="All">All</option>
-                  <option value="Direct Post">Direct Post</option>
-                  <option value="Ping Post">Ping Post</option>
                 </select>
               </div>
               <div>

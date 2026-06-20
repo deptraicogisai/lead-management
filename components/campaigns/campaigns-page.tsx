@@ -12,6 +12,7 @@ import { buildEmptySearchDateRange } from "@/lib/date-range";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
+import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -21,6 +22,7 @@ import {
   formatCampaignDateTime,
   type CampaignListRecord,
 } from "@/lib/campaign";
+import { toast } from "@/lib/toast";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type VerticalOption = { id: string; name: string; label: string };
@@ -63,6 +65,10 @@ export function CampaignsPage() {
   const [draftFilters, setDraftFilters] = useState(createDefaultCampaignFilters);
   const [appliedFilters, setAppliedFilters] = useState(createDefaultCampaignFilters);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteMode, setDeleteMode] = useState<"single" | "bulk" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CampaignListRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -143,6 +149,81 @@ export function CampaignsPage() {
     );
   }, [rows, tableSearch]);
 
+  const toggleRow = (rowId: string) => {
+    setSelectedIds((current) => (current.includes(rowId) ? current.filter((id) => id !== rowId) : [...current, rowId]));
+  };
+
+  const toggleAllRows = (checked: boolean) => {
+    setSelectedIds(checked ? filteredRows.map((row) => row.id) : []);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setDeleteMode(null);
+    setDeleteTarget(null);
+  };
+
+  const openSingleDelete = (row: CampaignListRecord) => {
+    setDeleteTarget(row);
+    setDeleteMode("single");
+  };
+
+  const openBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setDeleteTarget(null);
+    setDeleteMode("bulk");
+  };
+
+  const handleDelete = async () => {
+    const idsToDelete =
+      deleteMode === "bulk" ? selectedIds : deleteTarget ? [deleteTarget.id] : [];
+
+    if (idsToDelete.length === 0) return;
+
+    setIsDeleting(true);
+
+    try {
+      const results = await Promise.all(
+        idsToDelete.map(async (id) => {
+          const response = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, { method: "DELETE" });
+          const result = (await response.json().catch(() => null)) as { message?: string } | null;
+          return { id, ok: response.ok, message: result?.message };
+        })
+      );
+
+      const succeeded = results.filter((result) => result.ok);
+      const failed = results.filter((result) => !result.ok);
+
+      if (succeeded.length === 0) {
+        toast.error(failed[0]?.message ?? "Failed to delete campaign.");
+        return;
+      }
+
+      const deletedIds = new Set(succeeded.map((result) => result.id));
+      setSelectedIds((current) => current.filter((id) => !deletedIds.has(id)));
+      setDeleteMode(null);
+      setDeleteTarget(null);
+
+      if (failed.length > 0) {
+        toast.error(`Deleted ${succeeded.length} campaign(s). ${failed.length} failed.`);
+      } else if (deleteMode === "bulk") {
+        toast.success(`Deleted ${succeeded.length} campaign(s).`);
+      } else {
+        toast.success("Campaign deleted.");
+      }
+
+      if (rows.length <= succeeded.length && page > 1) {
+        setPage((current) => current - 1);
+      } else {
+        setReloadKey((current) => current + 1);
+      }
+    } catch {
+      toast.error("Failed to delete campaign.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const columns: Column<CampaignListRecord>[] = [
     {
       key: "id",
@@ -176,6 +257,28 @@ export function CampaignsPage() {
       label: "Created",
       sortValue: (row) => new Date(row.createdAt).getTime(),
       render: (row) => formatCampaignDateTime(row.createdAt),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      sortable: false,
+      render: (row) => (
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/campaigns/${row.id}`}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            View
+          </Link>
+          <button
+            type="button"
+            onClick={() => openSingleDelete(row)}
+            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+          >
+            Delete
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -276,6 +379,7 @@ export function CampaignsPage() {
                 const cleared = createDefaultCampaignFilters();
                 setDraftFilters(cleared);
                 setAppliedFilters(cleared);
+                setSelectedIds([]);
                 setPage(1);
               }}
             />
@@ -295,15 +399,26 @@ export function CampaignsPage() {
             totalItems={totalItems}
             tableFilter={tableSearch}
             onTableFilterChange={setTableSearch}
+            selectedCount={selectedIds.length}
             actions={
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-              >
-                <Plus size={15} />
-                Create New Campaign
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={openBulkDelete}
+                  disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
+                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
+                >
+                  Delete Selected ({selectedIds.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
+                >
+                  <Plus size={15} />
+                  Create New Campaign
+                </button>
+              </>
             }
           />
 
@@ -312,7 +427,14 @@ export function CampaignsPage() {
             isRefreshing={isRefreshing}
             loadingMessage="Loading campaigns..."
           >
-            <DataTable columns={columns} rows={filteredRows} emptyMessage="No campaigns found." />
+            <DataTable
+              columns={columns}
+              rows={filteredRows}
+              emptyMessage="No campaigns found."
+              selectedRowIds={selectedIds}
+              onToggleRow={toggleRow}
+              onToggleAllRows={toggleAllRows}
+            />
           </ListTableContainer>
         </div>
 
@@ -340,6 +462,39 @@ export function CampaignsPage() {
           setIsCreateOpen(false);
           setReloadKey((key) => key + 1);
         }}
+      />
+
+      <Modal
+        open={deleteMode !== null}
+        title={deleteMode === "bulk" ? "Delete Selected Campaigns" : "Delete Campaign"}
+        description={
+          deleteMode === "bulk"
+            ? `Delete ${selectedIds.length} selected campaign(s)? This action cannot be undone.`
+            : deleteTarget
+              ? `Delete campaign "${deleteTarget.name}"? This action cannot be undone.`
+              : undefined
+        }
+        onClose={closeDeleteModal}
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={closeDeleteModal}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => void handleDelete()}
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </>
+        }
       />
     </div>
   );

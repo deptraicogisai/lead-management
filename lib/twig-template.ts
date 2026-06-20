@@ -1,4 +1,8 @@
 import {
+  normalizeConfigFields,
+  type IntegrationBuilderConfigField,
+} from "@/lib/integration-builder";
+import {
   LEAD_SYSTEM_TEMPLATE_VARIABLES,
   buildLeadTemplateSuggestions,
   toLeadFieldTemplate,
@@ -160,7 +164,7 @@ function matchesTemplateQuery(item: TwigTemplateSuggestion, query: string) {
 }
 
 const TWIG_BLOCK_PATTERN = /\{\{([^{}]*)\}\}/g;
-const TWIG_EXPRESSION_PATTERN = /^(lead|config|mapped)\.([a-zA-Z][a-zA-Z0-9_]*)$/;
+const TWIG_EXPRESSION_PATTERN = /^(lead|config|mapped)\.([a-zA-Z][a-zA-Z0-9_]*)$/i;
 
 const LEAD_SYSTEM_PATHS = new Set(
   LEAD_SYSTEM_TEMPLATE_VARIABLES.map((item) =>
@@ -170,6 +174,15 @@ const LEAD_SYSTEM_PATHS = new Set(
       .trim()
   )
 );
+
+export function buildTwigConfigFieldsFromIntegration(
+  configFields?: IntegrationBuilderConfigField[] | null
+): IntegrationConfigTemplateField[] {
+  return normalizeConfigFields(configFields).map((field) => ({
+    variableName: field.variableName,
+    label: field.label,
+  }));
+}
 
 export type TwigValidationContext = {
   leadFieldNames: string[];
@@ -326,7 +339,6 @@ export function validateRequestMappingTwigPayload(
 
   requestMapping.dataRows?.forEach((row, index) => {
     const rowLabel = row.name.trim() || `row ${index + 1}`;
-    fields.push({ label: `Data name (${rowLabel})`, value: row.name });
     fields.push({ label: `Data value (${rowLabel})`, value: row.value });
   });
 

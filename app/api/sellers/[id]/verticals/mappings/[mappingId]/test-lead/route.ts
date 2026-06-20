@@ -5,8 +5,9 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { ensureVerticalMappingReferencesMigrated } from "@/lib/models/vertical-mapping";
 import { ensureMappingApiRequest, PUBLISHER_LEAD_ENDPOINT_PATH } from "@/lib/mapping-api-request";
 import { runMappingTestLeadSubmit } from "@/lib/mapping-lead-intake";
-import { listMappingTestLeadLogs } from "@/lib/mapping-test-lead-log";
+import { clearMappingTestLeadLogs, listMappingTestLeadLogs } from "@/lib/mapping-test-lead-log";
 import { buildTestLeadIntakeRuleGroups, buildTestLeadMultiSelectFilters } from "@/lib/mapping-test-lead-intake";
+import { parseMockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import { ensureSellerVerticalMappingFieldsSeededById } from "@/lib/seller-vertical-mapping";
@@ -17,6 +18,11 @@ type Params = { params: Promise<{ id: string; mappingId: string }> };
 type TestLeadSubmitPayload = {
   payload?: Record<string, unknown>;
   saveLead?: boolean;
+  postToBuyer?: boolean;
+  mockBuyerPost?: {
+    buyerPrice?: number | string;
+    responseDelaySeconds?: number | string;
+  };
 };
 
 async function loadMappingContext(sellerId: string, mappingId: string) {
@@ -87,6 +93,8 @@ export async function POST(req: Request, context: Params) {
     const body = (await req.json().catch(() => null)) as TestLeadSubmitPayload | null;
     const payload = body?.payload;
     const saveLead = Boolean(body?.saveLead);
+    const postToBuyer = Boolean(body?.postToBuyer);
+    const mockBuyerPostOptions = postToBuyer ? parseMockBuyerPostOptions(body?.mockBuyerPost) : undefined;
 
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return NextResponse.json({ message: "Payload must be a JSON object." }, { status: 400 });
@@ -97,7 +105,7 @@ export async function POST(req: Request, context: Params) {
       return NextResponse.json({ message: "Seller API not found." }, { status: 404 });
     }
 
-    const result = await runMappingTestLeadSubmit({
+    const submitParams = {
       sellerId: id,
       mappingId,
       mappingDoc: loaded.mapping.toObject(),
@@ -108,9 +116,66 @@ export async function POST(req: Request, context: Params) {
       mappingRef: loaded.mapping._id,
       payload,
       saveLead,
+      postToBuyer,
+      mockBuyerPostOptions,
       endpointUrl: PUBLISHER_LEAD_ENDPOINT_PATH,
+      origin: new URL(req.url).origin,
       userAgent: req.headers.get("user-agent")?.trim() || "Test Lead UI",
-    });
+    };
+
+    if (postToBuyer && saveLead) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const write = (event: Record<string, unknown>) => {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          };
+
+          try {
+            const result = await runMappingTestLeadSubmit({
+              ...submitParams,
+              buyerPostProgress: {
+                onPending: async (attempts) => {
+                  write({ type: "started", attempts });
+                },
+                onProcessing: async (info) => {
+                  write({ type: "processing", ...info });
+                },
+                onAttempt: async (attempt) => {
+                  write({ type: "attempt", attempt });
+                },
+              },
+            });
+
+            write({
+              type: "complete",
+              passed: result.passed,
+              checks: result.checks,
+              reasons: result.reasons,
+              status: result.status,
+              responseBody: result.responseBody,
+              leadSaved: result.leadSaved,
+              saveLead,
+              postToBuyer,
+              log: result.log,
+            });
+          } catch {
+            write({ type: "error", message: "Failed to submit test lead." });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const result = await runMappingTestLeadSubmit(submitParams);
 
     return NextResponse.json({
       passed: result.passed,
@@ -120,9 +185,25 @@ export async function POST(req: Request, context: Params) {
       responseBody: result.responseBody,
       leadSaved: result.leadSaved,
       saveLead,
+      postToBuyer,
       log: result.log,
     });
   } catch {
     return NextResponse.json({ message: "Failed to submit test lead." }, { status: 500 });
+  }
+}
+
+export async function DELETE(_: Request, context: Params) {
+  try {
+    const { id, mappingId } = await context.params;
+    const loaded = await loadMappingContext(id, mappingId);
+    if (!loaded) {
+      return NextResponse.json({ message: "Seller API not found." }, { status: 404 });
+    }
+
+    const cleared = await clearMappingTestLeadLogs(mappingId);
+    return NextResponse.json({ deletedCount: cleared.deletedCount, message: "Logs cleared." });
+  } catch {
+    return NextResponse.json({ message: "Failed to clear logs." }, { status: 500 });
   }
 }

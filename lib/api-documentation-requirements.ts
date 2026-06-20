@@ -1,7 +1,8 @@
-import type {
-  CampaignDuplicatesSettings,
-  CampaignGeneralFilter,
-  CampaignScheduleRule,
+import {
+  getMultiSelectFilterFieldLabel,
+  type CampaignDuplicatesSettings,
+  type CampaignGeneralFilter,
+  type CampaignScheduleRule,
 } from "@/lib/campaign";
 import type { DocumentationField } from "@/lib/api-documentation-content";
 import { getFieldsWithConditions, prettyType } from "@/lib/api-documentation-content";
@@ -60,7 +61,7 @@ function describeDuplicateLines(duplicates: CampaignDuplicatesSettings): string[
 }
 
 function describeFilterLine(filter: CampaignGeneralFilter): string | null {
-  const name = filter.description?.trim() || filter.fieldName;
+  const name = getMultiSelectFilterFieldLabel(filter.description?.trim() || filter.fieldName);
 
   if (filter.dataTypeFilter === "Text" && filter.textValue?.trim()) {
     return `${name} must be "${filter.textValue.trim()}".`;
@@ -76,10 +77,10 @@ function describeFilterLine(filter: CampaignGeneralFilter): string | null {
 
   if (filter.dataTypeFilter === "Multi Select" && (filter.selectedValues?.length ?? 0) > 0) {
     if (filter.multiSelectMode === "excluded") {
-      return `${name} must not contain: ${filter.selectedValues?.join(", ")}.`;
+      return `${name} (Excluded): must not contain: ${filter.selectedValues?.join(", ")}.`;
     }
 
-    return `${name} must contain one of: ${filter.selectedValues?.join(", ")}.`;
+    return `${name} (Included): must contain one of: ${filter.selectedValues?.join(", ")}.`;
   }
 
   return null;

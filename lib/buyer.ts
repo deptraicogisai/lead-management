@@ -16,6 +16,8 @@ export type BuyerListRecord = {
   integrations: string[];
   allowedPublisherIds: string[];
   blockedPublisherIds: string[];
+  plDnplListIds: string[];
+  copyPlDnplToOtherBuyers: boolean;
   questionnaireStatus: "Pending" | "Completed";
   quality: string;
   prepaid: boolean;
@@ -31,6 +33,8 @@ export type BuyerUpdatePayload = BuyerCreatePayload & {
   integrationIds?: string[];
   allowedPublisherIds?: string[];
   blockedPublisherIds?: string[];
+  plDnplListIds?: string[];
+  copyPlDnplToOtherBuyers?: boolean;
 };
 
 export function normalizeBuyerStatus(status?: BuyerStatus) {
@@ -109,6 +113,8 @@ export type BuyerDoc = {
   integrationRefs?: Array<{ toString(): string } | string> | null;
   allowedPublisherRefs?: Array<{ toString(): string } | string> | null;
   blockedPublisherRefs?: Array<{ toString(): string } | string> | null;
+  plDnplListIds?: string[] | null;
+  copyPlDnplToOtherBuyers?: boolean;
   createdAt?: Date | string;
 };
 
@@ -152,6 +158,8 @@ export function toBuyerListRecord(
     integrations: integrationLabels,
     allowedPublisherIds: resolvePublisherRefIds(doc.allowedPublisherRefs),
     blockedPublisherIds: resolvePublisherRefIds(doc.blockedPublisherRefs),
+    plDnplListIds: doc.plDnplListIds ?? [],
+    copyPlDnplToOtherBuyers: Boolean(doc.copyPlDnplToOtherBuyers),
     questionnaireStatus: doc.questionnaireStatus ?? "Pending",
     quality: doc.quality?.trim() || "M",
     prepaid: Boolean(doc.prepaid),

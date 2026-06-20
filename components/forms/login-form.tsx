@@ -59,11 +59,18 @@ export function LoginForm() {
         }),
       });
 
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      const contentType = response.headers.get("content-type") ?? "";
+      const payload = contentType.includes("application/json")
+        ? ((await response.json().catch(() => null)) as { message?: string } | null)
+        : null;
 
       if (!response.ok) {
         setErrors({
-          general: payload?.message ?? "Unable to sign in with the provided credentials.",
+          general:
+            payload?.message ??
+            (response.status === 404
+              ? "Sign-in service is unavailable. Restart the dev server and try again."
+              : "Unable to sign in with the provided credentials."),
         });
         return;
       }

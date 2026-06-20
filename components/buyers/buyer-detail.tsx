@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
@@ -10,6 +10,7 @@ import {
   Globe,
   Info,
   List,
+  ListFilter,
   Megaphone,
   Plug,
   Share2,
@@ -21,21 +22,31 @@ import {
   type SearchableMultiSelectOption,
 } from "@/components/ui/searchable-multi-select";
 import { toast } from "@/lib/toast";
+import { BuyerPlDnplSettings } from "@/components/buyers/buyer-pl-dnpl-settings";
 import {
   normalizeBuyerStatus,
   type BuyerListRecord,
   type BuyerUpdatePayload,
 } from "@/lib/buyer";
 import type { IntegrationOption } from "@/lib/buyer-integrations";
+import type { PresentListRecord } from "@/lib/present-list";
 import { cn } from "@/lib/utils";
 
 const buyerTabs = [
   { id: "global", label: "Global", icon: Globe },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "sources", label: "Sources", icon: Share2 },
+  { id: "pl-dnpl", label: "PL/DNPL", icon: ListFilter },
 ] as const;
 
 type BuyerTabId = (typeof buyerTabs)[number]["id"];
+
+function resolveBuyerTabId(tab: string | null): BuyerTabId {
+  if (buyerTabs.some((item) => item.id === tab)) {
+    return tab as BuyerTabId;
+  }
+  return "global";
+}
 
 type PublisherOption = SearchableMultiSelectOption & {
   name: string;
@@ -80,13 +91,9 @@ type BuyerDetailProps = {
 
 export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activeTabId, setActiveTabId] = useState<BuyerTabId>(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "integrations") return "integrations";
-    if (tab === "sources") return "sources";
-    return "global";
-  });
+  const activeTabId = resolveBuyerTabId(searchParams.get("tab"));
   const [name, setName] = useState(buyer.name);
   const [email, setEmail] = useState(buyer.email);
   const [status, setStatus] = useState<"Active" | "Inactive">(normalizeBuyerStatus(buyer.status));
@@ -100,12 +107,28 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [publisherOptions, setPublisherOptions] = useState<PublisherOption[]>([]);
   const [isLoadingPublishers, setIsLoadingPublishers] = useState(true);
   const [isSavingSources, setIsSavingSources] = useState(false);
+  const [selectedPlDnplIds, setSelectedPlDnplIds] = useState<string[]>(buyer.plDnplListIds);
+  const [copyPlDnplToOtherBuyers, setCopyPlDnplToOtherBuyers] = useState(buyer.copyPlDnplToOtherBuyers);
+  const [presentLists, setPresentLists] = useState<PresentListRecord[]>([]);
+  const [isLoadingPresentLists, setIsLoadingPresentLists] = useState(false);
+  const [isSavingPlDnpl, setIsSavingPlDnpl] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [deleteError, setDeleteError] = useState("");
 
   const activeTab = buyerTabs.find((tab) => tab.id === activeTabId) ?? buyerTabs[0];
+
+  const handleTabChange = (tabId: BuyerTabId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tabId === "global") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tabId);
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   useBreadcrumbLabel(`[${buyer.displayId}] ${name}`);
 
@@ -116,6 +139,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     setSelectedIntegrationIds(buyer.integrationIds);
     setAllowedPublisherIds(buyer.allowedPublisherIds);
     setBlockedPublisherIds(buyer.blockedPublisherIds);
+    setSelectedPlDnplIds(buyer.plDnplListIds);
+    setCopyPlDnplToOtherBuyers(buyer.copyPlDnplToOtherBuyers);
   }, [buyer]);
 
   useEffect(() => {
@@ -185,6 +210,23 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     };
 
     void fetchPublishers();
+  }, []);
+
+  useEffect(() => {
+    const fetchPresentLists = async () => {
+      setIsLoadingPresentLists(true);
+      try {
+        const response = await fetch("/api/present-lists?pageSize=1000");
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as { items: PresentListRecord[] };
+        setPresentLists(payload.items);
+      } finally {
+        setIsLoadingPresentLists(false);
+      }
+    };
+
+    void fetchPresentLists();
   }, []);
 
   const selectedIntegrations = useMemo(
@@ -314,6 +356,34 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
       toast.error("Failed to save sources.");
     } finally {
       setIsSavingSources(false);
+    }
+  };
+
+  const handleSavePlDnpl = async () => {
+    setIsSavingPlDnpl(true);
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plDnplListIds: selectedPlDnplIds,
+          copyPlDnplToOtherBuyers,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(result?.message ?? "Failed to save PL/DNPL settings.");
+        return;
+      }
+
+      toast.success("PL/DNPL settings saved successfully.");
+      router.refresh();
+    } catch {
+      toast.error("Failed to save PL/DNPL settings.");
+    } finally {
+      setIsSavingPlDnpl(false);
     }
   };
 
@@ -547,6 +617,35 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     </div>
   );
 
+  const renderPlDnplTab = () => (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="px-6 py-8">
+        <div className="mx-auto w-full max-w-4xl space-y-6">
+          {isLoadingPresentLists ? (
+            <p className="text-sm text-slate-500">Loading present lists...</p>
+          ) : (
+            <BuyerPlDnplSettings
+              presentLists={presentLists}
+              selectedIds={selectedPlDnplIds}
+              copyToOtherBuyers={copyPlDnplToOtherBuyers}
+              onSelectedIdsChange={setSelectedPlDnplIds}
+              onCopyToOtherBuyersChange={setCopyPlDnplToOtherBuyers}
+            />
+          )}
+
+          <PrimaryButton
+            type="button"
+            disabled={isSavingPlDnpl || isLoadingPresentLists}
+            onClick={() => void handleSavePlDnpl()}
+            className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            {isSavingPlDnpl ? "Saving..." : "Save"}
+          </PrimaryButton>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderPlaceholderTab = () => (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-start gap-4">
@@ -613,7 +712,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTabId(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={cn(
                     "inline-flex items-center gap-2 whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
                     isActive
@@ -635,7 +734,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
             ? renderIntegrationsTab()
             : activeTab.id === "sources"
               ? renderSourcesTab()
-              : renderPlaceholderTab()}
+              : activeTab.id === "pl-dnpl"
+                ? renderPlDnplTab()
+                : renderPlaceholderTab()}
       </section>
     </div>
   );

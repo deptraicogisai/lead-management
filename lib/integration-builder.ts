@@ -1,7 +1,6 @@
 import { normalizeResponseMapping } from "@/lib/response-mapping";
 
 export type IntegrationBuilderStatus = "Active" | "Draft" | "Paused";
-export type IntegrationBuilderPostingType = "Direct Post" | "Ping Post";
 
 export type IntegrationBuilderArrayMappingEntry = {
   fieldName: string;
@@ -55,7 +54,6 @@ export type IntegrationBuilderRecord = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
-  postingType: IntegrationBuilderPostingType;
   verticalId: string;
   product: string;
   productLabel: string;
@@ -72,7 +70,6 @@ type IntegrationBuilderDoc = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
-  postingType: IntegrationBuilderPostingType;
   verticalRef?: { toString(): string } | string | null;
   arrayMappings?: IntegrationBuilderArrayMappingEntry[] | null;
   requestMapping?: IntegrationBuilderRequestMapping | null;
@@ -84,10 +81,10 @@ type IntegrationBuilderDoc = {
 
 export const DEFAULT_CONFIG_FIELDS: IntegrationBuilderConfigField[] = [
   { variableName: "url", label: "URL", type: "string", required: true },
-  { variableName: "timeout", label: "Post timeout", type: "string", required: false },
+  { variableName: "timeout", label: "Post timeout (seconds)", type: "number", required: false },
 ];
 
-function normalizeConfigFields(
+export function normalizeConfigFields(
   configFields?: IntegrationBuilderConfigField[] | null
 ): IntegrationBuilderConfigField[] {
   const savedFields = Array.isArray(configFields) ? configFields : [];
@@ -180,7 +177,6 @@ export function toIntegrationBuilderRecord(
     displayId: doc.displayId,
     name: doc.name,
     status: doc.status,
-    postingType: doc.postingType,
     verticalId,
     product,
     productLabel: formatProductLabel(product, verticalIndex),

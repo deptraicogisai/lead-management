@@ -10,6 +10,7 @@ import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
+import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
 
 type MappingApiField = {
   _id?: { toString(): string };
@@ -493,11 +494,50 @@ export async function handleSellerLeadPost(req: Request) {
     }
 
     const leadId = createdLead._id?.toString() ?? "";
-    const responsePayload = {
-      status: 1,
-      status_text: "Accepted",
-      redirect_url: `${new URL(req.url).origin}/reports/publisher/lead-details?leadId=${encodeURIComponent(leadId)}`,
-    };
+    const origin = new URL(req.url).origin;
+
+    const distribution = await distributeLeadAfterIntake({
+      sellerLeadId: leadId,
+      sellerRefId: seller._id.toString(),
+      verticalRefId,
+      payload,
+      postedAt,
+      origin,
+    });
+
+    let responsePayload: Record<string, unknown>;
+
+    if (distribution.publisherStatus === "Sold") {
+      responsePayload = {
+        status: 1,
+        status_text: "Accepted",
+        redirect_url:
+          distribution.redirectUrl ||
+          `${origin}/reports/publisher/lead-details?leadId=${encodeURIComponent(leadId)}`,
+        price: distribution.soldPrice,
+        lead_id: leadId,
+      };
+    } else if (distribution.publisherStatus === "Test") {
+      responsePayload = {
+        status: 1,
+        status_text: "Accepted",
+        message: distribution.message,
+        lead_id: leadId,
+      };
+    } else if (distribution.publisherStatus === "Post Error") {
+      responsePayload = {
+        status: "error",
+        reasons: [{ message: distribution.message }],
+        lead_id: leadId,
+      };
+    } else {
+      responsePayload = {
+        status: 0,
+        status_text: "Rejected",
+        reasons: [{ message: distribution.message }],
+        lead_id: leadId,
+      };
+    }
 
     await createSellerIntakeLog({
       sellerRef: seller._id,
@@ -505,11 +545,18 @@ export async function handleSellerLeadPost(req: Request) {
       endpointUrl,
       requestPayload: payload,
       responseBody: JSON.stringify(responsePayload),
-      deliveryStatus: "success",
-      httpStatus: 200,
+      deliveryStatus: distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test" ? "success" : "fail",
+      httpStatus: distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test" ? 200 : 400,
     });
 
-    return NextResponse.json(responsePayload);
+    const httpStatus =
+      distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test"
+        ? 200
+        : distribution.publisherStatus === "Post Error"
+          ? 502
+          : 400;
+
+    return NextResponse.json(responsePayload, { status: httpStatus });
   } catch {
     const responsePayload = {
       status: "error",

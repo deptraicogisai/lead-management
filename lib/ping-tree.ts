@@ -1,4 +1,5 @@
 import type { CampaignType } from "@/lib/campaign";
+import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 
 export type PingTreeStrategy = "Priority";
 export type PingTreeCampaignType = CampaignType;
@@ -13,6 +14,7 @@ export type PingTreeCampaignCard = {
   minPrice: number;
   productLabel: string;
   priority: number;
+  testMock: CampaignTestMockResponse | null;
 };
 
 export type PingTreeRecord = {

@@ -14,7 +14,13 @@ import {
   type CampaignStatus,
 } from "@/lib/campaign";
 import { CampaignModel } from "@/lib/models/campaign";
+import { BuyerModel } from "@/lib/models/buyer";
+import { getAvailableIntegrationOptions, resolveBuyerIntegrations } from "@/lib/buyer-integrations";
 import { connectToDatabase } from "@/lib/mongodb";
+import { DEFAULT_POST_TIMEOUT_SECONDS, sanitizeIntegrationConfigValues } from "@/lib/campaign-integration-config";
+import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
+import { toIntegrationBuilderRecord, type IntegrationBuilderConfigField } from "@/lib/integration-builder";
+import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,8 +37,7 @@ type CampaignUpdatePayload = {
   copyPlDnplToOtherCampaigns?: boolean;
   scheduleRules?: CampaignScheduleRule[];
   integrationId?: string;
-  postUrl?: string;
-  postTimeout?: number | string;
+  configValues?: Record<string, string>;
 };
 
 export async function GET(_: Request, context: Params) {
@@ -132,18 +137,62 @@ export async function PATCH(req: Request, context: Params) {
     if (body.section === "integration") {
       if (body.integrationId !== undefined) {
         const value = body.integrationId?.trim() ?? "";
+
+        if (value) {
+          if (!Types.ObjectId.isValid(value)) {
+            return NextResponse.json({ message: "Invalid integration id." }, { status: 400 });
+          }
+
+          const buyer = await BuyerModel.findById(campaign.buyerRef).lean();
+          if (!buyer) {
+            return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+          }
+
+          const integrationOptions = await getAvailableIntegrationOptions();
+          const { integrationIds: allowedIntegrationIds } = resolveBuyerIntegrations(buyer, integrationOptions);
+
+          if (!allowedIntegrationIds.includes(value)) {
+            return NextResponse.json(
+              { message: "Integration is not assigned to this buyer." },
+              { status: 400 }
+            );
+          }
+
+          const integration = await IntegrationBuilderModel.findById(value).select({ _id: 1 }).lean();
+          if (!integration) {
+            return NextResponse.json({ message: "Integration not found." }, { status: 404 });
+          }
+        }
+
         campaign.integrationRef = value && Types.ObjectId.isValid(value) ? new Types.ObjectId(value) : null;
       }
 
-      if (!campaign.integrationSettings) campaign.integrationSettings = { postUrl: "", postTimeout: 90 };
-
-      if (body.postUrl !== undefined) {
-        campaign.integrationSettings.postUrl = body.postUrl?.trim() ?? "";
+      if (!campaign.integrationSettings) {
+        campaign.integrationSettings = { postUrl: "", postTimeout: DEFAULT_POST_TIMEOUT_SECONDS, configValues: {} };
       }
 
-      if (body.postTimeout !== undefined) {
-        const parsed = Number(body.postTimeout);
-        campaign.integrationSettings.postTimeout = Number.isFinite(parsed) && parsed > 0 ? parsed : 90;
+      if (body.configValues) {
+        await ensureVerticalCollectionMigrated();
+        const integrationId =
+          body.integrationId?.trim() ||
+          (campaign.integrationRef ? campaign.integrationRef.toString() : "");
+
+        let configFields: IntegrationBuilderConfigField[] = [];
+        if (integrationId && Types.ObjectId.isValid(integrationId)) {
+          const integration = await IntegrationBuilderModel.findById(integrationId).lean();
+          if (integration) {
+            const verticals = await VerticalModel.find().select({ _id: 1, name: 1 }).lean();
+            const verticalNameById = new Map(verticals.map((vertical) => [vertical._id.toString(), vertical.name]));
+            configFields = toIntegrationBuilderRecord(integration, verticalNameById).configFields;
+          }
+        }
+
+        const sanitizedValues = sanitizeIntegrationConfigValues(configFields, body.configValues);
+        campaign.integrationSettings.configValues = sanitizedValues;
+        campaign.integrationSettings.postUrl = sanitizedValues.url?.trim() ?? "";
+        const parsedTimeout = Number(sanitizedValues.timeout);
+        campaign.integrationSettings.postTimeout =
+          Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_POST_TIMEOUT_SECONDS;
       }
 
       campaign.markModified("integrationSettings");

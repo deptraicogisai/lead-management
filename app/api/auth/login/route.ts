@@ -48,8 +48,8 @@ export async function POST(req: Request) {
     const totalAccounts = await loginCollection.countDocuments();
     if (totalAccounts === 0) {
       return NextResponse.json(
-        { message: "Collection login does not have any configured account yet." },
-        { status: 404 }
+        { message: "No login account is configured yet. Add a document to the login collection in MongoDB." },
+        { status: 503 }
       );
     }
 

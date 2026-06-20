@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { Spinner } from "@/components/ui/state";
 import type { PhonexaProductDocument, PhonexaProductField } from "@/lib/phonexa-products";
@@ -87,6 +89,109 @@ function FieldTable({
   );
 }
 
+function resolveCodeLanguage(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes("php")) return "php";
+  if (normalized.includes("python")) return "python";
+  if (normalized.includes("java")) return "java";
+  if (normalized.includes("bash") || normalized.includes("shell")) return "bash";
+  if (normalized.includes("json")) return "json";
+  return "text";
+}
+
+function SnippetBlock({
+  title,
+  value,
+  language,
+  formatAsJson = false,
+}: {
+  title: string;
+  value: string | null;
+  language: string;
+  formatAsJson?: boolean;
+}) {
+  if (!value) return null;
+  const normalizedValue = normalizeSnippetValue(value, formatAsJson);
+  const resolvedLanguage = formatAsJson ? "json" : resolveCodeLanguage(language);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</p>
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+        <SyntaxHighlighter
+          language={resolvedLanguage}
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: "12px",
+            lineHeight: 1.6,
+            padding: "16px",
+            background: "rgb(2, 6, 23)",
+          }}
+          wrapLongLines
+          showLineNumbers={false}
+        >
+          {normalizedValue}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  );
+}
+
+function prettifyLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeSnippetValue(value: string, formatAsJson = false) {
+  if (!value.trim()) return value;
+
+  const looksLikeHtmlSnippet =
+    /<(pre|code|span|br)\b/i.test(value) ||
+    value.includes("&lt;") ||
+    value.includes("&gt;") ||
+    value.includes("&amp;");
+
+  let normalized = value;
+
+  if (looksLikeHtmlSnippet && typeof window !== "undefined") {
+    const container = window.document.createElement("div");
+    container.innerHTML = value;
+    const text = container.textContent ?? container.innerText ?? "";
+    normalized = text.replace(/\r\n/g, "\n").trim();
+  }
+
+  if (formatAsJson) {
+    try {
+      return JSON.stringify(JSON.parse(normalized), null, 2);
+    } catch {
+      return normalized;
+    }
+  }
+
+  return normalized;
+}
+
+function mapResponseLabel(key: string, content: string) {
+  const normalizedKey = key.toLowerCase();
+  const normalizedContent = content.toLowerCase();
+
+  if (normalizedKey.includes("sold") || normalizedContent.includes('"status_text": "sold"')) {
+    return "Sold Lead";
+  }
+  if (normalizedKey.includes("reject")) {
+    return "Reject Lead";
+  }
+  if (normalizedKey.includes("error") || normalizedContent.includes("error")) {
+    return "Error";
+  }
+  return "";
+}
+
 export function ProductDocViewer({
   document,
   isLoading,
@@ -100,6 +205,60 @@ export function ProductDocViewer({
     if (!document?.requestLinks) return [];
     return Object.entries(document.requestLinks);
   }, [document]);
+
+  const requestExampleTabs = useMemo(() => {
+    if (!document?.requestSamples) return [];
+
+    const tabs: Array<{ id: string; label: string; content: string }> = [];
+    for (const [language, variants] of Object.entries(document.requestSamples)) {
+      for (const [variant, content] of Object.entries(variants)) {
+        if (!content?.trim()) continue;
+        const id = `${language}:${variant}`;
+        const label = variant.toLowerCase() === "sample"
+          ? prettifyLabel(language)
+          : `${prettifyLabel(language)} ${prettifyLabel(variant)}`;
+        tabs.push({ id, label, content });
+      }
+    }
+
+    return tabs;
+  }, [document]);
+
+  const responseExampleTabs = useMemo(() => {
+    if (!document?.responseSamples) return [];
+
+    const rawEntries = Object.entries(document.responseSamples)
+      .filter(([, content]) => Boolean(content?.trim()))
+      .map(([status, content], index) => {
+        const label = mapResponseLabel(status, content);
+        return {
+          id: status,
+          label: label || ["Sold Lead", "Reject Lead", "Error"][index] || prettifyLabel(status),
+          content,
+        };
+      });
+
+    const preferredOrder = ["Sold Lead", "Reject Lead", "Error"];
+    return rawEntries.sort((left, right) => {
+      const leftOrder = preferredOrder.indexOf(left.label);
+      const rightOrder = preferredOrder.indexOf(right.label);
+      if (leftOrder === -1 && rightOrder === -1) return left.label.localeCompare(right.label);
+      if (leftOrder === -1) return 1;
+      if (rightOrder === -1) return -1;
+      return leftOrder - rightOrder;
+    });
+  }, [document]);
+
+  const [activeRequestTab, setActiveRequestTab] = useState("");
+  const [activeResponseTab, setActiveResponseTab] = useState("");
+
+  useEffect(() => {
+    setActiveRequestTab(requestExampleTabs[0]?.id ?? "");
+    setActiveResponseTab(responseExampleTabs[0]?.id ?? "");
+  }, [requestExampleTabs, responseExampleTabs]);
+
+  const activeRequestContent = requestExampleTabs.find((tab) => tab.id === activeRequestTab)?.content ?? null;
+  const activeResponseContent = responseExampleTabs.find((tab) => tab.id === activeResponseTab)?.content ?? null;
 
   if (isLoading) {
     return (
@@ -157,6 +316,60 @@ export function ProductDocViewer({
               </div>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {requestExampleTabs.length > 0 || responseExampleTabs.length > 0 ? (
+        <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-900 p-4 dark:border-slate-700">
+          <h3 className="text-lg font-semibold uppercase tracking-wide text-slate-100">Request and Response Examples</h3>
+
+          {requestExampleTabs.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-300">Request Example</p>
+              <div className="flex flex-wrap gap-2">
+                {requestExampleTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveRequestTab(tab.id)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1.5 text-xs font-medium transition",
+                      activeRequestTab === tab.id
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <SnippetBlock title="" value={activeRequestContent} language={activeRequestTab} />
+            </div>
+          ) : null}
+
+          {responseExampleTabs.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-300">Response Examples</p>
+              <div className="flex flex-wrap gap-2">
+                {responseExampleTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveResponseTab(tab.id)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1.5 text-xs font-medium transition",
+                      activeResponseTab === tab.id
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <SnippetBlock title="" value={activeResponseContent} language="json" formatAsJson />
+            </div>
+          ) : null}
         </section>
       ) : null}
     </div>

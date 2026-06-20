@@ -32,6 +32,8 @@ const buyerSchema = new Schema(
     integrationRefs: [{ type: Schema.Types.ObjectId, ref: "IntegrationBuilder", default: [] }],
     allowedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],
     blockedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],
+    plDnplListIds: { type: [String], default: [] },
+    copyPlDnplToOtherBuyers: { type: Boolean, default: false },
     mappings: { type: [buyerMappingSchema], default: [] },
   },
   { timestamps: true }

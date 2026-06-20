@@ -1,4 +1,5 @@
 import { formatProductLabel } from "@/lib/integration-builder";
+import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-value";
 
 export { getMaxRangeOptions, isGeneralFilterRangeValid };
@@ -67,8 +68,7 @@ export type CampaignRecord = {
   integrationId: string;
   integrationLabel: string;
   integrationSettings: {
-    postUrl: string;
-    postTimeout: number;
+    configValues: Record<string, string>;
   };
   duplicates: CampaignDuplicatesSettings;
   generalFilters: CampaignGeneralFilter[];
@@ -336,6 +336,7 @@ type CampaignDoc = {
     postUrl?: string | null;
     postTimeout?: number | null;
     postTimeoutMs?: number | null;
+    configValues?: Record<string, string> | null;
   } | null;
   campaignType: CampaignType;
   timezone: string;
@@ -390,17 +391,7 @@ export function toCampaignRecord(
     integrationId,
     integrationLabel: integrationId ? context.integrationLabelById.get(integrationId) ?? "-" : "-",
     integrationSettings: {
-      postUrl: doc.integrationSettings?.postUrl?.trim() ?? "",
-      postTimeout: (() => {
-        const settings = doc.integrationSettings;
-        if (settings?.postTimeout != null && Number.isFinite(Number(settings.postTimeout))) {
-          return Number(settings.postTimeout);
-        }
-        if (settings?.postTimeoutMs != null && Number.isFinite(Number(settings.postTimeoutMs))) {
-          return Math.round(Number(settings.postTimeoutMs) / 1000);
-        }
-        return 90;
-      })(),
+      configValues: normalizeCampaignIntegrationConfigValues(doc.integrationSettings),
     },
     duplicates: doc.duplicates ?? defaultCampaignDuplicates(),
     generalFilters: Array.isArray(doc.generalFilters)
@@ -504,7 +495,18 @@ export function groupGeneralFiltersForDisplay(filters: CampaignGeneralFilter[]):
       (item) => item.fieldName === filter.fieldName && item.dataTypeFilter === "Multi Select"
     );
     const included = pair.find((item) => (item.multiSelectMode ?? "included") === "included");
-    const excluded = pair.find((item) => item.multiSelectMode === "excluded");
+    let excluded = pair.find((item) => item.multiSelectMode === "excluded");
+
+    if (included && !excluded) {
+      const baseFieldId = included.fieldId.replace(/:included$/i, "") || included.fieldId;
+      excluded = {
+        ...included,
+        fieldId: buildMultiSelectFilterId(baseFieldId, "excluded"),
+        description: `${getMultiSelectFilterFieldLabel(included.description)} (Excluded)`,
+        multiSelectMode: "excluded",
+        selectedValues: [],
+      };
+    }
 
     if (included && excluded) {
       groupedMultiSelect.add(filter.fieldName);

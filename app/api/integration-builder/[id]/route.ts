@@ -10,19 +10,17 @@ import {
   toIntegrationBuilderRecord,
   type IntegrationBuilderArrayMappingEntry,
   type IntegrationBuilderConfigField,
-  type IntegrationBuilderPostingType,
   type IntegrationBuilderRequestMapping,
   type IntegrationBuilderResponseMapping,
   type IntegrationBuilderStatus,
 } from "@/lib/integration-builder";
-import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload } from "@/lib/twig-template";
+import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload, buildTwigConfigFieldsFromIntegration } from "@/lib/twig-template";
 
 type Params = { params: Promise<{ id: string }> };
 
 type IntegrationBuilderPayload = {
   name?: string;
   status?: IntegrationBuilderStatus;
-  postingType?: IntegrationBuilderPostingType;
   arrayMappings?: IntegrationBuilderArrayMappingEntry[];
   requestMapping?: Partial<IntegrationBuilderRequestMapping>;
   responseMapping?: IntegrationBuilderResponseMapping;
@@ -34,7 +32,6 @@ type IntegrationBuilderDoc = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
-  postingType: IntegrationBuilderPostingType;
   verticalRef?: { toString(): string } | string | null;
   arrayMappings?: IntegrationBuilderArrayMappingEntry[] | null;
   requestMapping?: IntegrationBuilderRequestMapping | null;
@@ -74,12 +71,9 @@ async function buildTwigValidationContext(
       ? (existing.configFields as { toObject(): IntegrationBuilderConfigField[] }).toObject()
       : (existing.configFields as IntegrationBuilderConfigField[] | null));
 
-  const integrationConfigFields = (Array.isArray(configSource) ? configSource : [])
-    .map((field) => ({
-      variableName: field.variableName?.trim() ?? "",
-      label: field.label?.trim() ?? "",
-    }))
-    .filter((field) => field.variableName);
+  const integrationConfigFields = buildTwigConfigFieldsFromIntegration(
+    Array.isArray(configSource) ? configSource : null
+  );
 
   const arrayMappingSource =
     body.arrayMappings ??
@@ -159,10 +153,6 @@ export async function PATCH(req: Request, context: Params) {
 
     if (body.status) {
       existing.status = body.status;
-    }
-
-    if (body.postingType) {
-      existing.postingType = body.postingType;
     }
 
     if (body.arrayMappings) {

@@ -66,6 +66,10 @@ function sanitizeIntegrationIds(integrationIds?: string[]) {
   return (integrationIds ?? []).filter((id) => Types.ObjectId.isValid(id));
 }
 
+function sanitizePlDnplListIds(listIds?: string[]) {
+  return (listIds ?? []).filter((id) => Types.ObjectId.isValid(id));
+}
+
 function sanitizePublisherSourceIds(allowedPublisherIds?: string[], blockedPublisherIds?: string[]) {
   const blocked = (blockedPublisherIds ?? []).filter((id) => Types.ObjectId.isValid(id));
   const blockedSet = new Set(blocked);
@@ -150,6 +154,29 @@ export async function PATCH(req: Request, context: Params) {
           postLeadUrl: body.postLeadUrl.trim(),
           status: normalizeBuyerStatus(body.status),
           mappings: sanitizeMappings(body.mappings),
+        },
+        { new: true }
+      ).lean();
+
+      if (!buyer) {
+        return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(await mapBuyerResponse(buyer as BuyerDoc));
+    }
+
+    if (
+      body.plDnplListIds !== undefined &&
+      body.name === undefined &&
+      body.integrationIds === undefined &&
+      body.allowedPublisherIds === undefined &&
+      body.blockedPublisherIds === undefined
+    ) {
+      const buyer = await BuyerModel.findByIdAndUpdate(
+        id,
+        {
+          plDnplListIds: sanitizePlDnplListIds(body.plDnplListIds),
+          copyPlDnplToOtherBuyers: Boolean(body.copyPlDnplToOtherBuyers),
         },
         { new: true }
       ).lean();

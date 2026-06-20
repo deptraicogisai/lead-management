@@ -4,6 +4,8 @@ import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
   buildDuplicateExistsQuery,
   buildLeadRejectResponse,
+  formatLeadRejectResponseBody,
+  formatBuyerPostResponseBody,
   validateMappingFieldConfiguration,
 } from "@/lib/mapping-lead-validation";
 import {
@@ -17,6 +19,13 @@ import {
   type MappingIntakeSettingsRecord,
 } from "@/lib/mapping-intake-settings";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
+import { distributeLeadAfterIntake, listPendingBuyerPostCampaigns } from "@/lib/lead-distribution";
+import { buildInitialBuyerPostQueue } from "@/lib/test-lead-buyer-progress";
+import type { PingTreeCampaignType } from "@/lib/ping-tree";
+import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
+import type { BuyerPostAttemptSnapshot } from "@/lib/buyer-post-request";
+import { resolvePrimaryBuyerPostAttempt } from "@/lib/buyer-post-request";
+import { resolveBuyerResponseSnapshot } from "@/lib/mapping-test-lead-log-shared";
 
 type MappingApiField = {
   _id?: { toString(): string };
@@ -202,7 +211,19 @@ export async function runMappingTestLeadSubmit(params: {
   mappingRef: Types.ObjectId;
   payload: Record<string, unknown>;
   saveLead: boolean;
+  postToBuyer?: boolean;
+  mockBuyerPostOptions?: MockBuyerPostOptions;
+  buyerPostProgress?: {
+    onPending?: (attempts: BuyerPostAttemptSnapshot[]) => void | Promise<void>;
+    onProcessing?: (info: {
+      campaignId: string;
+      pingTreeType: PingTreeCampaignType;
+      campaignOrder: number;
+    }) => void | Promise<void>;
+    onAttempt?: (attempt: BuyerPostAttemptSnapshot) => void | Promise<void>;
+  };
   endpointUrl: string;
+  origin: string;
   userAgent?: string;
 }) {
   const postedAt = new Date();
@@ -218,12 +239,30 @@ export async function runMappingTestLeadSubmit(params: {
   const intakeRules = buildTestLeadIntakeRuleGroups(validationResult.intakeSettings);
   const checks = buildTestLeadValidationChecks(validationResult.breakdown, intakeRules);
 
-  let status = validationResult.passed ? 200 : 400;
-  let responseBody: unknown;
   let leadSaved = false;
+  let createdLeadId = "";
+  let buyerPostAttempts: BuyerPostAttemptSnapshot[] = [];
+  let primaryBuyerAttempt = resolvePrimaryBuyerPostAttempt(buyerPostAttempts);
+  let buyerPostHint: string | null = null;
+  let buyerResponse: Record<string, unknown> | null = null;
+
+  const publisherStatus = validationResult.passed ? 200 : 400;
+  let publisherResponse: Record<string, unknown>;
+
+  if (validationResult.passed) {
+    publisherResponse = {
+      status: 1,
+      status_text: "Accepted",
+      message: params.saveLead
+        ? "Lead passed publisher validation."
+        : "Lead passed publisher validation. Test lead data was not saved.",
+    };
+  } else {
+    publisherResponse = buildLeadRejectResponse(validationResult.allReasons) as Record<string, unknown>;
+  }
 
   if (params.saveLead) {
-    await SellerLeadModel.create({
+    const createdLead = await SellerLeadModel.create({
       sellerRef: params.sellerRef,
       verticalRef: params.verticalRef,
       mappingRef: params.mappingRef,
@@ -234,27 +273,63 @@ export async function runMappingTestLeadSubmit(params: {
       userAgent: params.userAgent ?? "Test Lead UI",
     });
     leadSaved = true;
+    createdLeadId = createdLead._id?.toString() ?? "";
 
-    responseBody = validationResult.passed
-      ? {
-          status: 1,
-          status_text: "Accepted",
-          message: "Test lead saved successfully.",
-        }
-      : buildLeadRejectResponse(validationResult.allReasons);
+    if (validationResult.passed && params.postToBuyer && createdLeadId && params.verticalRef) {
+      if (params.buyerPostProgress?.onPending) {
+        const pendingCampaigns = await listPendingBuyerPostCampaigns(params.verticalRef.toString(), true);
+        await params.buyerPostProgress.onPending(
+          buildInitialBuyerPostQueue(pendingCampaigns, postedAt.toISOString())
+        );
+      }
 
-    if (!validationResult.passed) {
-      status = 400;
+      const distribution = await distributeLeadAfterIntake({
+        sellerLeadId: createdLeadId,
+        sellerRefId: params.sellerRef.toString(),
+        verticalRefId: params.verticalRef.toString(),
+        payload: params.payload,
+        postedAt,
+        origin: params.origin,
+        postToBuyer: true,
+        mockBuyerPost: true,
+        mockBuyerPostOptions: params.mockBuyerPostOptions,
+        progress: {
+          onBuyerPostProcessing: params.buyerPostProgress?.onProcessing,
+          onBuyerPostAttempt: params.buyerPostProgress?.onAttempt,
+        },
+      });
+
+      buyerPostAttempts = distribution.buyerPostAttempts;
+      primaryBuyerAttempt = resolvePrimaryBuyerPostAttempt(buyerPostAttempts);
+      buyerPostHint = distribution.buyerPostHint ?? null;
+
+      const buyerResponseSnapshot = resolveBuyerResponseSnapshot({
+        postToBuyer: true,
+        validationPassed: true,
+        buyerPostAttempts,
+        buyerResponse: null,
+        buyerStatus: null,
+      });
+      buyerResponse = buyerResponseSnapshot.postedToBuyer
+        ? (buyerResponseSnapshot.responseBody as Record<string, unknown>)
+        : formatLeadRejectResponseBody(buyerResponseSnapshot.responseBody);
     }
-  } else if (validationResult.passed) {
-    responseBody = {
-      status: 1,
-      status_text: "Accepted",
-      message: "Lead passed validation. Test lead data was not saved.",
+
+    if (validationResult.passed) {
+      publisherResponse = {
+        status: 1,
+        status_text: "Accepted",
+        message: params.postToBuyer
+          ? "Lead passed publisher validation. Buyer posting runs as a separate step."
+          : "Test lead saved successfully.",
+        lead_id: createdLeadId,
+      };
+    }
+  } else if (validationResult.passed && params.postToBuyer && !params.saveLead) {
+    publisherResponse = {
+      ...publisherResponse,
+      message: "Lead passed publisher validation. Enable Save lead to post to buyer.",
     };
-  } else {
-    responseBody = buildLeadRejectResponse(validationResult.allReasons);
-    status = 400;
   }
 
   const log = await appendMappingTestLeadLog({
@@ -262,21 +337,27 @@ export async function runMappingTestLeadSubmit(params: {
     mappingId: params.mappingId,
     submittedAt: postedAt,
     saveLead: params.saveLead,
+    postToBuyer: Boolean(params.postToBuyer),
     leadSaved,
     endpointUrl: params.endpointUrl,
     requestBody: params.payload,
-    status,
-    responseBody,
+    buyerPostAttempts,
+    postedBuyerRequest: primaryBuyerAttempt?.request ?? null,
+    postedBuyerResponse: primaryBuyerAttempt?.response ?? null,
+    publisherStatus,
+    publisherResponse,
     validationChecks: checks,
     validationPassed: validationResult.passed,
+    buyerPostHint,
+    buyerResponse,
   });
 
   return {
     passed: validationResult.passed,
     checks,
     reasons: validationResult.allReasons,
-    status,
-    responseBody,
+    status: publisherStatus,
+    responseBody: publisherResponse,
     leadSaved,
     log,
   };

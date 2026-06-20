@@ -25,7 +25,8 @@
     "next": "^16.2.4",
     "pdfkit": "^0.18.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-syntax-highlighter": "^16.1.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",

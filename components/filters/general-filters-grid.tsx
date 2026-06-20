@@ -20,6 +20,66 @@ type GeneralFiltersGridProps = {
   onSetMultiSelectPairEnabled: (fieldName: string, enabled: boolean) => void;
 };
 
+function renderMultiSelectValueEditor(params: {
+  filter: CampaignGeneralFilter;
+  options: FieldOptionLike[];
+  filters: CampaignGeneralFilter[];
+  disabled: boolean;
+  blockedValues: string[];
+  id: string;
+  onPatchFilter: GeneralFiltersGridProps["onPatchFilter"];
+}) {
+  const { filter, options, filters, disabled, blockedValues, id, onPatchFilter } = params;
+
+  if (options.length > 0) {
+    const blocked = new Set(blockedValues.map((value) => value.trim().toLowerCase()));
+
+    return (
+      <div
+        className={cn(
+          "rounded-xl border border-slate-100 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-800/40",
+          disabled && "pointer-events-none opacity-60"
+        )}
+      >
+        <div className="flex flex-col gap-0.5">
+          {options.map((option) => {
+            const optionKey = resolveFieldOptionKey(option);
+            const selected = filter.selectedValues?.includes(optionKey) ?? false;
+            const isBlocked = !selected && blocked.has(optionKey.trim().toLowerCase());
+
+            return (
+              <Checkbox
+                key={optionKey}
+                id={`${id}-${optionKey}`}
+                checked={selected}
+                disabled={disabled || isBlocked}
+                label={option.label ?? option.value ?? optionKey}
+                onChange={(checked) => {
+                  const current = new Set(filter.selectedValues ?? []);
+                  if (checked) current.add(optionKey);
+                  else current.delete(optionKey);
+                  onPatchFilter(filter.fieldId, { selectedValues: Array.from(current) });
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <FilterTagInput
+      id={id}
+      values={filter.selectedValues ?? []}
+      disabled={disabled}
+      blockedValues={blockedValues.length > 0 ? blockedValues : getMultiSelectSiblingSelectedValues(filters, filter)}
+      placeholder="Type a value and press Enter"
+      onChange={(selectedValues) => onPatchFilter(filter.fieldId, { selectedValues })}
+    />
+  );
+}
+
 function renderSingleFilterCard(
   filter: CampaignGeneralFilter,
   options: FieldOptionLike[],
@@ -119,14 +179,15 @@ function renderSingleFilterCard(
       ) : null}
 
       {filter.dataTypeFilter === "Multi Select" ? (
-        <FilterTagInput
-          id={`${filter.fieldId}-multi-select`}
-          values={filter.selectedValues ?? []}
-          disabled={!isInteractive}
-          blockedValues={getMultiSelectSiblingSelectedValues(filters, filter)}
-          placeholder="Type a value and press Enter"
-          onChange={(selectedValues) => onPatchFilter(filter.fieldId, { selectedValues })}
-        />
+        renderMultiSelectValueEditor({
+          filter,
+          options,
+          filters,
+          disabled: !isInteractive,
+          blockedValues: getMultiSelectSiblingSelectedValues(filters, filter),
+          id: `${filter.fieldId}-multi-select`,
+          onPatchFilter,
+        })
       ) : null}
 
       {filter.dataTypeFilter === "Text" ? (
@@ -162,6 +223,7 @@ export function GeneralFiltersGrid({
       {displayItems.map((item) => {
         if (item.kind === "multi-select") {
           const isInteractive = item.included.enabled;
+          const options = fieldOptionsListByName.get(item.fieldName) ?? [];
 
           return (
             <div
@@ -182,26 +244,28 @@ export function GeneralFiltersGrid({
               <div className="space-y-4">
                 <div className={cn(!isInteractive && "pointer-events-none opacity-60")}>
                   <FieldLabel htmlFor={`${item.included.fieldId}-included`} label="Included" />
-                  <FilterTagInput
-                    id={`${item.included.fieldId}-included`}
-                    values={item.included.selectedValues ?? []}
-                    disabled={!isInteractive}
-                    blockedValues={item.excluded.selectedValues ?? []}
-                    placeholder="Type a value and press Enter"
-                    onChange={(selectedValues) => onPatchFilter(item.included.fieldId, { selectedValues })}
-                  />
+                  {renderMultiSelectValueEditor({
+                    filter: item.included,
+                    options,
+                    filters,
+                    disabled: !isInteractive,
+                    blockedValues: item.excluded.selectedValues ?? [],
+                    id: `${item.included.fieldId}-included`,
+                    onPatchFilter,
+                  })}
                 </div>
 
                 <div className={cn(!isInteractive && "pointer-events-none opacity-60")}>
                   <FieldLabel htmlFor={`${item.excluded.fieldId}-excluded`} label="Excluded" />
-                  <FilterTagInput
-                    id={`${item.excluded.fieldId}-excluded`}
-                    values={item.excluded.selectedValues ?? []}
-                    disabled={!isInteractive}
-                    blockedValues={item.included.selectedValues ?? []}
-                    placeholder="Type a value and press Enter"
-                    onChange={(selectedValues) => onPatchFilter(item.excluded.fieldId, { selectedValues })}
-                  />
+                  {renderMultiSelectValueEditor({
+                    filter: item.excluded,
+                    options,
+                    filters,
+                    disabled: !isInteractive,
+                    blockedValues: item.included.selectedValues ?? [],
+                    id: `${item.excluded.fieldId}-excluded`,
+                    onPatchFilter,
+                  })}
                 </div>
               </div>
             </div>

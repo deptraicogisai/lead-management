@@ -300,7 +300,7 @@ export function normalizeMultiSelectPayloadValues(value: unknown): string[] {
 export function isValueInMultiSelectFilter(
   value: unknown,
   selectedValues: string[],
-  _options: FieldOptionLike[] = []
+  options: FieldOptionLike[] = []
 ) {
   const tokens = selectedValues.map((item) => item.trim()).filter(Boolean);
   if (tokens.length === 0) return true;
@@ -308,16 +308,25 @@ export function isValueInMultiSelectFilter(
   const submitted = normalizeMultiSelectPayloadValues(value);
   if (submitted.length === 0) return false;
 
-  return submitted.every((item) => {
+  const allowed = buildAllowedCheckboxFilterValues(tokens, options);
+
+  if (options.length > 0) {
+    return submitted.every((item) => allowed.has(normalizeComparableValue(item)));
+  }
+
+  const normalizedTokens = tokens.map((token) => token.trim().toLowerCase()).filter(Boolean);
+  return submitted.some((item) => {
     const comparable = normalizeComparableValue(item);
-    return tokens.some((token) => comparable.includes(token.trim().toLowerCase()));
+    if (!comparable) return false;
+
+    return normalizedTokens.some((token) => comparable.includes(token));
   });
 }
 
 export function isValueExcludedFromMultiSelectFilter(
   value: unknown,
   excludedValues: string[],
-  _options: FieldOptionLike[] = []
+  options: FieldOptionLike[] = []
 ) {
   const tokens = excludedValues.map((item) => item.trim()).filter(Boolean);
   if (tokens.length === 0) return true;
@@ -325,9 +334,18 @@ export function isValueExcludedFromMultiSelectFilter(
   const submitted = normalizeMultiSelectPayloadValues(value);
   if (submitted.length === 0) return true;
 
+  const excluded = buildAllowedCheckboxFilterValues(tokens, options);
+
+  if (options.length > 0) {
+    return !submitted.some((item) => excluded.has(normalizeComparableValue(item)));
+  }
+
+  const normalizedTokens = tokens.map((token) => token.trim().toLowerCase()).filter(Boolean);
   return !submitted.some((item) => {
     const comparable = normalizeComparableValue(item);
-    return tokens.some((token) => comparable.includes(token.trim().toLowerCase()));
+    if (!comparable) return false;
+
+    return normalizedTokens.some((token) => comparable.includes(token));
   });
 }
 

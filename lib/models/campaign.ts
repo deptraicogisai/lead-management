@@ -52,6 +52,7 @@ const campaignSchema = new Schema(
     integrationSettings: {
       postUrl: { type: String, trim: true, default: "" },
       postTimeout: { type: Number, default: 90 },
+      configValues: { type: Schema.Types.Mixed, default: {} },
     },
     campaignType: { type: String, enum: ["Redirect", "Silent"], required: true },
     timezone: { type: String, required: true, trim: true, default: "New York (EST/EDT)" },

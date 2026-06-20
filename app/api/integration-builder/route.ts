@@ -4,9 +4,9 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
+  DEFAULT_CONFIG_FIELDS,
   buildVerticalIndexMap,
   toIntegrationBuilderRecord,
-  type IntegrationBuilderPostingType,
   type IntegrationBuilderStatus,
 } from "@/lib/integration-builder";
 import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
@@ -15,7 +15,6 @@ type IntegrationBuilderPayload = {
   name?: string;
   verticalId?: string;
   status?: IntegrationBuilderStatus;
-  postingType?: IntegrationBuilderPostingType;
 };
 
 type IntegrationBuilderDoc = {
@@ -23,7 +22,6 @@ type IntegrationBuilderDoc = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
-  postingType: IntegrationBuilderPostingType;
   verticalRef?: { toString(): string } | string | null;
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -85,8 +83,8 @@ export async function POST(req: Request) {
       displayId: nextDisplayId,
       name: body.name.trim(),
       status: body.status ?? "Active",
-      postingType: body.postingType ?? "Direct Post",
       verticalRef: body.verticalId.trim(),
+      configFields: DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field })),
     });
 
     const { verticalNameById, verticalIndexById } = await getVerticalMaps();

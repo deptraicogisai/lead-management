@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
-import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
+import { ClearButton, DetailNameLink, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
@@ -39,6 +39,7 @@ export function PresentListsPage() {
   const [appliedFilters, setAppliedFilters] = useState(draftFilters);
   const [tableFilter, setTableFilter] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingList, setEditingList] = useState<PresentListRecord | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -124,6 +125,20 @@ export function PresentListsPage() {
       label: "Last Update Time",
       sortValue: (row) => new Date(row.updatedAt).getTime(),
       render: (row) => formatPresentListDateTime(row.updatedAt),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <IconActionButton
+          icon={Pencil}
+          onClick={() => setEditingList(row)}
+          className="rounded-lg px-2 py-1 text-xs"
+          aria-label="Edit list"
+        >
+          Edit
+        </IconActionButton>
+      ),
     },
   ];
 
@@ -225,7 +240,21 @@ export function PresentListsPage() {
         open={isCreateOpen}
         verticalOptions={verticalOptions}
         onClose={() => setIsCreateOpen(false)}
-        onCreated={() => { setIsCreateOpen(false); setReloadKey((key) => key + 1); }}
+        onCreated={() => {
+          setIsCreateOpen(false);
+          setReloadKey((key) => key + 1);
+        }}
+      />
+
+      <PresentListCreateModal
+        open={editingList !== null}
+        verticalOptions={verticalOptions}
+        list={editingList}
+        onClose={() => setEditingList(null)}
+        onCreated={() => {
+          setEditingList(null);
+          setReloadKey((key) => key + 1);
+        }}
       />
     </div>
   );

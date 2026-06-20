@@ -4,7 +4,7 @@ import { buildVerticalIndexMap } from "@/lib/integration-builder";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { PresentListModel } from "@/lib/models/present-list";
 import { connectToDatabase } from "@/lib/mongodb";
-import { toPresentListRecord, toPresentListValueRecord } from "@/lib/present-list";
+import { toPresentListRecord, toPresentListValueRecord, type PresentListType } from "@/lib/present-list";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
 
 type Params = { params: Promise<{ id: string }> };
@@ -63,6 +63,149 @@ export async function GET(req: Request, context: Params) {
     });
   } catch {
     return NextResponse.json({ message: "Failed to fetch present list." }, { status: 500 });
+  }
+}
+
+type PresentListPatchPayload = {
+  name?: string;
+  applyToField?: string;
+  listType?: PresentListType;
+  defaultExpirationPeriod?: string;
+  allowApiAccess?: boolean;
+  valueId?: string;
+  value?: string;
+  expirationDate?: string | null;
+};
+
+function parseExpirationDate(value: string | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
+export async function PATCH(req: Request, context: Params) {
+  try {
+    const { id } = await context.params;
+    const body = (await req.json()) as PresentListPatchPayload;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid list id." }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    await ensureVerticalCollectionMigrated();
+
+    const list = await PresentListModel.findById(id);
+    if (!list) {
+      return NextResponse.json({ message: "Present list not found." }, { status: 404 });
+    }
+
+    if (body.valueId) {
+      if (!Types.ObjectId.isValid(body.valueId)) {
+        return NextResponse.json({ message: "Invalid value id." }, { status: 400 });
+      }
+
+      const valueEntry = list.values.id(body.valueId);
+      if (!valueEntry) {
+        return NextResponse.json({ message: "Value not found." }, { status: 404 });
+      }
+
+      if (body.value !== undefined) {
+        const trimmedValue = body.value.trim();
+        if (!trimmedValue) {
+          return NextResponse.json({ message: "Value is required." }, { status: 400 });
+        }
+
+        const duplicate = list.values.some(
+          (entry) =>
+            entry._id?.toString() !== body.valueId && entry.value.trim().toLowerCase() === trimmedValue.toLowerCase()
+        );
+        if (duplicate) {
+          return NextResponse.json({ message: "This value already exists in the list." }, { status: 400 });
+        }
+
+        valueEntry.value = trimmedValue;
+      }
+
+      if (body.expirationDate !== undefined) {
+        const parsedExpiration = parseExpirationDate(body.expirationDate);
+        if (parsedExpiration === undefined) {
+          return NextResponse.json({ message: "Invalid expiration date." }, { status: 400 });
+        }
+        valueEntry.expirationDate = parsedExpiration;
+      }
+
+      await list.save();
+
+      const lookup = await buildPresentListContext();
+      return NextResponse.json({
+        list: toPresentListRecord(list.toObject(), lookup),
+        value: toPresentListValueRecord(valueEntry.toObject()),
+      });
+    }
+
+    const hasMetadataUpdate =
+      body.name !== undefined ||
+      body.applyToField !== undefined ||
+      body.listType !== undefined ||
+      body.defaultExpirationPeriod !== undefined ||
+      body.allowApiAccess !== undefined;
+
+    if (!hasMetadataUpdate) {
+      return NextResponse.json({ message: "No changes provided." }, { status: 400 });
+    }
+
+    if (body.name !== undefined) {
+      const trimmedName = body.name.trim();
+      if (!trimmedName) {
+        return NextResponse.json({ message: "List name is required." }, { status: 400 });
+      }
+      list.name = trimmedName;
+    }
+
+    if (body.applyToField !== undefined) {
+      const trimmedField = body.applyToField.trim();
+      if (!trimmedField) {
+        return NextResponse.json({ message: "Apply to field is required." }, { status: 400 });
+      }
+
+      const vertical = await VerticalModel.findById(list.verticalRef).lean();
+      const fieldExists = (vertical?.fields ?? []).some((field) => field.fieldName === trimmedField);
+      if (!fieldExists) {
+        return NextResponse.json({ message: "Selected field was not found on this product." }, { status: 400 });
+      }
+
+      list.applyToField = trimmedField;
+    }
+
+    if (body.listType !== undefined) {
+      if (!["PL", "DNPL"].includes(body.listType)) {
+        return NextResponse.json({ message: "List type must be PL or DNPL." }, { status: 400 });
+      }
+      list.listType = body.listType;
+    }
+
+    if (body.defaultExpirationPeriod !== undefined) {
+      list.defaultExpirationPeriod = body.defaultExpirationPeriod.trim() || "No expiration";
+    }
+
+    if (body.allowApiAccess !== undefined) {
+      list.allowApiAccess = Boolean(body.allowApiAccess);
+    }
+
+    await list.save();
+
+    const lookup = await buildPresentListContext();
+    return NextResponse.json({ list: toPresentListRecord(list.toObject(), lookup) });
+  } catch {
+    return NextResponse.json({ message: "Failed to update present list." }, { status: 500 });
   }
 }
 

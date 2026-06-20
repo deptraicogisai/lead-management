@@ -39,7 +39,7 @@ import {
 } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
 import { toLeadFieldTemplate } from "@/lib/lead-template";
-import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload } from "@/lib/twig-template";
+import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload, buildTwigConfigFieldsFromIntegration } from "@/lib/twig-template";
 
 function RequestMappingCollapsible({ open, children }: { open: boolean; children: ReactNode }) {
   return (
@@ -312,7 +312,6 @@ type IntegrationBuilderDetailProps = {
     id: string;
     name: string;
     status: "Active" | "Draft" | "Paused";
-    postingType: "Direct Post" | "Ping Post";
     productLabel: string;
     verticalId: string;
     updatedAt: string;
@@ -384,12 +383,14 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
   const integrationConfigFields = useMemo(
     () =>
-      configFieldRows
-        .map((row) => ({
-          variableName: row.variableName.trim(),
-          label: row.label.trim(),
+      buildTwigConfigFieldsFromIntegration(
+        configFieldRows.map((row) => ({
+          variableName: row.variableName,
+          label: row.label,
+          type: row.type,
+          required: row.required,
         }))
-        .filter((field) => field.variableName),
+      ),
     [configFieldRows]
   );
 
@@ -505,7 +506,6 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
         body: JSON.stringify({
           name: integrationName.trim(),
           status: generalStatus,
-          postingType: builder.postingType,
         }),
       });
 
@@ -941,10 +941,6 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             <p className="py-2.5 text-slate-800 dark:text-slate-100">{builder?.productLabel || "-"}</p>
           )}
           {renderGeneralRow(
-            "Post model:",
-            <p className="py-2.5 text-slate-800 dark:text-slate-100">{builder?.postingType ?? "-"}</p>
-          )}
-          {renderGeneralRow(
             "Date updated:",
             <p className="py-2.5 text-slate-800 dark:text-slate-100">{formatBuilderDate(dateUpdated)}</p>
           )}
@@ -1303,11 +1299,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               >
               <div className="space-y-4">
                 <p className="text-sm text-slate-600 dark:text-slate-300">
-                  Text fields accept plain values or Twig templates. Type{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{`}</code> for suggestions — e.g.{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ lead.field_name }}`}</code> (leads) or{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ config.api_key }}`}</code> (Integration Config),{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ mapped.slug }}`}</code> (Array Mapping slugs).
+                  <span className="font-medium text-slate-700 dark:text-slate-200">Field Name</span> is the buyer field key sent in the request body.
+                  <span className="font-medium text-slate-700 dark:text-slate-200"> Value</span> accepts plain text or Twig templates — e.g.{" "}
+                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ lead.field_name }}`}</code> (lead),{" "}
+                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ mapped.slug }}`}</code> (Array Mapping),{" "}
+                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ config.api_key }}`}</code> (Integration Config).
                 </p>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -1337,7 +1333,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_180px_minmax(0,1fr)_48px]">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Name</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Field Name</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Type</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</p>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"> </p>
@@ -1350,10 +1346,10 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                 ) : (
                   requestDataRows.map((row) => (
                     <div key={row.id} className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_180px_minmax(0,1fr)_48px]">
-                      <TwigTemplateInput
+                      <Input
                         value={row.name}
-                        onChange={(nextValue) => updateRequestDataRow(row.id, "name", nextValue)}
-                        {...twigInputProps}
+                        onChange={(event) => updateRequestDataRow(row.id, "name", event.target.value)}
+                        placeholder="buyer_field_name"
                       />
                       <select
                         value={row.type}

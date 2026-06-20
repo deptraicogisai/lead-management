@@ -6,6 +6,7 @@ import { CampaignModel } from "@/lib/models/campaign";
 import { PingTreeModel } from "@/lib/models/ping-tree";
 import { connectToDatabase } from "@/lib/mongodb";
 import { toPingTreeRecord, type PingTreeCampaignCard } from "@/lib/ping-tree";
+import { normalizeCampaignTestMocks, sanitizeCampaignTestMock } from "@/lib/campaign-test-mock";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,6 +15,7 @@ type PingTreeUpdatePayload = {
   activeCampaignIds?: string[];
   inactiveCampaignIds?: string[];
   campaignPriorities?: Record<string, number>;
+  campaignTestMocks?: Record<string, unknown | null>;
 };
 
 function buildInactiveIdOrder(
@@ -72,6 +74,8 @@ export async function GET(_: Request, context: Params) {
       }
     }
 
+    const campaignTestMocks = normalizeCampaignTestMocks(tree.campaignTestMocks as Record<string, unknown> | Map<string, unknown>);
+
     const toCard = (record: ReturnType<typeof toCampaignRecord>, priority = 0): PingTreeCampaignCard => ({
       id: record.id,
       displayId: record.displayId,
@@ -81,6 +85,7 @@ export async function GET(_: Request, context: Params) {
       minPrice: record.minPrice,
       productLabel: record.productLabel,
       priority,
+      testMock: campaignTestMocks[record.id] ?? null,
     });
 
     const pingTreeList = (tree.activeCampaignIds ?? [])
@@ -141,6 +146,26 @@ export async function PATCH(req: Request, context: Params) {
     if (body.campaignPriorities) {
       tree.set("campaignPriorities", body.campaignPriorities);
       tree.markModified("campaignPriorities");
+    }
+
+    if (body.campaignTestMocks) {
+      const existingRaw = tree.campaignTestMocks;
+      const existing =
+        existingRaw instanceof Map
+          ? Object.fromEntries(existingRaw.entries())
+          : { ...((existingRaw as Record<string, unknown> | undefined) ?? {}) };
+
+      for (const [campaignId, mock] of Object.entries(body.campaignTestMocks)) {
+        if (mock === null) {
+          delete existing[campaignId];
+          continue;
+        }
+
+        existing[campaignId] = sanitizeCampaignTestMock(mock);
+      }
+
+      tree.set("campaignTestMocks", existing);
+      tree.markModified("campaignTestMocks");
     }
 
     await tree.save();
