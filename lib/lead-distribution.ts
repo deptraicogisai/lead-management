@@ -92,13 +92,23 @@ function orderPingTreeActiveCampaignIds(activeCampaignIds: string[]) {
 }
 
 function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: boolean): PublisherLeadStatus {
-  if (deliveries.some((entry) => entry.buyerStatus === "Accept")) {
+  if (
+    deliveries.some(
+      (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
+    )
+  ) {
     return "Sold";
   }
   if (hadPostError) {
     return "Post Error";
   }
   return "Reject";
+}
+
+function findRedirectAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
+  return deliveries.find(
+    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
+  );
 }
 
 async function loadVerticalFields(verticalRefId: string) {
@@ -1168,7 +1178,7 @@ export async function distributeLeadAfterIntake(params: {
 
   const coreDeliveries = [...redirectDeliveries, ...silentDeliveries];
 
-  const accepted = coreDeliveries.find((entry) => entry.buyerStatus === "Accept");
+  const accepted = findRedirectAcceptedDelivery(coreDeliveries);
   const hadPostError = coreDeliveries.some(
     (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
   );
@@ -1217,6 +1227,10 @@ export async function distributeLeadAfterIntake(params: {
         "No buyer request was built. Add the campaign to the Ping Tree, configure Integration on the campaign, and ensure the buyer is Active."
       : "";
 
+  const firstPostError = coreDeliveries.find(
+    (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
+  );
+
   return {
     publisherStatus,
     redirectUrl,
@@ -1228,7 +1242,9 @@ export async function distributeLeadAfterIntake(params: {
       publisherStatus === "Sold"
         ? "Lead sold to buyer."
         : publisherStatus === "Post Error"
-          ? "Lead could not be sold due to buyer post errors."
+          ? firstPostError?.errorReason
+            ? `Lead could not be sold due to buyer post errors: ${firstPostError.errorReason}`
+            : "Lead could not be sold due to buyer post errors."
           : publisherStatus === "Test"
             ? "Test lead was not posted to buyers."
             : "Lead was not sold to any buyer.",

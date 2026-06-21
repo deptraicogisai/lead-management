@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
-import { parsePageParam, parsePageSizeParam } from "@/lib/pagination";
+import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { resolveNewestFirstDisplayId, sortNewestFirst } from "@/lib/list-sort";
 
 type SellerPayload = {
@@ -55,11 +55,22 @@ export async function GET(req: Request) {
     const hasListParams = searchParams.has("page") || searchParams.has("pageSize");
     const page = parsePageParam(searchParams.get("page"), 1);
     const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 15);
+    const search = normalizeSearchParam(searchParams.get("search"));
 
     await connectToDatabase();
     await ensureSellerCollectionMigrated();
+
+    const filter: Record<string, unknown> = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
     if (!hasListParams) {
-      const sellers = await SellerModel.find().sort(sortNewestFirst).lean();
+      const sellers = await SellerModel.find(filter).sort(sortNewestFirst).lean();
       const totalItems = sellers.length;
       return NextResponse.json(
         sellers.map((seller, index) =>
@@ -68,9 +79,9 @@ export async function GET(req: Request) {
       );
     }
 
-    const totalItems = await SellerModel.countDocuments();
+    const totalItems = await SellerModel.countDocuments(filter);
     const skip = (page - 1) * pageSize;
-    const sellers = await SellerModel.find()
+    const sellers = await SellerModel.find(filter)
       .sort(sortNewestFirst)
       .skip(skip)
       .limit(pageSize)

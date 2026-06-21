@@ -55,7 +55,6 @@ function isLegacyBuyerPayload(body: LegacyBuyerPayload & CreateBuyerPayload) {
   return Boolean(
     body.firstName ||
       body.lastName ||
-      body.email ||
       body.phone ||
       body.company ||
       body.verticalId ||

@@ -753,6 +753,8 @@ export default function IndustryFieldsPage() {
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
             <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to
             reorder fields. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
+            Upload JSON accepts a lead sample object: every key in the file becomes a field using the exact key name (for example{" "}
+            <span className="font-mono text-xs">fname</span>, <span className="font-mono text-xs">apikey</span>).
           </p>
 
           {selectedFieldIds.length > 0 ? (

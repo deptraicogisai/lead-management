@@ -46,7 +46,6 @@ function isLegacyBuyerPayload(body: LegacyBuyerPayload & Partial<BuyerUpdatePayl
   return Boolean(
     body.firstName ||
       body.lastName ||
-      body.email ||
       body.phone ||
       body.company ||
       body.verticalId ||
@@ -70,17 +69,12 @@ function sanitizePlDnplListIds(listIds?: string[]) {
   return (listIds ?? []).filter((id) => Types.ObjectId.isValid(id));
 }
 
-function sanitizePublisherSourceIds(allowedPublisherIds?: string[], blockedPublisherIds?: string[]) {
-  const blocked = (blockedPublisherIds ?? []).filter((id) => Types.ObjectId.isValid(id));
-  const blockedSet = new Set(blocked);
-  const allowed = (allowedPublisherIds ?? [])
-    .filter((id) => Types.ObjectId.isValid(id))
-    .filter((id) => !blockedSet.has(id));
-  const allowedSet = new Set(allowed);
-
+function sanitizeBlockedPublisherIds(blockedPublisherIds?: string[]) {
   return {
-    allowedPublisherRefs: allowed.map((id) => new Types.ObjectId(id)),
-    blockedPublisherRefs: blocked.filter((id) => !allowedSet.has(id)).map((id) => new Types.ObjectId(id)),
+    allowedPublisherRefs: [],
+    blockedPublisherRefs: (blockedPublisherIds ?? [])
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id)),
   };
 }
 
@@ -169,7 +163,6 @@ export async function PATCH(req: Request, context: Params) {
       body.plDnplListIds !== undefined &&
       body.name === undefined &&
       body.integrationIds === undefined &&
-      body.allowedPublisherIds === undefined &&
       body.blockedPublisherIds === undefined
     ) {
       const buyer = await BuyerModel.findByIdAndUpdate(
@@ -189,15 +182,11 @@ export async function PATCH(req: Request, context: Params) {
     }
 
     if (
-      body.allowedPublisherIds !== undefined &&
       body.blockedPublisherIds !== undefined &&
       body.name === undefined &&
       body.integrationIds === undefined
     ) {
-      const publisherSources = sanitizePublisherSourceIds(
-        body.allowedPublisherIds,
-        body.blockedPublisherIds
-      );
+      const publisherSources = sanitizeBlockedPublisherIds(body.blockedPublisherIds);
 
       const buyer = await BuyerModel.findByIdAndUpdate(id, publisherSources, { new: true }).lean();
 

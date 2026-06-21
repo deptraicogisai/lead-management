@@ -105,16 +105,7 @@ export function isPublisherAllowedForBuyer(buyer: BuyerPublisherDoc, sellerRefId
   if (!sellerId) return false;
 
   const blocked = resolvePublisherRefIds(buyer.blockedPublisherRefs);
-  if (blocked.includes(sellerId)) {
-    return false;
-  }
-
-  const allowed = resolvePublisherRefIds(buyer.allowedPublisherRefs);
-  if (allowed.length > 0 && !allowed.includes(sellerId)) {
-    return false;
-  }
-
-  return true;
+  return !blocked.includes(sellerId);
 }
 
 function buildDuplicateFingerprint(payload: Record<string, unknown>, method: CampaignDuplicatesSettings["duplicateMethod"]) {
@@ -176,7 +167,7 @@ export async function validateCampaignLeadIntake(params: {
   const publisherAllowed = isPublisherAllowedForBuyer(params.buyer, params.sellerRefId);
   const publisherMessages = publisherAllowed
     ? []
-    : ["Publisher is not allowed to post to this buyer."];
+    : ["Publisher is blocked from posting to this buyer."];
   if (!publisherAllowed) {
     reasons.push(...publisherMessages);
   }
@@ -184,7 +175,7 @@ export async function validateCampaignLeadIntake(params: {
     category: "Publisher",
     passed: publisherAllowed,
     messages:
-      publisherMessages.length > 0 ? publisherMessages : ["Publisher is allowed for this buyer."],
+      publisherMessages.length > 0 ? publisherMessages : ["Publisher is not blocked for this buyer."],
   };
 
   const plDnplResult = await evaluatePlDnplForCampaign({

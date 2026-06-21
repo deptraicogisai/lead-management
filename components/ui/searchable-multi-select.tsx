@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
@@ -42,7 +43,10 @@ export function SearchableMultiSelect({
 }: SearchableMultiSelectProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const labelOptionMap = useMemo(
     () => new Map((labelOptions ?? options).map((option) => [option.id, option])),
@@ -69,14 +73,45 @@ export function SearchableMultiSelect({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!dropdownRef.current?.contains(event.target as Node)) {
-        setDropdownOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+
+      setDropdownOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!dropdownOpen) {
+      setMenuPosition(null);
+      return;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [dropdownOpen]);
 
   const toggleOption = (optionId: string, checked: boolean) => {
     if (checked) {
@@ -92,9 +127,10 @@ export function SearchableMultiSelect({
   };
 
   return (
-    <div ref={dropdownRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", className)}>
       <button
         id={id}
+        ref={triggerRef}
         type="button"
         disabled={disabled || isLoading}
         onClick={() => setDropdownOpen((open) => !open)}
@@ -146,53 +182,65 @@ export function SearchableMultiSelect({
         />
       </button>
 
-      {dropdownOpen ? (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900">
-          <div className="border-b border-slate-200 p-2 dark:border-slate-700">
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            />
-          </div>
+      {dropdownOpen && menuPosition && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                position: "fixed",
+                top: menuPosition.top,
+                left: menuPosition.left,
+                width: menuPosition.width,
+              }}
+              className="z-[100] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
+            >
+              <div className="border-b border-slate-200 p-2 dark:border-slate-700">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+                />
+              </div>
 
-          <div className="max-h-60 overflow-y-auto py-1">
-            {filteredOptions.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
-            ) : (
-              filteredOptions.map((option) => {
-                const checked = selectedIds.includes(option.id);
-                return (
-                  <Checkbox
-                    key={option.id}
-                    id={`${id ?? "multi-select"}-${option.id}`}
-                    checked={checked}
-                    onChange={(nextChecked) => toggleOption(option.id, nextChecked)}
-                    className="rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70"
-                    label={
-                      option.displayId !== undefined || option.description ? (
-                        <span className="flex min-w-0 items-start gap-2.5">
-                          {option.displayId !== undefined ? <IdBadge id={option.displayId} /> : null}
-                          <span className="flex min-w-0 flex-col">
-                            <span className="font-medium text-slate-800 dark:text-slate-100">{option.label}</span>
-                            {option.description ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">{option.description}</span>
-                            ) : null}
-                          </span>
-                        </span>
-                      ) : (
-                        option.label
-                      )
-                    }
-                  />
-                );
-              })
-            )}
-          </div>
-        </div>
-      ) : null}
+              <div className="max-h-60 overflow-y-auto py-1">
+                {filteredOptions.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
+                ) : (
+                  filteredOptions.map((option) => {
+                    const checked = selectedIds.includes(option.id);
+                    return (
+                      <Checkbox
+                        key={option.id}
+                        id={`${id ?? "multi-select"}-${option.id}`}
+                        checked={checked}
+                        onChange={(nextChecked) => toggleOption(option.id, nextChecked)}
+                        className="rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                        label={
+                          option.displayId !== undefined || option.description ? (
+                            <span className="flex min-w-0 items-start gap-2.5">
+                              {option.displayId !== undefined ? <IdBadge id={option.displayId} /> : null}
+                              <span className="flex min-w-0 flex-col">
+                                <span className="font-medium text-slate-800 dark:text-slate-100">{option.label}</span>
+                                {option.description ? (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">{option.description}</span>
+                                ) : null}
+                              </span>
+                            </span>
+                          ) : (
+                            option.label
+                          )
+                        }
+                      />
+                    );
+                  })
+                )}
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

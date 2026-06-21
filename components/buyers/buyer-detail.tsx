@@ -102,7 +102,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
   const [integrationPickerValue, setIntegrationPickerValue] = useState("");
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
-  const [allowedPublisherIds, setAllowedPublisherIds] = useState<string[]>(buyer.allowedPublisherIds);
   const [blockedPublisherIds, setBlockedPublisherIds] = useState<string[]>(buyer.blockedPublisherIds);
   const [publisherOptions, setPublisherOptions] = useState<PublisherOption[]>([]);
   const [isLoadingPublishers, setIsLoadingPublishers] = useState(true);
@@ -137,7 +136,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     setEmail(buyer.email);
     setStatus(normalizeBuyerStatus(buyer.status));
     setSelectedIntegrationIds(buyer.integrationIds);
-    setAllowedPublisherIds(buyer.allowedPublisherIds);
     setBlockedPublisherIds(buyer.blockedPublisherIds);
     setSelectedPlDnplIds(buyer.plDnplListIds);
     setCopyPlDnplToOtherBuyers(buyer.copyPlDnplToOtherBuyers);
@@ -242,26 +240,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     [integrationOptions, selectedIntegrationIds]
   );
 
-  const allowPublisherOptions = useMemo(
-    () => publisherOptions.filter((publisher) => !blockedPublisherIds.includes(publisher.id)),
-    [blockedPublisherIds, publisherOptions]
-  );
-
-  const blockPublisherOptions = useMemo(
-    () => publisherOptions.filter((publisher) => !allowedPublisherIds.includes(publisher.id)),
-    [allowedPublisherIds, publisherOptions]
-  );
-
-  const handleAllowedPublishersChange = (ids: string[]) => {
-    setAllowedPublisherIds(ids);
-    setBlockedPublisherIds((current) => current.filter((id) => !ids.includes(id)));
-  };
-
-  const handleBlockedPublishersChange = (ids: string[]) => {
-    setBlockedPublisherIds(ids);
-    setAllowedPublisherIds((current) => current.filter((id) => !ids.includes(id)));
-  };
-
   const renderDetailRow = (labelText: string, control: ReactNode, showLinkIcon = false) => (
     <div className="grid gap-2 py-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center sm:gap-6">
       <FieldLabelWithHelp htmlFor={`buyer-${labelText.toLowerCase().replace(/\s+/g, "-")}`} label={`${labelText}:`} showLinkIcon={showLinkIcon} />
@@ -339,7 +317,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          allowedPublisherIds,
           blockedPublisherIds,
         }),
       });
@@ -566,31 +543,20 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   );
 
   const renderSourcesTab = () => (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <div className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="px-6 py-8">
         <div className="mx-auto w-full max-w-4xl space-y-1">
-          {renderDetailRow(
-            "Allow Publishers",
-            <SearchableMultiSelect
-              id="buyer-allow-publishers"
-              selectedIds={allowedPublisherIds}
-              onChange={handleAllowedPublishersChange}
-              options={allowPublisherOptions}
-              labelOptions={publisherOptions}
-              isLoading={isLoadingPublishers}
-              placeholder="Select allowed publishers..."
-              searchPlaceholder="Search publishers..."
-              emptyMessage="No publishers available."
-            />
-          )}
+          <p className="pb-4 text-sm text-slate-500 dark:text-slate-400">
+            Publishers not selected below are allowed to post leads to this buyer.
+          </p>
 
           {renderDetailRow(
             "Block Publishers",
             <SearchableMultiSelect
               id="buyer-block-publishers"
               selectedIds={blockedPublisherIds}
-              onChange={handleBlockedPublishersChange}
-              options={blockPublisherOptions}
+              onChange={setBlockedPublisherIds}
+              options={publisherOptions}
               labelOptions={publisherOptions}
               isLoading={isLoadingPublishers}
               placeholder="Select blocked publishers..."

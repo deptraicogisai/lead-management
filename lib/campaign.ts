@@ -604,6 +604,10 @@ export function patchGeneralFilter(
   fieldId: string,
   patch: Partial<CampaignGeneralFilter>
 ) {
+  if (patch.enabled !== undefined) {
+    return filters.map((filter) => (filter.fieldId === fieldId ? { ...filter, ...patch } : filter));
+  }
+
   if (patch.selectedValues !== undefined) {
     return applyMultiSelectFilterValuesChange(filters, fieldId, patch.selectedValues);
   }

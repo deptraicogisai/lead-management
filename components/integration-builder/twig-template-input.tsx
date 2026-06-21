@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from "react";
+import { useMemo, useRef, useState, type InputHTMLAttributes } from "react";
 import { Input } from "@/components/ui/form-controls";
 import {
   buildTwigTemplateSuggestions,
   filterTwigTemplateSuggestions,
-  getActiveTwigTemplateQuery,
+  getTwigTemplateSuggestionQuery,
+  shouldShowTwigTemplateSuggestions,
   type ArrayMappingTemplateSlug,
   type BuildTwigTemplateSuggestionsOptions,
   type IntegrationConfigTemplateField,
@@ -43,6 +44,7 @@ export function TwigTemplateInput({
 }: TwigTemplateInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [cursor, setCursor] = useState(0);
+  const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(0);
 
@@ -54,17 +56,24 @@ export function TwigTemplateInput({
     [leadFieldNames, integrationConfigFields, arrayMappingSlugs, includeResponseSuggestions]
   );
 
-  const activeQuery = useMemo(() => getActiveTwigTemplateQuery(value, cursor), [value, cursor]);
+  const suggestionQuery = useMemo(
+    () => getTwigTemplateSuggestionQuery(value, cursor),
+    [value, cursor]
+  );
+
+  const canSuggest = useMemo(
+    () => focused && shouldShowTwigTemplateSuggestions(value, cursor),
+    [focused, value, cursor]
+  );
 
   const filteredSuggestions = useMemo(() => {
-    if (!activeQuery) return [];
-    return filterTwigTemplateSuggestions(allSuggestions, activeQuery.partial).slice(0, 16);
-  }, [activeQuery, allSuggestions]);
+    if (!canSuggest) return [];
 
-  useEffect(() => {
-    setOpen(filteredSuggestions.length > 0);
-    setHighlightIndex(0);
-  }, [filteredSuggestions.length, activeQuery?.partial, activeQuery?.openIndex]);
+    const partial = suggestionQuery?.partial ?? "";
+    return filterTwigTemplateSuggestions(allSuggestions, partial).slice(0, 16);
+  }, [canSuggest, suggestionQuery, allSuggestions]);
+
+  const showDropdown = open && canSuggest && filteredSuggestions.length > 0;
 
   const usesTemplateSyntax = value.includes("{{");
 
@@ -74,19 +83,20 @@ export function TwigTemplateInput({
   };
 
   const insertToken = (token: string) => {
-    if (!activeQuery) {
+    const query = getTwigTemplateSuggestionQuery(value, cursor);
+    if (!query) {
       onChange(token);
       return;
     }
 
-    const nextValue = `${value.slice(0, activeQuery.replaceStart)}${token}${value.slice(activeQuery.replaceEnd)}`;
+    const nextValue = `${value.slice(0, query.replaceStart)}${token}${value.slice(query.replaceEnd)}`;
     onChange(nextValue);
     setOpen(false);
 
     requestAnimationFrame(() => {
       const input = inputRef.current;
       if (!input) return;
-      const nextCursor = activeQuery.replaceStart + token.length;
+      const nextCursor = query.replaceStart + token.length;
       input.focus();
       input.setSelectionRange(nextCursor, nextCursor);
       setCursor(nextCursor);
@@ -94,7 +104,7 @@ export function TwigTemplateInput({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open || filteredSuggestions.length === 0) return;
+    if (!showDropdown) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -129,7 +139,10 @@ export function TwigTemplateInput({
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
-          setCursor(event.target.selectionStart ?? event.target.value.length);
+          const nextCursor = event.target.selectionStart ?? event.target.value.length;
+          setCursor(nextCursor);
+          setOpen(true);
+          setHighlightIndex(0);
         }}
         onKeyDown={(event) => {
           handleKeyDown(event);
@@ -145,9 +158,13 @@ export function TwigTemplateInput({
         }}
         onFocus={(event) => {
           syncCursor();
+          setFocused(true);
+          setOpen(true);
+          setHighlightIndex(0);
           inputProps.onFocus?.(event);
         }}
         onBlur={(event) => {
+          setFocused(false);
           window.setTimeout(() => setOpen(false), 120);
           inputProps.onBlur?.(event);
         }}
@@ -157,7 +174,7 @@ export function TwigTemplateInput({
         autoComplete="off"
       />
 
-      {open && activeQuery ? (
+      {showDropdown && suggestionQuery ? (
         <div
           role="listbox"
           className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-900"

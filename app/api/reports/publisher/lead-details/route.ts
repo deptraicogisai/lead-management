@@ -22,6 +22,9 @@ type LeadDoc = {
   rawData?: string;
   validationStatus: "success" | "fail";
   validationErrors?: string[];
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
+  redirectUrl?: string;
+  soldPrice?: number | null;
   userAgent?: string;
   postedAt?: Date | string;
   createdAt?: Date | string;
@@ -77,7 +80,7 @@ function buildMongoFilter(params: {
   publisherTags: string;
   tableSearch: string;
 }) {
-  const andConditions: Record<string, unknown>[] = [];
+  const andConditions: Record<string, unknown>[] = [{ validationStatus: "success" }];
 
   if (params.leadId) {
     andConditions.push(buildLeadIdCondition(params.leadId));
@@ -102,9 +105,9 @@ function buildMongoFilter(params: {
 
   const normalizedStatus = params.status.toLowerCase();
   if (normalizedStatus === "accepted" || normalizedStatus === "sold") {
-    andConditions.push({ validationStatus: "success" });
+    andConditions.push({ publisherStatus: "Sold" });
   } else if (normalizedStatus === "reject") {
-    andConditions.push({ validationStatus: "fail" });
+    andConditions.push({ publisherStatus: { $in: ["Reject", "Post Error"] } });
   }
 
   if (params.publisherChannel) {
@@ -275,6 +278,9 @@ export async function GET(req: Request) {
       return mapLeadDocToPublisherRow({
         id: doc._id?.toString() ?? "",
         validationStatus: doc.validationStatus,
+        publisherStatus: doc.publisherStatus,
+        redirectUrl: doc.redirectUrl,
+        soldPrice: doc.soldPrice,
         postedAt,
         createdAt,
         userAgent: doc.userAgent,

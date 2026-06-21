@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { LeadDeliveryModel } from "@/lib/models/lead-delivery";
 import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
+import { resolveBuyerName } from "@/lib/buyer";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
 
 function parsePageSize(value: string | null) {
@@ -20,6 +21,16 @@ function buildLeadIdCondition(leadId: string) {
   return null;
 }
 
+function parseDate(value: string | null) {
+  if (!value?.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -27,6 +38,9 @@ export async function GET(req: Request) {
     const buyerId = normalizeSearchParam(searchParams.get("buyerId"));
     const campaignId = normalizeSearchParam(searchParams.get("campaignId"));
     const status = normalizeSearchParam(searchParams.get("status"));
+    const dateFrom = parseDate(searchParams.get("dateFrom"));
+    const dateTo = parseDate(searchParams.get("dateTo"));
+    const tableSearch = normalizeSearchParam(searchParams.get("tableSearch"));
     const page = parsePageParam(searchParams.get("page"), 1);
     const pageSize = parsePageSize(searchParams.get("pageSize"));
     const skip = (page - 1) * pageSize;
@@ -55,6 +69,18 @@ export async function GET(req: Request) {
       filter.buyerStatus = status;
     }
 
+    if (dateFrom || dateTo) {
+      filter.postedAt = {
+        ...(dateFrom ? { $gte: dateFrom } : {}),
+        ...(dateTo ? { $lte: dateTo } : {}),
+      };
+    }
+
+    if (tableSearch) {
+      const regex = { $regex: escapeRegex(tableSearch), $options: "i" };
+      filter.$or = [{ postLeadUrl: regex }, { errorReason: regex }, { rejectReason: regex }];
+    }
+
     const [docs, total] = await Promise.all([
       LeadDeliveryModel.find(filter).sort({ postedAt: -1, campaignOrder: 1 }).skip(skip).limit(pageSize).lean(),
       LeadDeliveryModel.countDocuments(filter),
@@ -68,7 +94,7 @@ export async function GET(req: Request) {
         ? CampaignModel.find({ _id: { $in: campaignIds } }).select({ name: 1, displayId: 1 }).lean()
         : [],
       buyerIds.length > 0
-        ? BuyerModel.find({ _id: { $in: buyerIds } }).select({ company: 1 }).lean()
+        ? BuyerModel.find({ _id: { $in: buyerIds } }).select({ company: 1, name: 1 }).lean()
         : [],
     ]);
 
@@ -86,7 +112,7 @@ export async function GET(req: Request) {
         campaignName: campaign?.name ?? "",
         campaignDisplayId: campaign?.displayId ?? 0,
         buyerId: doc.buyerRef?.toString() ?? "",
-        buyerCompany: buyer?.company ?? "",
+        buyerCompany: buyer ? resolveBuyerName(buyer) : "",
         pingTreeType: doc.pingTreeType,
         campaignOrder: doc.campaignOrder,
         buyerStatus: doc.buyerStatus,

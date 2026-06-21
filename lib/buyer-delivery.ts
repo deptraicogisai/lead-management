@@ -334,6 +334,34 @@ export async function deliverLeadToBuyer(params: {
       });
     }
 
+    const ambiguousHttpParseError =
+      !response.ok &&
+      inferred.status === "Error" &&
+      (!inferred.reason ||
+        inferred.reason === "Unrecognized buyer response status." ||
+        inferred.reason === "Empty or unmapped buyer response." ||
+        inferred.reason === "Response mapping could not determine buyer status.");
+
+    if (ambiguousHttpParseError) {
+      return assembleBuyerDeliveryResult({
+        publisherLead: params.publisherLead,
+        systemLead: params.lead,
+        mappedValues,
+        buyerRequest: outboundRequest,
+        buyerStatus: "Error",
+        price: parsed.soldPrice,
+        redirectUrl: parsed.redirectUrl,
+        rejectSign: parsed.rejectSign,
+        rejectReason: parsed.rejectReason,
+        errorReason: `Buyer returned HTTP ${httpStatus}.`,
+        postLeadUrl,
+        responseBody,
+        httpStatus,
+        parsed,
+        traceSteps,
+      });
+    }
+
     return assembleBuyerDeliveryResult({
       publisherLead: params.publisherLead,
       systemLead: params.lead,

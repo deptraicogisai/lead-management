@@ -140,11 +140,19 @@ export default function BuyersPage() {
         body: JSON.stringify(values),
       });
 
-      if (!response.ok) return;
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
 
+      if (!response.ok) {
+        toast.error(result?.message ?? "Failed to create buyer.");
+        return;
+      }
+
+      toast.success("Buyer created successfully.");
       setIsAddModalOpen(false);
       setPage(1);
       setReloadKey((current) => current + 1);
+    } catch {
+      toast.error("Failed to create buyer.");
     } finally {
       setIsSaving(false);
     }

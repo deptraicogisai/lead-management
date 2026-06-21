@@ -132,21 +132,101 @@ export type ActiveTwigTemplateQuery = {
   replaceEnd: number;
 };
 
-export function getActiveTwigTemplateQuery(value: string, cursor: number): ActiveTwigTemplateQuery | null {
+export type TwigTemplateSuggestionQuery = {
+  partial: string;
+  replaceStart: number;
+  replaceEnd: number;
+};
+
+function normalizeTwigSuggestionSearchQuery(value: string) {
+  return value.replace(/^\{\{\s*/, "").replace(/\s*\}\}\s*$/, "").trim();
+}
+
+function looksLikePlainLiteralValue(value: string) {
+  const query = normalizeTwigSuggestionSearchQuery(value);
+  if (!query) return false;
+
+  if (/^https?:\/\//i.test(query)) return true;
+  if (/^[\d]+(\.[\d]+)?$/.test(query)) return true;
+  if (/["'`{[\]()]/.test(query)) return true;
+  if (/[/\\:@#$,;!?&=+]/.test(query)) return true;
+
+  if (/\s/.test(query) && !/^(lead|config|mapped|response)\.[a-zA-Z0-9_.]+$/.test(query)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function shouldShowTwigTemplateSuggestions(value: string, cursor: number): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+
   const before = value.slice(0, cursor);
   const openIndex = before.lastIndexOf("{{");
-  if (openIndex === -1) return null;
+  if (openIndex !== -1) {
+    const afterOpen = before.slice(openIndex + 2);
+    if (!afterOpen.includes("}}")) {
+      return true;
+    }
+  }
 
-  const afterOpen = before.slice(openIndex + 2);
-  if (afterOpen.includes("}}")) return null;
+  if (/^\{\{[^{}]+\}\}$/.test(trimmed)) {
+    return true;
+  }
 
-  const partial = afterOpen.replace(/^\s+/, "");
+  return !looksLikePlainLiteralValue(trimmed);
+}
+
+export function getTwigTemplateSuggestionQuery(
+  value: string,
+  cursor: number
+): TwigTemplateSuggestionQuery | null {
+  if (!shouldShowTwigTemplateSuggestions(value, cursor)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {
+      partial: "",
+      replaceStart: 0,
+      replaceEnd: value.length,
+    };
+  }
+
+  const before = value.slice(0, cursor);
+  const openIndex = before.lastIndexOf("{{");
+  if (openIndex !== -1) {
+    const afterOpen = before.slice(openIndex + 2);
+    if (!afterOpen.includes("}}")) {
+      const partial = afterOpen.replace(/^\s+/, "");
+      return {
+        partial,
+        replaceStart: openIndex,
+        replaceEnd: cursor,
+      };
+    }
+  }
 
   return {
-    openIndex,
-    partial,
-    replaceStart: openIndex,
-    replaceEnd: cursor,
+    partial: value,
+    replaceStart: 0,
+    replaceEnd: value.length,
+  };
+}
+
+export function getActiveTwigTemplateQuery(value: string, cursor: number): ActiveTwigTemplateQuery | null {
+  const query = getTwigTemplateSuggestionQuery(value, cursor);
+  if (!query) return null;
+
+  const openIndex = value.slice(0, cursor).lastIndexOf("{{");
+
+  return {
+    openIndex: openIndex === -1 ? 0 : openIndex,
+    partial: query.partial,
+    replaceStart: query.replaceStart,
+    replaceEnd: query.replaceEnd,
   };
 }
 

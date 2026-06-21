@@ -8,7 +8,7 @@ import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/compo
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { FieldLabel } from "@/components/ui/form-controls";
+import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -50,11 +50,13 @@ export default function SellersPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>("All");
+  const [nameEmailFilter, setNameEmailFilter] = useState("");
   const [dateFrom, setDateFrom] = useState(emptyDateRange.from);
   const [dateTo, setDateTo] = useState(emptyDateRange.to);
 
   const [appliedFilters, setAppliedFilters] = useState({
     statusFilter: "All" as (typeof STATUS_FILTER_OPTIONS)[number],
+    nameEmail: "",
     dateFrom: emptyDateRange.from,
     dateTo: emptyDateRange.to,
   });
@@ -69,6 +71,10 @@ export default function SellersPage() {
           page: String(page),
           pageSize: String(pageSize),
         });
+        const search = appliedFilters.nameEmail.trim();
+        if (search) {
+          params.set("search", search);
+        }
         const response = await fetch(`/api/sellers?${params.toString()}`);
         if (!response.ok) return;
 
@@ -82,7 +88,7 @@ export default function SellersPage() {
     };
 
     void fetchSellers();
-  }, [page, pageSize, reloadKey]);
+  }, [page, pageSize, reloadKey, appliedFilters.nameEmail]);
 
   const filteredRows = useMemo(() => {
     const fromDate = parseDateTimeValue(appliedFilters.dateFrom);
@@ -91,6 +97,11 @@ export default function SellersPage() {
     return sellerRows.filter((row) => {
       const matchesStatus =
         appliedFilters.statusFilter === "All" ? true : row.status === appliedFilters.statusFilter;
+
+      const nameEmailSearch = appliedFilters.nameEmail.trim().toLowerCase();
+      const matchesNameEmail = nameEmailSearch
+        ? row.name.toLowerCase().includes(nameEmailSearch) || row.email.toLowerCase().includes(nameEmailSearch)
+        : true;
 
       const createdAt = row.createdAt ? new Date(row.createdAt) : null;
       const matchesDateFrom = !fromDate || !createdAt ? true : createdAt >= fromDate;
@@ -104,13 +115,14 @@ export default function SellersPage() {
           String(row.displayId ?? "").includes(search)
         : true;
 
-      return matchesStatus && matchesDateFrom && matchesDateTo && matchesTableFilter;
+      return matchesStatus && matchesNameEmail && matchesDateFrom && matchesDateTo && matchesTableFilter;
     });
   }, [sellerRows, appliedFilters, tableFilter]);
 
   const handleSearch = () => {
     setAppliedFilters({
       statusFilter,
+      nameEmail: nameEmailFilter.trim(),
       dateFrom,
       dateTo,
     });
@@ -120,11 +132,13 @@ export default function SellersPage() {
   const clearFilters = () => {
     const resetDateRange = buildEmptySearchDateRange();
     setStatusFilter("All");
+    setNameEmailFilter("");
     setDateFrom(resetDateRange.from);
     setDateTo(resetDateRange.to);
     setTableFilter("");
     setAppliedFilters({
       statusFilter: "All",
+      nameEmail: "",
       dateFrom: resetDateRange.from,
       dateTo: resetDateRange.to,
     });
@@ -270,7 +284,7 @@ export default function SellersPage() {
       <PageSection>
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
                 <select
@@ -284,6 +298,22 @@ export default function SellersPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <FieldLabel htmlFor="publisher-name-email" label="Name / Email" />
+                <Input
+                  id="publisher-name-email"
+                  value={nameEmailFilter}
+                  onChange={(event) => setNameEmailFilter(event.target.value)}
+                  placeholder="Search by name or email"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSearch();
+                    }
+                  }}
+                />
               </div>
 
               <div>

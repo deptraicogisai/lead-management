@@ -100,12 +100,18 @@ export function buildPublisherLeadDisplayCode(id: string) {
   return `W_${suffix || "LEAD"}`;
 }
 
-export function buildQualityDots(validationStatus: "success" | "fail") {
-  if (validationStatus === "success") {
+export function buildQualityDots(publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null) {
+  if (publisherStatus === "Sold") {
     return [true, true, true, false];
   }
 
   return [false, true, false, false];
+}
+
+function resolvePublisherStatusLabel(
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null
+): "Accepted" | "Reject" {
+  return publisherStatus === "Sold" ? "Accepted" : "Reject";
 }
 
 function formatIndexedLabel(name: string, index?: number) {
@@ -245,6 +251,9 @@ export function buildPublisherLeadFieldColumnsFromLeads(
 export function mapLeadDocToPublisherRow(input: {
   id: string;
   validationStatus: "success" | "fail";
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
+  redirectUrl?: string;
+  soldPrice?: number | null;
   postedAt: string;
   createdAt: string;
   userAgent?: string;
@@ -260,20 +269,24 @@ export function mapLeadDocToPublisherRow(input: {
   const channelName =
     readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
   const channelId = readPayloadString(payload, ["channel_id", "channelId"]) || "2";
+  const publisherPayout =
+    input.soldPrice != null && Number.isFinite(input.soldPrice)
+      ? `$${input.soldPrice.toFixed(2)}`
+      : readPayloadMoney(payload, ["price", "payout", "publisher_payout", "amount"]);
 
   return {
     id: input.id,
     displayCode: buildPublisherLeadDisplayCode(input.id),
-    qualityDots: buildQualityDots(input.validationStatus),
+    qualityDots: buildQualityDots(input.publisherStatus),
     postedAt: input.postedAt,
     createdAt: input.createdAt,
-    statusLabel: input.validationStatus === "success" ? "Accepted" : "Reject",
+    statusLabel: resolvePublisherStatusLabel(input.publisherStatus),
     tier: 0,
     publisherLabel: input.publisherIndex
       ? `[${input.publisherIndex}] ${input.publisherName}`
       : input.publisherName,
-    redirectLabel: input.mappingLabel || "—",
-    publisherPayout: readPayloadMoney(payload, ["price", "payout", "publisher_payout", "amount"]),
+    redirectLabel: input.redirectUrl?.trim() || input.mappingLabel || "—",
+    publisherPayout,
     adm: readPayloadMoney(payload, ["adm", "admin_fee"]),
     ttl: readPayloadMoney(payload, ["ttl", "total"]),
     ref: readPayloadMoney(payload, ["ref", "referral"]),

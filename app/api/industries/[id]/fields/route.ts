@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
-import { parseVerticalFieldImport } from "@/lib/vertical-field";
+import { resolveJsonUploadFieldImport } from "@/lib/vertical-field";
 import { findVerticalById, findVerticalByIdLean, isValidVerticalId } from "@/lib/vertical-db";
 import { toVerticalFieldResponse } from "@/lib/vertical-field-api";
 import { importVerticalFields as persistImportedVerticalFields } from "@/lib/vertical-field-import";
@@ -93,26 +93,15 @@ function normalizeFieldConfig(body: VerticalFieldPayload) {
   };
 }
 
-function isImportPayload(payload: unknown): payload is unknown[] | { fields: unknown[] } {
-  return (
-    Array.isArray(payload) ||
-    (Boolean(payload) &&
-      typeof payload === "object" &&
-      Array.isArray((payload as { fields?: unknown }).fields))
-  );
-}
-
-async function importVerticalFields(id: string, payload: unknown) {
+async function importVerticalFieldsFromParsed(
+  id: string,
+  fields: Parameters<typeof persistImportedVerticalFields>[1]
+) {
   if (!isValidVerticalId(id)) {
     return NextResponse.json({ message: "Invalid vertical id." }, { status: 400 });
   }
 
-  const parsed = parseVerticalFieldImport(payload);
-  if ("error" in parsed) {
-    return NextResponse.json({ message: parsed.error }, { status: 400 });
-  }
-
-  return persistImportedVerticalFields(id, parsed.fields);
+  return persistImportedVerticalFields(id, fields);
 }
 
 export async function GET(_: Request, context: Params) {
@@ -146,14 +135,26 @@ export async function POST(req: Request, context: Params) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
 
-    if (isImportPayload(body)) {
-      return importVerticalFields(id, body);
+    const resolved = resolveJsonUploadFieldImport(body);
+
+    if ("fields" in resolved) {
+      return importVerticalFieldsFromParsed(id, resolved.fields);
+    }
+
+    if ("error" in resolved) {
+      return NextResponse.json({ message: resolved.error }, { status: 400 });
     }
 
     const fieldBody = body as VerticalFieldPayload;
 
     if (!fieldBody.fieldName?.trim() || !fieldBody.description?.trim() || !fieldBody.type?.trim()) {
-      return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
+      return NextResponse.json(
+        {
+          message:
+            "Missing required fields. Upload a lead sample JSON object to create fields from its keys, or a field definition with fieldName, description, and type.",
+        },
+        { status: 400 }
+      );
     }
 
     const normalizedConfig = normalizeFieldConfig(fieldBody);

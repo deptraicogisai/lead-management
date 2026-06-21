@@ -20,6 +20,13 @@ export type VerticalFieldRecord = {
   ignoreValues?: string[];
 };
 
+export type VerticalFieldImportPayload = Omit<VerticalFieldRecord, "id">;
+
+export type JsonUploadFieldImportResult =
+  | { fields: VerticalFieldImportPayload[] }
+  | { error: string }
+  | { notBulk: true };
+
 export type VerticalFieldImportItem = {
   field_name?: string;
   fieldName?: string;
@@ -59,6 +66,105 @@ export function formatVerticalFieldTypeLabel(value: string) {
 function normalizeOptionValue(value: string | number | null | undefined) {
   if (value === null || value === undefined) return "";
   return String(value);
+}
+
+function isSingleFieldDefinitionPayload(payload: Record<string, unknown>) {
+  const fieldName = String(payload.fieldName ?? payload.field_name ?? "").trim();
+  const description = String(payload.description ?? "").trim();
+  const type = String(payload.type ?? payload.data_type ?? "").trim();
+
+  if (!fieldName || !description || !type) {
+    return false;
+  }
+
+  const allowedKeys = new Set([
+    "fieldName",
+    "field_name",
+    "description",
+    "type",
+    "data_type",
+    "required",
+    "format",
+    "displayArrayMapping",
+    "display_array_mapping",
+    "dataTypeFilter",
+    "data_type_filter",
+    "options",
+    "emailDuplicateRule",
+    "ignoreValues",
+  ]);
+
+  return Object.keys(payload).every((key) => allowedKeys.has(key));
+}
+
+function isFieldDefinitionImportItem(value: unknown): value is VerticalFieldImportItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const item = value as VerticalFieldImportItem;
+  const fieldName = (item.fieldName ?? item.field_name ?? "").trim();
+  const description = (item.description ?? "").trim();
+  const type = (item.type ?? item.data_type ?? "").trim();
+
+  return Boolean(fieldName && description && type);
+}
+
+export function parseLeadSampleFieldImport(
+  payload: Record<string, unknown>
+): { fields: VerticalFieldImportPayload[] } | { error: string } {
+  const entries = Object.entries(payload).filter(([key]) => key.trim());
+
+  if (entries.length === 0) {
+    return { error: "JSON object does not contain any fields." as const };
+  }
+
+  const fields = entries.map(([fieldName]) => ({
+    fieldName,
+    description: fieldName,
+    type: "string",
+    required: false,
+    displayArrayMapping: false,
+    options: [],
+    ignoreValues: [],
+  }));
+
+  return { fields };
+}
+
+export function resolveJsonUploadFieldImport(payload: unknown): JsonUploadFieldImportResult {
+  if (Array.isArray(payload)) {
+    if (payload.length === 0) {
+      return { error: "JSON array is empty." as const };
+    }
+
+    if (isFieldDefinitionImportItem(payload[0])) {
+      return parseVerticalFieldImport(payload);
+    }
+
+    const first = payload[0];
+    if (first && typeof first === "object" && !Array.isArray(first)) {
+      return parseLeadSampleFieldImport(first as Record<string, unknown>);
+    }
+
+    return { error: "JSON array must contain field definitions or a lead sample object." as const };
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return { error: "Upload JSON must be an object or array." as const };
+  }
+
+  if (Array.isArray((payload as { fields?: unknown }).fields)) {
+    return parseVerticalFieldImport(payload);
+  }
+
+  const objectPayload = payload as Record<string, unknown>;
+
+  if (isSingleFieldDefinitionPayload(objectPayload)) {
+    return { notBulk: true as const };
+  }
+
+  return parseLeadSampleFieldImport(objectPayload);
 }
 
 export function parseVerticalFieldImportItem(
@@ -114,7 +220,9 @@ export function parseVerticalFieldImportItem(
   };
 }
 
-export function parseVerticalFieldImport(payload: unknown) {
+export function parseVerticalFieldImport(
+  payload: unknown
+): { fields: VerticalFieldImportPayload[] } | { error: string } {
   const items = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object" && Array.isArray((payload as { fields?: unknown }).fields)
@@ -125,7 +233,7 @@ export function parseVerticalFieldImport(payload: unknown) {
     return { error: "Import file must contain a JSON array of field definitions." as const };
   }
 
-  const fields: Omit<VerticalFieldRecord, "id">[] = [];
+  const fields: VerticalFieldImportPayload[] = [];
 
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index] as VerticalFieldImportItem;

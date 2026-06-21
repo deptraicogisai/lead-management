@@ -1,7 +1,5 @@
-import { ReportPlaceholderPage } from "@/components/reports/report-placeholder-page";
+import { BuyerLeadDetailsPage } from "@/components/reports/buyer-lead-details-page";
 
-export default function BuyerLeadDetailsPage() {
-  return (
-    <ReportPlaceholderPage description="Buyer lead details report will be available here." />
-  );
+export default function BuyerLeadDetailsRoutePage() {
+  return <BuyerLeadDetailsPage />;
 }

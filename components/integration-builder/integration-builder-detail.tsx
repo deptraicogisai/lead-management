@@ -38,7 +38,6 @@ import {
   type ArrayMappingEntry,
 } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
-import { toLeadFieldTemplate } from "@/lib/lead-template";
 import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload, buildTwigConfigFieldsFromIntegration } from "@/lib/twig-template";
 
 function RequestMappingCollapsible({ open, children }: { open: boolean; children: ReactNode }) {
@@ -263,7 +262,7 @@ function buildRowsFromSample(sample: unknown) {
           id: `sample-array-${Date.now()}-${index}`,
           name: key,
           type: inferSampleValueType(value),
-          value: toLeadFieldTemplate(key),
+          value: stringifySampleValue(value),
         })),
       };
     }
@@ -286,7 +285,7 @@ function buildRowsFromSample(sample: unknown) {
         id: `sample-object-${Date.now()}-${index}`,
         name: key,
         type: inferSampleValueType(value),
-        value: toLeadFieldTemplate(key),
+        value: stringifySampleValue(value),
       })),
     };
   }
@@ -1184,7 +1183,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               <TwigTemplateInput
                 value={requestUrl}
                 onChange={setRequestUrl}
-                placeholder="{{ config.url }}"
+                placeholder="config.url or static value"
                 {...twigInputProps}
               />
             </div>

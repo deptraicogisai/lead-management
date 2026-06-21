@@ -525,10 +525,16 @@ export async function handleSellerLeadPost(req: Request) {
         lead_id: leadId,
       };
     } else if (distribution.publisherStatus === "Post Error") {
+      const postErrorDelivery = distribution.campaignDeliveries.find(
+        (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
+      );
       responsePayload = {
         status: "error",
         reasons: [{ message: distribution.message }],
         lead_id: leadId,
+        ...(postErrorDelivery?.errorReason ? { buyer_post_error: postErrorDelivery.errorReason } : {}),
+        ...(postErrorDelivery?.postLeadUrl ? { post_lead_url: postErrorDelivery.postLeadUrl } : {}),
+        ...(postErrorDelivery?.httpStatus ? { buyer_http_status: postErrorDelivery.httpStatus } : {}),
       };
     } else {
       responsePayload = {
