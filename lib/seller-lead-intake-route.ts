@@ -540,8 +540,12 @@ export async function handleSellerLeadPost(req: Request) {
       const redirectAttempt = distribution.campaignDeliveries.find(
         (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
       );
+      const silentAttempt = distribution.campaignDeliveries.find(
+        (entry) => entry.pingTreeType === "Silent" && entry.buyerStatus !== "Skipped"
+      );
       const primaryAttempt =
         redirectAttempt ??
+        silentAttempt ??
         distribution.campaignDeliveries.find((entry) => entry.buyerStatus !== "Skipped");
 
       responsePayload = {

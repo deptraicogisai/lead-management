@@ -9,11 +9,12 @@ export type IntegrationTemplateContext = {
   lead: Record<string, unknown>;
   config: Record<string, string>;
   mapped: Record<string, string>;
+  campaign?: Record<string, unknown>;
   response?: unknown;
 };
 
 const TWIG_BLOCK_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
-const TEMPLATE_EXPRESSION_PATTERN = /^(lead|config|mapped|response)\.(.+)$/i;
+const TEMPLATE_EXPRESSION_PATTERN = /^(lead|config|mapped|response|campaign)\.(.+)$/i;
 
 function getValueAtPath(source: unknown, path: string): unknown {
   if (!path.trim()) return undefined;
@@ -138,6 +139,10 @@ function resolveTemplateExpression(expression: string, context: IntegrationTempl
     return stringifyTemplateValue(getValueAtPath(context.response, path));
   }
 
+  if (namespace === "campaign") {
+    return stringifyTemplateValue(getValueAtPath(context.campaign, path));
+  }
+
   return "";
 }
 
@@ -219,11 +224,13 @@ export function buildIntegrationRequest(params: {
   lead: Record<string, unknown>;
   config: Record<string, string>;
   mapped: Record<string, string>;
+  campaign?: Record<string, unknown>;
 }) {
   const context: IntegrationTemplateContext = {
     lead: buildLeadTemplateContext(params.lead),
     config: params.config,
     mapped: params.mapped,
+    campaign: params.campaign ?? {},
   };
 
   const url = renderTwigTemplate(params.requestMapping.requestUrl, context).trim();
@@ -298,7 +305,8 @@ function isAcceptedSoldSign(value: string) {
 
 export function parseIntegrationResponse(
   responseMapping: IntegrationBuilderResponseMapping,
-  rawResponseText: string
+  rawResponseText: string,
+  campaign: Record<string, unknown> = {}
 ): ParsedBuyerResponse {
   const result: ParsedBuyerResponse = {
     soldSign: "",
@@ -327,6 +335,7 @@ export function parseIntegrationResponse(
     lead: {},
     config: {},
     mapped: {},
+    campaign,
     response: parsedResponse,
   };
 

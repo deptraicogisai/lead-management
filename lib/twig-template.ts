@@ -3,6 +3,11 @@ import {
   type IntegrationBuilderConfigField,
 } from "@/lib/integration-builder";
 import {
+  CAMPAIGN_TEMPLATE_FIELDS,
+  CAMPAIGN_TEMPLATE_PATHS,
+  toCampaignFieldTemplate,
+} from "@/lib/campaign-template";
+import {
   LEAD_SYSTEM_TEMPLATE_VARIABLES,
   buildLeadTemplateSuggestions,
   toLeadFieldTemplate,
@@ -11,19 +16,55 @@ import {
 export type TwigTemplateSuggestion = {
   token: string;
   description: string;
-  group: "lead-system" | "lead-payload" | "config-field" | "mapped-slug" | "response-field";
+  group: "lead-system" | "lead-payload" | "config-field" | "mapped-slug" | "response-field" | "campaign";
 };
 
-export const RESPONSE_TEMPLATE_VARIABLES: TwigTemplateSuggestion[] = [
-  { token: "{{ response.message }}", description: "Response message", group: "response-field" },
-  { token: '{{ response.message == "Approved" }}', description: "Approved status check", group: "response-field" },
-  { token: '{{ response.message == "Declined" }}', description: "Declined status check", group: "response-field" },
-  { token: "{{ response.result.price }}", description: "Result price", group: "response-field" },
-  { token: "{{ response.result.redirect_url }}", description: "Redirect URL", group: "response-field" },
+export function toResponseFieldTemplate(fieldName: string) {
+  const normalized = fieldName.trim();
+  if (!normalized) return "{{ response. }}";
+  return `{{ response.${normalized} }}`;
+}
+
+const COMMON_RESPONSE_PATHS: Array<{ path: string; description: string }> = [
+  { path: "msg", description: "Response msg" },
+  { path: "status", description: "Response status" },
+  { path: "status_text", description: "Response status text" },
+  { path: "message", description: "Response message" },
+  { path: "price", description: "Sold price" },
+  { path: "redirect_url", description: "Redirect URL" },
+  { path: "redirectUrl", description: "Redirect URL (camelCase)" },
+  { path: "error_reason", description: "Error reason" },
+  { path: "reject_reason", description: "Reject reason" },
+  { path: "result.price", description: "Nested result price" },
+  { path: "result.redirect_url", description: "Nested redirect URL" },
 ];
 
-export function buildResponseTemplateSuggestions(): TwigTemplateSuggestion[] {
-  return RESPONSE_TEMPLATE_VARIABLES.map((item) => ({ ...item }));
+const RESPONSE_EQUALITY_TEMPLATES: TwigTemplateSuggestion[] = [
+  { token: '{{ response.msg == "success" }}', description: "Sold sign when msg is success", group: "response-field" },
+  { token: '{{ response.msg == "error" }}', description: "Reject sign when msg is error", group: "response-field" },
+  { token: '{{ response.message == "Approved" }}', description: "Approved status check", group: "response-field" },
+  { token: '{{ response.message == "Declined" }}', description: "Declined status check", group: "response-field" },
+  { token: '{{ response.status == "1" }}', description: "Sold sign when status is 1", group: "response-field" },
+  { token: '{{ response.status == "0" }}', description: "Reject sign when status is 0", group: "response-field" },
+];
+
+export function buildCampaignTemplateSuggestions(): TwigTemplateSuggestion[] {
+  return CAMPAIGN_TEMPLATE_FIELDS.map((field) => ({
+    token: toCampaignFieldTemplate(field.path),
+    description: field.description,
+    group: "campaign" as const,
+  }));
+}
+
+export function buildResponseTemplateSuggestions() {
+  return [
+    ...COMMON_RESPONSE_PATHS.map((entry) => ({
+      token: `{{ response.${entry.path} }}`,
+      description: entry.description,
+      group: "response-field" as const,
+    })),
+    ...RESPONSE_EQUALITY_TEMPLATES.map((item) => ({ ...item })),
+  ];
 }
 
 export type IntegrationConfigTemplateField = {
@@ -114,11 +155,18 @@ export function buildTwigTemplateSuggestions(
 
   const configSuggestions = buildConfigTemplateSuggestions(integrationConfigFields);
   const mappedSuggestions = buildMappedTemplateSuggestions(arrayMappingSlugs);
+  const campaignSuggestions = buildCampaignTemplateSuggestions();
   const responseSuggestions = options.includeResponse ? buildResponseTemplateSuggestions() : [];
 
   const seen = new Set<string>();
 
-  return [...leadSuggestions, ...configSuggestions, ...mappedSuggestions, ...responseSuggestions].filter((item) => {
+  return [
+    ...leadSuggestions,
+    ...configSuggestions,
+    ...mappedSuggestions,
+    ...campaignSuggestions,
+    ...responseSuggestions,
+  ].filter((item) => {
     if (seen.has(item.token)) return false;
     seen.add(item.token);
     return true;
@@ -151,7 +199,7 @@ function looksLikePlainLiteralValue(value: string) {
   if (/["'`{[\]()]/.test(query)) return true;
   if (/[/\\:@#$,;!?&=+]/.test(query)) return true;
 
-  if (/\s/.test(query) && !/^(lead|config|mapped|response)\.[a-zA-Z0-9_.]+$/.test(query)) {
+  if (/\s/.test(query) && !/^(lead|config|mapped|response|campaign)\.[a-zA-Z0-9_.]+$/.test(query)) {
     return true;
   }
 
@@ -244,7 +292,7 @@ function matchesTemplateQuery(item: TwigTemplateSuggestion, query: string) {
 }
 
 const TWIG_BLOCK_PATTERN = /\{\{([^{}]*)\}\}/g;
-const TWIG_EXPRESSION_PATTERN = /^(lead|config|mapped)\.([a-zA-Z][a-zA-Z0-9_]*)$/i;
+const TWIG_EXPRESSION_PATTERN = /^(lead|config|mapped|campaign)\.([a-zA-Z][a-zA-Z0-9_]*)$/i;
 
 const LEAD_SYSTEM_PATHS = new Set(
   LEAD_SYSTEM_TEMPLATE_VARIABLES.map((item) =>
@@ -283,10 +331,10 @@ function validateTwigExpression(
 
   const match = expression.match(TWIG_EXPRESSION_PATTERN);
   if (!match) {
-    return `${fieldLabel}: invalid Twig expression "${expression}". Use {{ lead.<field> }}, {{ config.<variable> }}, or {{ mapped.<slug> }}.`;
+    return `${fieldLabel}: invalid Twig expression "${expression}". Use {{ lead.<field> }}, {{ config.<variable> }}, {{ mapped.<slug> }}, or {{ campaign.<field> }}.`;
   }
 
-  const namespace = match[1];
+  const namespace = match[1].toLowerCase();
   const path = match[2];
 
   if (namespace === "lead") {
@@ -304,6 +352,11 @@ function validateTwigExpression(
     }
 
     return null;
+  }
+
+  if (namespace === "campaign") {
+    if (CAMPAIGN_TEMPLATE_PATHS.has(path)) return null;
+    return `${fieldLabel}: unknown campaign field "${path}".`;
   }
 
   const configVariable = context.integrationConfigFields.find((field) => field.variableName === path);
@@ -339,7 +392,7 @@ function validateTwigBlockInner(
     return null;
   }
 
-  return `${fieldLabel}: invalid Twig expression "${expression}". Use {{ lead.<field> }}, {{ config.<variable> }}, or {{ mapped.<slug> }}.`;
+  return `${fieldLabel}: invalid Twig expression "${expression}". Use {{ lead.<field> }}, {{ config.<variable> }}, {{ mapped.<slug> }}, or {{ campaign.<field> }}.`;
 }
 
 export function validateTwigTemplateValue(
@@ -455,6 +508,13 @@ export function filterTwigTemplateSuggestions(suggestions: TwigTemplateSuggestio
     const subQuery = query === "response" ? "" : query.slice("response.".length);
     if (!subQuery) return scoped;
     return scoped.filter((item) => matchesTemplateQuery(item, `response.${subQuery}`) || matchesTemplateQuery(item, subQuery));
+  }
+
+  if (query === "campaign" || query.startsWith("campaign.")) {
+    scoped = suggestions.filter((item) => item.group === "campaign");
+    const subQuery = query === "campaign" ? "" : query.slice("campaign.".length);
+    if (!subQuery) return scoped;
+    return scoped.filter((item) => matchesTemplateQuery(item, `campaign.${subQuery}`) || matchesTemplateQuery(item, subQuery));
   }
 
   if (!query) return suggestions;

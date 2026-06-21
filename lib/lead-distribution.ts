@@ -22,6 +22,7 @@ import {
 } from "@/lib/buyer-post-trace";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
+import { buildCampaignTemplateContext } from "@/lib/campaign-template";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { mergeMockBuyerPostOptions, normalizeCampaignTestMocks, type CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
@@ -91,26 +92,66 @@ function orderPingTreeActiveCampaignIds(activeCampaignIds: string[]) {
   return activeCampaignIds.map((campaignId) => campaignId?.trim() ?? "").filter(Boolean);
 }
 
+function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
+  return deliveries.some((entry) => entry.pingTreeType === "Redirect");
+}
+
 function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: boolean): PublisherLeadStatus {
-  if (
-    deliveries.some(
-      (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
-    )
-  ) {
+  const redirectAccept = deliveries.find(
+    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
+  );
+  if (redirectAccept) {
     return "Sold";
   }
+
+  if (hasRedirectDeliveries(deliveries)) {
+    if (hadPostError) {
+      return "Post Error";
+    }
+    return "Reject";
+  }
+
+  if (deliveries.some((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept")) {
+    return "Sold";
+  }
+
   if (hadPostError) {
     return "Post Error";
   }
+
   return "Reject";
+}
+
+function findAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
+  if (hasRedirectDeliveries(deliveries)) {
+    return deliveries.find((entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept");
+  }
+
+  return deliveries.find((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept");
+}
+
+function resolvePublisherPostError(deliveries: CampaignDeliveryLog[]) {
+  if (hasRedirectDeliveries(deliveries)) {
+    return deliveries.some(
+      (entry) =>
+        entry.pingTreeType === "Redirect" &&
+        (entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout")
+    );
+  }
+
+  return deliveries.some((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
 }
 
 function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
   const redirectAttempt = deliveries.find(
     (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
   );
+  const silentAttempt = deliveries.find(
+    (entry) => entry.pingTreeType === "Silent" && entry.buyerStatus !== "Skipped"
+  );
   const primary =
     redirectAttempt ??
+    silentAttempt ??
     deliveries.find((entry) => entry.buyerStatus !== "Skipped") ??
     deliveries[0];
 
@@ -133,12 +174,6 @@ function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
   }
 
   return "Lead was not sold to any buyer.";
-}
-
-function findRedirectAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
-  return deliveries.find(
-    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
-  );
 }
 
 async function loadVerticalFields(verticalRefId: string) {
@@ -677,6 +712,19 @@ async function processCampaignAttempt(params: {
     publisherLead: params.payload,
     lead: payloadWithFingerprint,
     configValues,
+    campaign: buildCampaignTemplateContext({
+      id: params.campaignId,
+      displayId: campaign.displayId,
+      name: campaign.name,
+      status: campaign.status,
+      campaignType: campaign.campaignType,
+      timezone: campaignTimezone,
+      minPrice: campaign.minPrice,
+      buyerId,
+      buyerLabel: buyerCompany,
+      verticalId: campaign.verticalRef?.toString() ?? "",
+      integrationId,
+    }),
     minPrice: campaign.minPrice ?? 0,
     mockBuyerPostUrl,
     mockBuyerPostOptions: params.mockBuyerPost
@@ -1208,10 +1256,8 @@ export async function distributeLeadAfterIntake(params: {
 
   const coreDeliveries = [...redirectDeliveries, ...silentDeliveries];
 
-  const accepted = findRedirectAcceptedDelivery(coreDeliveries);
-  const hadPostError = coreDeliveries.some(
-    (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
-  );
+  const accepted = findAcceptedDelivery(coreDeliveries);
+  const hadPostError = resolvePublisherPostError(coreDeliveries);
   const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError);
 
   const redirectUrl = accepted?.redirectUrl ?? "";
@@ -1257,9 +1303,13 @@ export async function distributeLeadAfterIntake(params: {
         "No buyer request was built. Add the campaign to the Ping Tree, configure Integration on the campaign, and ensure the buyer is Active."
       : "";
 
-  const firstPostError = coreDeliveries.find(
-    (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
-  );
+  const firstPostError = hasRedirectDeliveries(coreDeliveries)
+    ? coreDeliveries.find(
+        (entry) =>
+          entry.pingTreeType === "Redirect" &&
+          (entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout")
+      )
+    : coreDeliveries.find((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
 
   return {
     publisherStatus,

@@ -29,6 +29,7 @@ const GROUP_LABELS: Record<TwigTemplateSuggestion["group"], string> = {
   "config-field": "Integration Config",
   "mapped-slug": "Array Mapping",
   "response-field": "Response",
+  "campaign": "Campaign",
 };
 
 export function TwigTemplateInput({

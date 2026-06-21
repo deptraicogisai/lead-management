@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Braces,
@@ -177,6 +178,15 @@ type ResponseMappingRow = {
   id: string;
   key: string;
   value: string;
+};
+
+type LinkedCampaignSummary = {
+  id: string;
+  displayId: number;
+  name: string;
+  campaignType: "Redirect" | "Silent";
+  status: string;
+  productLabel?: string;
 };
 
 function mapResponseFieldsToRows(fields: IntegrationBuilderResponseMappingField[]): ResponseMappingRow[] {
@@ -377,6 +387,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const [responseDataType, setResponseDataType] = useState("JSON");
   const [responseFieldRows, setResponseFieldRows] = useState<ResponseMappingRow[]>([]);
   const [isSavingResponseMapping, setIsSavingResponseMapping] = useState(false);
+  const [linkedCampaigns, setLinkedCampaigns] = useState<LinkedCampaignSummary[]>([]);
 
   const activeTab = builderTabs.find((tab) => tab.id === activeTabId) ?? builderTabs[0];
 
@@ -484,6 +495,49 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
     void loadArrayMappingFields();
   }, [builder?.verticalId]);
+
+  useEffect(() => {
+    if (!builder?.id) {
+      setLinkedCampaigns([]);
+      return;
+    }
+
+    const loadLinkedCampaigns = async () => {
+      try {
+        const response = await fetch("/api/campaigns?page=1&pageSize=1000");
+        if (!response.ok) return;
+
+        const data = (await response.json()) as {
+          items?: Array<{
+            id: string;
+            displayId: number;
+            name: string;
+            campaignType: "Redirect" | "Silent";
+            status: string;
+            integrationId: string;
+            productLabel: string;
+          }>;
+        };
+
+        const linked = (data.items ?? []).filter((campaign) => campaign.integrationId === builder.id);
+
+        setLinkedCampaigns(
+          linked.map((campaign) => ({
+            id: campaign.id,
+            displayId: campaign.displayId,
+            name: campaign.name,
+            campaignType: campaign.campaignType,
+            status: campaign.status,
+            productLabel: campaign.productLabel,
+          }))
+        );
+      } catch {
+        setLinkedCampaigns([]);
+      }
+    };
+
+    void loadLinkedCampaigns();
+  }, [builder?.id]);
 
   const handleSaveIntegration = async () => {
     if (!builder?.id) {
@@ -1103,6 +1157,9 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       includeResponseSuggestions: true,
     };
 
+    const redirectCampaigns = linkedCampaigns.filter((campaign) => campaign.campaignType === "Redirect");
+    const silentCampaigns = linkedCampaigns.filter((campaign) => campaign.campaignType === "Silent");
+
     return (
       <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -1111,12 +1168,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               Response Mapping
             </h3>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Map buyer response values. Use plain text or Twig — type{" "}
+              Map buyer response values. Type in a field or{" "}
               <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{`}</code> for
-              suggestions (<code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs dark:bg-slate-700">response</code>,{" "}
-              <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs dark:bg-slate-700">lead</code>,{" "}
-              <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs dark:bg-slate-700">config</code>,{" "}
-              <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs dark:bg-slate-700">mapped</code>).
+              Twig suggestions — use{" "}
+              <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ campaign.minPrice }}`}</code>,{" "}
+              <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ response.msg }}`}</code>, and other tokens.
             </p>
           </div>
 
@@ -1128,6 +1184,69 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
           >
             {isSavingResponseMapping ? "Saving..." : "Save Response Mapping"}
           </PrimaryButton>
+        </div>
+
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-5 dark:border-blue-500/30 dark:bg-blue-500/10">
+          <div className="flex items-start gap-2">
+            <Info size={18} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
+            <div className="space-y-3 text-sm text-slate-700 dark:text-slate-200">
+              <p className="font-medium text-slate-800 dark:text-slate-100">Campaign type & publisher result</p>
+              <ul className="list-disc space-y-1 pl-5 text-slate-600 dark:text-slate-300">
+                <li>
+                  <span className="font-medium">Redirect</span> campaign exists and buyer accepts → publisher receives{" "}
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Accepted</span>.
+                </li>
+                <li>
+                  <span className="font-medium">Redirect</span> campaign exists but buyer rejects → publisher receives{" "}
+                  <span className="font-medium text-red-600 dark:text-red-300">Rejected</span> (Silent accept does not
+                  override).
+                </li>
+                <li>
+                  No <span className="font-medium">Redirect</span> campaign in flow →{" "}
+                  <span className="font-medium">Silent</span> accept returns{" "}
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Accepted</span> to publisher.
+                </li>
+              </ul>
+
+              {linkedCampaigns.length > 0 ? (
+                <div className="space-y-2 pt-1">
+                  <p className="font-medium text-slate-800 dark:text-slate-100">Campaigns using this integration</p>
+                  <div className="flex flex-wrap gap-2">
+                    {linkedCampaigns.map((campaign) => (
+                      <Link
+                        key={campaign.id}
+                        href={`/campaigns/${encodeURIComponent(campaign.id)}?tab=integration`}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400/40 dark:hover:bg-slate-800"
+                      >
+                        <span className="font-medium">[{campaign.displayId}] {campaign.name}</span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+                            campaign.campaignType === "Redirect"
+                              ? "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
+                              : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                          )}
+                        >
+                          {campaign.campaignType}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400">{campaign.status}</span>
+                        <ExternalLink size={12} className="text-slate-400" />
+                      </Link>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {redirectCampaigns.length > 0
+                      ? `${redirectCampaigns.length} Redirect, ${silentCampaigns.length} Silent — campaign tokens resolve from the active campaign at post time.`
+                      : "Only Silent campaigns use this integration — campaign tokens resolve from the active campaign at post time."}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  No campaigns linked yet. Assign this integration on a campaign Integration tab to see it here.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">

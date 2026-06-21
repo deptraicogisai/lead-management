@@ -123,6 +123,7 @@ export function prepareBuyerIntegrationRequest(params: {
   publisherLead: Record<string, unknown>;
   lead: Record<string, unknown>;
   configValues: Record<string, string>;
+  campaign?: Record<string, unknown>;
   mockBuyerPostUrl?: string;
 }): PreparedBuyerIntegrationRequest {
   const systemLead = buildLeadTemplateContext(params.lead);
@@ -133,6 +134,7 @@ export function prepareBuyerIntegrationRequest(params: {
     lead: systemLead,
     config: configValues,
     mapped: mappedValues,
+    campaign: params.campaign ?? {},
   });
   const postLeadUrl = params.mockBuyerPostUrl?.trim() || request.url.trim();
 
@@ -156,6 +158,7 @@ export async function deliverLeadToBuyer(params: {
   publisherLead: Record<string, unknown>;
   lead: Record<string, unknown>;
   configValues: Record<string, string>;
+  campaign?: Record<string, unknown>;
   minPrice: number;
   mockBuyerPostUrl?: string;
   mockBuyerPostOptions?: MockBuyerPostOptions;
@@ -166,6 +169,7 @@ export async function deliverLeadToBuyer(params: {
     publisherLead: params.publisherLead,
     lead: params.lead,
     configValues: params.configValues,
+    campaign: params.campaign ?? {},
     mockBuyerPostUrl: params.mockBuyerPostUrl,
   });
   const { mappedValues, requestMappingData, buyerRequest, postLeadUrl, configValues } = prepared;
@@ -295,7 +299,11 @@ export async function deliverLeadToBuyer(params: {
         : errorStepResult(`Buyer returned HTTP ${httpStatus}.`, `HTTP ${httpStatus}`),
     });
 
-    const parsed = parseIntegrationResponse(params.integration.responseMapping, responseBody);
+    const parsed = parseIntegrationResponse(
+      params.integration.responseMapping,
+      responseBody,
+      params.campaign ?? {}
+    );
     const inferred = inferBuyerStatusFromParsedResponse(parsed, params.minPrice);
     const parseSuccess = inferred.status === "Accept";
     const parseError =
