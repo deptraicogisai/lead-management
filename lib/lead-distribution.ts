@@ -105,6 +105,36 @@ function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: bool
   return "Reject";
 }
 
+function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
+  const redirectAttempt = deliveries.find(
+    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
+  );
+  const primary =
+    redirectAttempt ??
+    deliveries.find((entry) => entry.buyerStatus !== "Skipped") ??
+    deliveries[0];
+
+  if (!primary) {
+    return "Lead was not sold to any buyer.";
+  }
+
+  if (primary.buyerStatus === "Price Reject" || primary.buyerStatus === "Price Conflict") {
+    return primary.rejectReason || "Buyer price did not meet campaign requirements.";
+  }
+
+  if (primary.buyerStatus === "Reject") {
+    return primary.rejectReason
+      ? `Lead was not sold: ${primary.rejectReason}`
+      : "Lead was not sold to any buyer.";
+  }
+
+  if (primary.buyerStatus === "Skipped" && primary.validationErrors.length > 0) {
+    return primary.validationErrors.join(" | ");
+  }
+
+  return "Lead was not sold to any buyer.";
+}
+
 function findRedirectAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
   return deliveries.find(
     (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
@@ -1247,6 +1277,6 @@ export async function distributeLeadAfterIntake(params: {
             : "Lead could not be sold due to buyer post errors."
           : publisherStatus === "Test"
             ? "Test lead was not posted to buyers."
-            : "Lead was not sold to any buyer.",
+            : buildPublisherRejectMessage(coreDeliveries),
   };
 }

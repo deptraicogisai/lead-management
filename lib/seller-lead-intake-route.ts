@@ -537,11 +537,23 @@ export async function handleSellerLeadPost(req: Request) {
         ...(postErrorDelivery?.httpStatus ? { buyer_http_status: postErrorDelivery.httpStatus } : {}),
       };
     } else {
+      const redirectAttempt = distribution.campaignDeliveries.find(
+        (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
+      );
+      const primaryAttempt =
+        redirectAttempt ??
+        distribution.campaignDeliveries.find((entry) => entry.buyerStatus !== "Skipped");
+
       responsePayload = {
         status: 0,
         status_text: "Rejected",
         reasons: [{ message: distribution.message }],
         lead_id: leadId,
+        ...(primaryAttempt?.rejectReason ? { buyer_reject_reason: primaryAttempt.rejectReason } : {}),
+        ...(primaryAttempt?.buyerStatus ? { buyer_status: primaryAttempt.buyerStatus } : {}),
+        ...(primaryAttempt?.responseBody
+          ? { buyer_response: String(primaryAttempt.responseBody).slice(0, 500) }
+          : {}),
       };
     }
 

@@ -269,7 +269,8 @@ function evaluateResponseExpression(expression: string, response: unknown) {
   const equalityMatch = trimmed.match(/^response\.(.+?)\s*==\s*["'](.+?)["']$/);
   if (equalityMatch) {
     const left = stringifyTemplateValue(getValueAtPath(response, equalityMatch[1] ?? "")).trim();
-    return left === (equalityMatch[2] ?? "");
+    const right = (equalityMatch[2] ?? "").trim();
+    return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
   }
 
   const pathMatch = trimmed.match(/^response\.(.+)$/);
@@ -278,6 +279,21 @@ function evaluateResponseExpression(expression: string, response: unknown) {
   }
 
   return trimmed;
+}
+
+function isAcceptedSoldSign(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === "true" ||
+    normalized === "accept" ||
+    normalized === "accepted" ||
+    normalized === "sold" ||
+    normalized === "approved" ||
+    normalized === "success" ||
+    normalized === "ok" ||
+    normalized === "1" ||
+    normalized === "yes"
+  );
 }
 
 export function parseIntegrationResponse(
@@ -350,9 +366,11 @@ export function parseIntegrationResponse(
 
   if (!hasMapping && trimmed) {
     const responseRecord = parsedResponse as Record<string, unknown>;
-    const status = stringifyTemplateValue(responseRecord.status ?? responseRecord.msg ?? responseRecord.message).trim();
+    const status = stringifyTemplateValue(
+      responseRecord.status ?? responseRecord.msg ?? responseRecord.message ?? responseRecord.status_text
+    ).trim();
     result.soldSign = status;
-    result.rejectSign = status;
+    result.rejectSign = isAcceptedSoldSign(status) ? "" : status;
     result.rejectReason = stringifyTemplateValue(responseRecord.reject_reason ?? responseRecord.rejectReason);
     result.errorReason = stringifyTemplateValue(responseRecord.error_reason ?? responseRecord.errorReason);
     result.redirectUrl = stringifyTemplateValue(responseRecord.redirectUrl ?? responseRecord.redirect_url);
@@ -377,8 +395,20 @@ export function parseIntegrationResponse(
     }
 
     if (!result.soldSign && !result.rejectSign && !result.errorReason && trimmed) {
-      result.mappingError = true;
-      result.errorReason = "Response mapping could not determine buyer status.";
+      const responseRecord = parsedResponse as Record<string, unknown>;
+      const statusText = stringifyTemplateValue(
+        responseRecord.status ??
+          responseRecord.msg ??
+          responseRecord.message ??
+          responseRecord.status_text
+      ).trim();
+
+      if (isAcceptedSoldSign(statusText)) {
+        result.soldSign = statusText;
+      } else {
+        result.mappingError = true;
+        result.errorReason = "Response mapping could not determine buyer status.";
+      }
     }
   }
 
@@ -403,13 +433,7 @@ export function inferBuyerStatusFromParsedResponse(parsed: ParsedBuyerResponse, 
   const soldComparable = parsed.soldSign.trim().toLowerCase();
   const rejectComparable = parsed.rejectSign.trim().toLowerCase();
 
-  const isAccept =
-    soldComparable === "true" ||
-    soldComparable === "accept" ||
-    soldComparable === "accepted" ||
-    soldComparable === "sold" ||
-    soldComparable === "approved" ||
-    soldComparable === "1";
+  const isAccept = isAcceptedSoldSign(parsed.soldSign);
 
   const isReject =
     rejectComparable === "true" ||
@@ -442,7 +466,7 @@ export function inferBuyerStatusFromParsedResponse(parsed: ParsedBuyerResponse, 
     return { status: "Price Reject" as const, reason: parsed.rejectReason || "Buyer price below floor." };
   }
 
-  if (isReject || parsed.rejectReason) {
+  if (isReject) {
     return { status: "Reject" as const, reason: parsed.rejectReason || "Buyer rejected the lead." };
   }
 
