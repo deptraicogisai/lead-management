@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Calendar, Copy, Filter, FlaskConical, List, Pencil, Plus, Trash2 } from "lucide-react";
+import { Calendar, Copy, Filter, FlaskConical, List, Pencil, Percent, Plus, Trash2 } from "lucide-react";
 import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
+import { MappingRevShareSettingsTab } from "@/components/api-config/mapping-rev-share-settings-tab";
 import { MappingTestLeadTab } from "@/components/api-config/mapping-test-lead-tab";
 import { useParams, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -109,7 +110,7 @@ function buildFieldPayload(field: ApiField) {
   };
 }
 
-type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule" | "test-lead";
+type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule" | "rev-share" | "test-lead";
 
 export function SellerFieldConfigurationPage() {
   const params = useParams<{ sellerId: string; mappingId: string }>();
@@ -765,6 +766,7 @@ export function SellerFieldConfigurationPage() {
               { id: "duplicates" as const, label: "Duplicates", icon: Copy },
               { id: "filters" as const, label: "Filters", icon: Filter },
               { id: "schedule" as const, label: "Schedule", icon: Calendar },
+              { id: "rev-share" as const, label: "Rev-Share Model", icon: Percent },
               { id: "test-lead" as const, label: "Test Lead", icon: FlaskConical },
             ] as const
           ).map((tab) => {
@@ -846,6 +848,8 @@ export function SellerFieldConfigurationPage() {
           }}
         />
         </>
+        ) : sellerId && mappingId && activeTab === "rev-share" ? (
+          <MappingRevShareSettingsTab sellerId={sellerId} mappingId={mappingId} />
         ) : sellerId && mappingId && (activeTab === "duplicates" || activeTab === "filters" || activeTab === "schedule") ? (
           <MappingIntakeSettingsTabs
             sellerId={sellerId}

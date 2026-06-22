@@ -23,6 +23,11 @@ import {
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import { buildCampaignTemplateContext } from "@/lib/campaign-template";
+import {
+  defaultMappingRevShareSettings,
+  resolvePublisherPriceFromRevShare,
+  type MappingRevShareSettingsRecord,
+} from "@/lib/mapping-rev-share-settings";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { mergeMockBuyerPostOptions, normalizeCampaignTestMocks, type CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
@@ -1206,6 +1211,7 @@ export async function distributeLeadAfterIntake(params: {
   postToBuyer?: boolean;
   mockBuyerPost?: boolean;
   mockBuyerPostOptions?: MockBuyerPostOptions;
+  revShareSettings?: MappingRevShareSettingsRecord;
   progress?: LeadDistributionProgressHandlers;
 }): Promise<LeadDistributionResult> {
   const isTestLead = isTestLeadPayload(params.payload);
@@ -1261,7 +1267,9 @@ export async function distributeLeadAfterIntake(params: {
   const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError);
 
   const redirectUrl = accepted?.redirectUrl ?? "";
-  const soldPrice = accepted?.price ?? null;
+  const buyerPrice = accepted?.price ?? null;
+  const revShareSettings = params.revShareSettings ?? defaultMappingRevShareSettings();
+  const soldPrice = resolvePublisherPriceFromRevShare(buyerPrice, revShareSettings);
 
   await SellerLeadModel.updateOne(
     { _id: new Types.ObjectId(params.sellerLeadId) },

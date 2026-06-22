@@ -9,12 +9,20 @@ import {
   toIntegrationBuilderRecord,
   type IntegrationBuilderStatus,
 } from "@/lib/integration-builder";
+import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
+import {
+  buildIntegrationBuilderImportCreateData,
+  parseIntegrationBuilderImportSchema,
+  resolveImportVerticalId,
+} from "@/lib/integration-builder-import";
 import { sortNewestDisplayIdFirst } from "@/lib/list-sort";
 
 type IntegrationBuilderPayload = {
   name?: string;
   verticalId?: string;
   status?: IntegrationBuilderStatus;
+  createType?: "new" | "import";
+  importSchema?: IntegrationBuilderExportPayload;
 };
 
 type IntegrationBuilderDoc = {
@@ -59,19 +67,51 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as IntegrationBuilderPayload;
+    const isImport = body.createType === "import";
 
-    if (!body.name?.trim()) {
-      return NextResponse.json({ message: "Name is required." }, { status: 400 });
-    }
+    if (!isImport) {
+      if (!body.name?.trim()) {
+        return NextResponse.json({ message: "Name is required." }, { status: 400 });
+      }
 
-    if (!body.verticalId?.trim() || !Types.ObjectId.isValid(body.verticalId.trim())) {
-      return NextResponse.json({ message: "A valid vertical is required." }, { status: 400 });
+      if (!body.verticalId?.trim() || !Types.ObjectId.isValid(body.verticalId.trim())) {
+        return NextResponse.json({ message: "A valid vertical is required." }, { status: 400 });
+      }
     }
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
 
-    const vertical = await VerticalModel.findById(body.verticalId.trim(), { name: 1 }).lean();
+    const verticals = await VerticalModel.find().sort({ createdAt: 1 }).select({ _id: 1, name: 1 }).lean();
+    const verticalIdsOldestFirst = verticals.map((vertical) => vertical._id.toString());
+
+    let importName = "";
+    let importVerticalId = "";
+
+    if (isImport) {
+      if (!body.importSchema) {
+        return NextResponse.json({ message: "Import schema is required." }, { status: 400 });
+      }
+
+      const parsed = parseIntegrationBuilderImportSchema(body.importSchema);
+      if (!parsed.ok) {
+        return NextResponse.json({ message: parsed.message }, { status: 400 });
+      }
+
+      importName = parsed.schema.name.trim();
+      importVerticalId = resolveImportVerticalId(parsed.schema.productId, verticalIdsOldestFirst) ?? "";
+
+      if (!importVerticalId || !Types.ObjectId.isValid(importVerticalId)) {
+        return NextResponse.json(
+          { message: `Product with id ${parsed.schema.productId} was not found.` },
+          { status: 400 }
+        );
+      }
+    } else {
+      importVerticalId = body.verticalId!.trim();
+    }
+
+    const vertical = await VerticalModel.findById(importVerticalId, { name: 1 }).lean();
     if (!vertical) {
       return NextResponse.json({ message: "Selected vertical was not found." }, { status: 404 });
     }
@@ -79,13 +119,32 @@ export async function POST(req: Request) {
     const latest = await IntegrationBuilderModel.findOne().sort({ displayId: -1 }).select({ displayId: 1 }).lean();
     const nextDisplayId = (latest?.displayId ?? 0) + 1;
 
-    const record = await IntegrationBuilderModel.create({
-      displayId: nextDisplayId,
-      name: body.name.trim(),
-      status: body.status ?? "Active",
-      verticalRef: body.verticalId.trim(),
-      configFields: DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field })),
-    });
+    let recordData: Record<string, unknown>;
+
+    if (isImport) {
+      const parsed = parseIntegrationBuilderImportSchema(body.importSchema!);
+      if (!parsed.ok) {
+        return NextResponse.json({ message: parsed.message }, { status: 400 });
+      }
+
+      recordData = {
+        displayId: nextDisplayId,
+        name: importName,
+        status: body.status ?? "Active",
+        verticalRef: importVerticalId,
+        ...buildIntegrationBuilderImportCreateData(parsed.schema),
+      };
+    } else {
+      recordData = {
+        displayId: nextDisplayId,
+        name: body.name!.trim(),
+        status: body.status ?? "Active",
+        verticalRef: importVerticalId,
+        configFields: DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field })),
+      };
+    }
+
+    const record = await IntegrationBuilderModel.create(recordData);
 
     const { verticalNameById, verticalIndexById } = await getVerticalMaps();
 

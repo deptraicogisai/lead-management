@@ -81,6 +81,14 @@ export function getMonthGridDates(date: Date) {
   return Array.from({ length: 42 }, (_, index) => addDays(start, index));
 }
 
+export function isSameCalendarDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
 export function shiftCalendarDate(date: Date, view: ScheduleCalendarView, direction: -1 | 0 | 1) {
   if (direction === 0) {
     return startOfDay(new Date());

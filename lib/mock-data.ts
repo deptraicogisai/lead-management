@@ -4,6 +4,7 @@ export type Seller = {
   name: string;
   email: string;
   region: string;
+  publisherTag?: string;
   status: "Active" | "Inactive";
   createdAt?: string | null;
   apiFields?: ApiFieldConfig[];

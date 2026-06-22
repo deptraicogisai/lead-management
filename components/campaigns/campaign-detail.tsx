@@ -22,6 +22,7 @@ import { CampaignIntegrationConfigForm } from "@/components/campaigns/campaign-i
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
+import { CopyCampaignScheduleModal } from "@/components/campaigns/copy-campaign-schedule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
@@ -99,6 +100,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [buyerPlDnplListIds, setBuyerPlDnplListIds] = useState<string[]>([]);
   const [buyerIntegrationIds, setBuyerIntegrationIds] = useState<string[]>([]);
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
+  const [copyScheduleModalOpen, setCopyScheduleModalOpen] = useState(false);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [integrationForm, setIntegrationForm] = useState({
@@ -766,7 +768,19 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             </div>
 
             {campaign.scheduleRules.length > 0 ? (
-              <CampaignScheduleCalendar rules={campaign.scheduleRules} timezone={campaign.timezone} />
+              <>
+                <CampaignScheduleCalendar rules={campaign.scheduleRules} timezone={campaign.timezone} />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setCopyScheduleModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    <Copy size={16} />
+                    Copy schedule
+                  </button>
+                </div>
+              </>
             ) : null}
           </div>
         ) : null}
@@ -854,6 +868,12 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         onClose={closeScheduleRuleModal}
         initialRule={editingScheduleRule}
         onSave={(rule) => void handleSaveScheduleRule(rule)}
+      />
+
+      <CopyCampaignScheduleModal
+        open={copyScheduleModalOpen}
+        sourceCampaignId={campaignId}
+        onClose={() => setCopyScheduleModalOpen(false)}
       />
 
       <Modal

@@ -20,6 +20,7 @@ import {
 } from "@/lib/mapping-intake-settings";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { distributeLeadAfterIntake, listPendingBuyerPostCampaigns } from "@/lib/lead-distribution";
+import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 import { buildInitialBuyerPostQueue } from "@/lib/test-lead-buyer-progress";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
@@ -293,6 +294,7 @@ export async function runMappingTestLeadSubmit(params: {
         postToBuyer: true,
         mockBuyerPost: true,
         mockBuyerPostOptions: params.mockBuyerPostOptions,
+        revShareSettings: toMappingRevShareSettings((params.mappingDoc as { revShare?: MappingRevShareDoc }).revShare),
         progress: {
           onBuyerPostProcessing: params.buyerPostProgress?.onProcessing,
           onBuyerPostAttempt: params.buyerPostProgress?.onAttempt,

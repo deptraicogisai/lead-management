@@ -18,7 +18,7 @@ export const clientManagementSections: ClientManagementNavSection[] = [
       { href: "/campaigns", label: "Campaigns", icon: Shuffle },
       { href: "/integration-builder", label: "Integration Builder", icon: Rocket },
       { href: "/ping-tree-settings", label: "Ping Tree Settings", icon: Shuffle },
-      { href: "/present-lists", label: "Present & Do Not Present Lists", icon: Ban },
+      { href: "/present-lists", label: "Present / DNP Lists", icon: Ban },
     ],
   },
 ];

@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { buildCampaignLookupContext } from "@/lib/campaign-context";
+import { cloneScheduleRulesForCopy } from "@/lib/campaign-schedule-copy";
 import {
   defaultScheduleRule,
   findScheduleRuleOverlap,
@@ -232,7 +233,11 @@ export async function DELETE(_: Request, context: Params) {
 export async function POST(req: Request, context: Params) {
   try {
     const { id } = await context.params;
-    const body = (await req.json()) as { action?: string; rule?: CampaignScheduleRule };
+    const body = (await req.json()) as {
+      action?: string;
+      rule?: CampaignScheduleRule;
+      targetCampaignIds?: string[];
+    };
 
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: "Invalid campaign id." }, { status: 400 });
@@ -284,6 +289,80 @@ export async function POST(req: Request, context: Params) {
         dailyPostLeadsLimit: nextRule.dailyPostLeadsLimit,
       });
       await campaign.save();
+    }
+
+    if (body.action === "copy-schedule") {
+      const targetCampaignIds = Array.isArray(body.targetCampaignIds)
+        ? body.targetCampaignIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+
+      if (targetCampaignIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one campaign." }, { status: 400 });
+      }
+
+      const copiedRules = cloneScheduleRulesForCopy(
+        campaign.scheduleRules.map((rule) => ({
+          id: rule._id?.toString() ?? "",
+          active: Boolean(rule.active),
+          action: rule.action,
+          scheduleMethod: rule.scheduleMethod,
+          days: rule.days ?? [],
+          startHour: rule.startHour,
+          startMinute: rule.startMinute,
+          endHour: rule.endHour,
+          endMinute: rule.endMinute,
+          dailySoldLeadsLimit: rule.dailySoldLeadsLimit ?? null,
+          dailyPostLeadsLimit: rule.dailyPostLeadsLimit ?? null,
+        }))
+      );
+
+      const overlapMessage = validateScheduleRulesNoOverlap(
+        copiedRules.map((rule, index) => ({ ...rule, id: `copy-${index}` }))
+      );
+      if (overlapMessage) {
+        return NextResponse.json({ message: overlapMessage }, { status: 409 });
+      }
+
+      let updatedCount = 0;
+
+      for (const targetCampaignId of targetCampaignIds) {
+        if (!Types.ObjectId.isValid(targetCampaignId) || targetCampaignId === id) {
+          continue;
+        }
+
+        const targetCampaign = await CampaignModel.findById(targetCampaignId);
+        if (!targetCampaign) {
+          continue;
+        }
+
+        targetCampaign.set(
+          "scheduleRules",
+          copiedRules.map((rule) => ({
+            active: rule.active,
+            action: rule.action,
+            scheduleMethod: rule.scheduleMethod,
+            days: rule.days,
+            startHour: rule.startHour,
+            startMinute: rule.startMinute,
+            endHour: rule.endHour,
+            endMinute: rule.endMinute,
+            dailySoldLeadsLimit: rule.dailySoldLeadsLimit,
+            dailyPostLeadsLimit: rule.dailyPostLeadsLimit,
+          }))
+        );
+        targetCampaign.markModified("scheduleRules");
+        await targetCampaign.save();
+        updatedCount += 1;
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json({ message: "No valid target campaigns were updated." }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        message: `Schedule copied to ${updatedCount} campaign(s).`,
+        updatedCount,
+      });
     }
 
     const lookup = await buildCampaignLookupContext();

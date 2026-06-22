@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
+import { normalizePublisherTag } from "@/lib/publisher-tag";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -8,6 +9,7 @@ type SellerPayload = {
   name?: string;
   email?: string;
   region?: string;
+  publisherTag?: string;
   status?: "Active" | "Inactive";
 };
 
@@ -16,6 +18,7 @@ function toSellerResponse(doc: {
   name: string;
   email: string;
   region: string;
+  publisherTag?: string;
   status: "Active" | "Inactive";
   apiFields?: Array<{
     _id?: { toString(): string };
@@ -31,6 +34,7 @@ function toSellerResponse(doc: {
     name: doc.name,
     email: doc.email,
     region: doc.region,
+    publisherTag: normalizePublisherTag(doc.publisherTag),
     status: doc.status,
     apiFields: (doc.apiFields ?? []).map((field) => ({
       id: field._id?.toString() ?? "",
@@ -59,6 +63,7 @@ export async function PATCH(req: Request, context: Params) {
         name: body.name.trim(),
         email: body.email.trim(),
         region: body.region?.trim() ?? "",
+        publisherTag: normalizePublisherTag(body.publisherTag),
         status: body.status,
       },
       { new: true }

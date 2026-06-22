@@ -100,7 +100,9 @@ export default function SellersPage() {
 
       const nameEmailSearch = appliedFilters.nameEmail.trim().toLowerCase();
       const matchesNameEmail = nameEmailSearch
-        ? row.name.toLowerCase().includes(nameEmailSearch) || row.email.toLowerCase().includes(nameEmailSearch)
+        ? row.name.toLowerCase().includes(nameEmailSearch) ||
+          row.email.toLowerCase().includes(nameEmailSearch) ||
+          (row.publisherTag ?? "").toLowerCase().includes(nameEmailSearch)
         : true;
 
       const createdAt = row.createdAt ? new Date(row.createdAt) : null;
@@ -111,6 +113,7 @@ export default function SellersPage() {
       const matchesTableFilter = search
         ? row.name.toLowerCase().includes(search) ||
           row.email.toLowerCase().includes(search) ||
+          (row.publisherTag ?? "").toLowerCase().includes(search) ||
           row.status.toLowerCase().includes(search) ||
           String(row.displayId ?? "").includes(search)
         : true;
@@ -179,7 +182,12 @@ export default function SellersPage() {
     setIsFormOpen(false);
   };
 
-  const handleSubmitSeller = async (values: { name: string; email: string; status: Seller["status"] }) => {
+  const handleSubmitSeller = async (values: {
+    name: string;
+    email: string;
+    publisherTag: string;
+    status: Seller["status"];
+  }) => {
     if (editingSellerId) {
       const response = await fetch(`/api/sellers/${encodeURIComponent(editingSellerId)}`, {
         method: "PATCH",
@@ -233,6 +241,13 @@ export default function SellersPage() {
       key: "email",
       label: "Email",
       render: (row) => <span className="text-xs text-slate-700 dark:text-slate-200">{row.email}</span>,
+    },
+    {
+      key: "publisherTag",
+      label: "Publisher Tag",
+      render: (row) => (
+        <span className="text-xs text-slate-700 dark:text-slate-200">{row.publisherTag?.trim() || "-"}</span>
+      ),
     },
     {
       key: "createdAt",
@@ -407,6 +422,7 @@ export default function SellersPage() {
               ? {
                   name: editingSeller.name,
                   email: editingSeller.email,
+                  publisherTag: editingSeller.publisherTag ?? "",
                   status: editingSeller.status,
                 }
               : undefined

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { CircleHelp, Copy, Download, Plus, Trash2 } from "lucide-react";
-import { ClearButton, ComingSoonButton, ExportButton, SearchButton } from "@/components/ui/action-buttons";
+import { ClearButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
@@ -14,12 +14,26 @@ import { PageSection } from "@/components/ui/state";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast";
+import {
+  buildIntegrationBuilderExportFileName,
+  buildIntegrationBuilderExportPayload,
+  downloadJsonFile,
+  resolveIntegrationExportProductId,
+} from "@/lib/integration-builder-export";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
+import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
+import { parseIntegrationBuilderImportSchema } from "@/lib/integration-builder-import";
 
 type VerticalOption = {
   id: string;
   name: string;
 };
+
+type IntegrationBuilderCreateType = "new" | "import";
+
+const addFormSelectClassName =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/25";
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -51,7 +65,10 @@ export default function IntegrationBuilderPage() {
   const [addForm, setAddForm] = useState({
     name: "",
     verticalId: "",
+    type: "new" as IntegrationBuilderCreateType,
   });
+  const [importSchema, setImportSchema] = useState<IntegrationBuilderExportPayload | null>(null);
+  const [importSchemaFileName, setImportSchemaFileName] = useState("");
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>({});
   const [reloadKey, setReloadKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<
@@ -60,6 +77,11 @@ export default function IntegrationBuilderPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [tableFilter, setTableFilter] = useState("");
+  const [cloneTarget, setCloneTarget] = useState<IntegrationBuilderRecord | null>(null);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneError, setCloneError] = useState("");
+  const [isCloning, setIsCloning] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRecords = async () => {
@@ -125,6 +147,28 @@ export default function IntegrationBuilderPage() {
       return matchesId && matchesName && matchesStatus && matchesProduct && matchesTableFilter;
     });
   }, [records, idFilter, nameFilter, statusFilter, productFilter, tableFilter]);
+
+  const handleExportRecord = async (record: IntegrationBuilderRecord) => {
+    setExportingId(record.id);
+
+    try {
+      const response = await fetch(`/api/integration-builder/${encodeURIComponent(record.id)}`);
+      if (!response.ok) {
+        throw new Error("Failed to load integration builder record.");
+      }
+
+      const fullRecord = (await response.json()) as IntegrationBuilderRecord;
+      const productId = resolveIntegrationExportProductId(fullRecord, verticalOptions);
+      const payload = buildIntegrationBuilderExportPayload(fullRecord, productId);
+
+      downloadJsonFile(buildIntegrationBuilderExportFileName(fullRecord.name), payload);
+      toast.success("Integration exported successfully.", "Export");
+    } catch {
+      toast.error("Failed to export integration builder record.", "Export");
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   const columns: Column<IntegrationBuilderRecord>[] = [
     {
@@ -194,12 +238,27 @@ export default function IntegrationBuilderPage() {
           >
             Configure
           </Link>
-          <ComingSoonButton icon={Copy} className="rounded-lg px-3 py-1.5">
-            Clone
-          </ComingSoonButton>
-          <ComingSoonButton icon={Download} className="rounded-lg border-blue-200 px-3 py-1.5 text-blue-700 dark:border-blue-500/40 dark:text-blue-200">
-            Export
-          </ComingSoonButton>
+          <button
+            type="button"
+            onClick={() => {
+              setCloneTarget(row);
+              setCloneName(`${row.name} Copy`);
+              setCloneError("");
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            <Copy size={13} />
+            <span>Clone</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportRecord(row)}
+            disabled={exportingId === row.id}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-500/10"
+          >
+            <Download size={13} />
+            <span>{exportingId === row.id ? "Exporting..." : "Export"}</span>
+          </button>
           <button
             type="button"
             onClick={() => setDeleteConfirm({ mode: "single", record: row })}
@@ -234,8 +293,44 @@ export default function IntegrationBuilderPage() {
     setAddForm({
       name: "",
       verticalId: "",
+      type: "new",
     });
+    setImportSchema(null);
+    setImportSchemaFileName("");
     setAddFormErrors({});
+  };
+
+  const handleSchemaFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      setImportSchema(null);
+      setImportSchemaFileName("");
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text) as unknown;
+      const parsed = parseIntegrationBuilderImportSchema(raw);
+
+      if (!parsed.ok) {
+        setImportSchema(null);
+        setImportSchemaFileName("");
+        setAddFormErrors((current) => ({ ...current, schemaFile: parsed.message }));
+        return;
+      }
+
+      setImportSchema(parsed.schema);
+      setImportSchemaFileName(file.name);
+      setAddFormErrors((current) => ({ ...current, schemaFile: "" }));
+    } catch {
+      setImportSchema(null);
+      setImportSchemaFileName("");
+      setAddFormErrors((current) => ({ ...current, schemaFile: "Invalid JSON file." }));
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -298,15 +393,63 @@ export default function IntegrationBuilderPage() {
     setIsDeleting(false);
   };
 
+  const handleCloseCloneModal = () => {
+    if (isCloning) return;
+    setCloneTarget(null);
+    setCloneName("");
+    setCloneError("");
+  };
+
+  const handleCloneRecord = async () => {
+    if (!cloneTarget) return;
+
+    if (!cloneName.trim()) {
+      setCloneError("Name is required.");
+      return;
+    }
+
+    setIsCloning(true);
+    setCloneError("");
+
+    try {
+      const response = await fetch(`/api/integration-builder/${encodeURIComponent(cloneTarget.id)}/clone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: cloneName.trim() }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        setCloneError(payload?.message ?? "Failed to clone integration builder record.");
+        return;
+      }
+
+      toast.success("Integration builder cloned successfully.", "Clone");
+      handleCloseCloneModal();
+      setReloadKey((current) => current + 1);
+    } catch {
+      setCloneError("Failed to clone integration builder record.");
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
   const handleAddRecord = async () => {
     const errors: Record<string, string> = {};
 
-    if (!addForm.name.trim()) {
-      errors.name = "Name is required.";
+    if (addForm.type === "new") {
+      if (!addForm.name.trim()) {
+        errors.name = "Name is required.";
+      }
+
+      if (!addForm.verticalId.trim()) {
+        errors.verticalId = "Product is required.";
+      }
     }
 
-    if (!addForm.verticalId.trim()) {
-      errors.verticalId = "Product is required.";
+    if (addForm.type === "import" && !importSchema) {
+      errors.schemaFile = "Schema file is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -320,10 +463,18 @@ export default function IntegrationBuilderPage() {
       const response = await fetch("/api/integration-builder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: addForm.name.trim(),
-          verticalId: addForm.verticalId,
-        }),
+        body: JSON.stringify(
+          addForm.type === "import"
+            ? {
+                createType: "import",
+                importSchema,
+              }
+            : {
+                name: addForm.name.trim(),
+                verticalId: addForm.verticalId,
+                createType: "new",
+              }
+        ),
       });
 
       if (!response.ok) {
@@ -334,6 +485,10 @@ export default function IntegrationBuilderPage() {
 
       handleCloseAddModal();
       setReloadKey((current) => current + 1);
+      toast.success(
+        addForm.type === "import" ? "Integration imported successfully." : "Integration created successfully.",
+        "Add New"
+      );
     } catch {
       setAddFormErrors({ form: "Failed to create record." });
     } finally {
@@ -401,7 +556,6 @@ export default function IntegrationBuilderPage() {
               selectedCount={selectedIds.length}
               actions={
                 <>
-                  <ExportButton disabled />
                   <button
                     type="button"
                     onClick={handleOpenAddModal}
@@ -473,35 +627,128 @@ export default function IntegrationBuilderPage() {
       >
         <div className="space-y-4">
           <div>
-            <FieldLabel htmlFor="integration-builder-name" label="Name" />
-            <Input
-              id="integration-builder-name"
-              value={addForm.name}
-              onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Enter record name"
-            />
-            <FormError error={addFormErrors.name} />
+            <FieldLabel htmlFor="integration-builder-type" label="Type" />
+            <select
+              id="integration-builder-type"
+              value={addForm.type}
+              onChange={(event) => {
+                const nextType = event.target.value as IntegrationBuilderCreateType;
+                setAddForm((current) => ({ ...current, type: nextType }));
+                setAddFormErrors((current) => ({ ...current, schemaFile: "" }));
+
+                if (nextType === "new") {
+                  setImportSchema(null);
+                  setImportSchemaFileName("");
+                }
+              }}
+              className={addFormSelectClassName}
+            >
+              <option value="new">New</option>
+              <option value="import">Import</option>
+            </select>
           </div>
 
-          <div>
-            <FieldLabel htmlFor="integration-builder-product" label="Product" />
-            <select
-              id="integration-builder-product"
-              value={addForm.verticalId}
-              onChange={(event) => setAddForm((current) => ({ ...current, verticalId: event.target.value }))}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/25"
-            >
-              <option value="">{isLoadingVerticals ? "Loading verticals..." : "Please select product"}</option>
-              {verticalOptions.map((vertical, index) => (
-                <option key={vertical.id} value={vertical.id}>
-                  [{index + 1}] {vertical.name}
-                </option>
-              ))}
-            </select>
-            <FormError error={addFormErrors.verticalId} />
-          </div>
+          {addForm.type === "new" ? (
+            <>
+              <div>
+                <FieldLabel htmlFor="integration-builder-name" label="Name" />
+                <Input
+                  id="integration-builder-name"
+                  value={addForm.name}
+                  onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Enter record name"
+                />
+                <FormError error={addFormErrors.name} />
+              </div>
+
+              <div>
+                <FieldLabel htmlFor="integration-builder-product" label="Product" />
+                <select
+                  id="integration-builder-product"
+                  value={addForm.verticalId}
+                  onChange={(event) => setAddForm((current) => ({ ...current, verticalId: event.target.value }))}
+                  className={addFormSelectClassName}
+                >
+                  <option value="">{isLoadingVerticals ? "Loading verticals..." : "Please select product"}</option>
+                  {verticalOptions.map((vertical, index) => (
+                    <option key={vertical.id} value={vertical.id}>
+                      [{index + 1}] {vertical.name}
+                    </option>
+                  ))}
+                </select>
+                <FormError error={addFormErrors.verticalId} />
+              </div>
+            </>
+          ) : null}
+
+          {addForm.type === "import" ? (
+            <div>
+              <FieldLabel htmlFor="integration-builder-schema-file" label="Schema File" />
+              <div className="space-y-2">
+                <input
+                  id="integration-builder-schema-file"
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(event) => void handleSchemaFileChange(event)}
+                  className="block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600"
+                />
+                {importSchemaFileName ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Selected: {importSchemaFileName}</p>
+                ) : null}
+              </div>
+              <FormError error={addFormErrors.schemaFile} />
+            </div>
+          ) : null}
 
           <FormError error={addFormErrors.form} />
+        </div>
+      </Modal>
+
+      <Modal
+        open={cloneTarget !== null}
+        title="Clone Integration"
+        description={
+          cloneTarget
+            ? `Create a copy of "${cloneTarget.name}" with all configuration, mappings, and settings.`
+            : undefined
+        }
+        onClose={handleCloseCloneModal}
+        panelClassName="max-w-lg"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={handleCloseCloneModal}
+              disabled={isCloning}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <PrimaryButton
+              type="button"
+              onClick={() => void handleCloneRecord()}
+              disabled={isCloning}
+              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+            >
+              {isCloning ? "Cloning..." : "Clone"}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <FieldLabel htmlFor="integration-builder-clone-name" label="Name" />
+            <Input
+              id="integration-builder-clone-name"
+              value={cloneName}
+              onChange={(event) => {
+                setCloneName(event.target.value);
+                if (cloneError) setCloneError("");
+              }}
+              placeholder="Enter integration name"
+            />
+            <FormError error={cloneError} />
+          </div>
         </div>
       </Modal>
 

@@ -11,6 +11,7 @@ import {
   getMonthGridDates,
   getRulesForDate,
   getWeekDates,
+  isSameCalendarDay,
   shiftCalendarDate,
   type ScheduleCalendarView,
   WEEKDAY_HEADERS,
@@ -54,29 +55,32 @@ function CalendarDayCell({
 }) {
   const dayRules = getRulesForDate(rules, date);
   const hasRules = dayRules.length > 0;
-  const today = new Date();
-  const isToday =
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate();
+  const isToday = isSameCalendarDay(date, new Date());
 
   return (
     <div
       className={cn(
         "min-h-[120px] border border-slate-200 p-2 dark:border-slate-700",
         hasRules ? "bg-emerald-50/90 dark:bg-emerald-500/10" : "bg-white dark:bg-slate-900",
+        isToday &&
+          "z-10 border-2 border-blue-600 bg-blue-50/70 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.25)] dark:border-blue-400 dark:bg-blue-500/15",
         muted && "opacity-50"
       )}
     >
-      <div className="mb-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <span
           className={cn(
             "text-sm font-semibold",
-            isToday ? "text-emerald-800 dark:text-emerald-300" : "text-slate-700 dark:text-slate-200"
+            isToday ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
           )}
         >
           {date.getDate()}
         </span>
+        {isToday ? (
+          <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-blue-500">
+            Today
+          </span>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -97,6 +101,7 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
   const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
   const monthDates = useMemo(() => getMonthGridDates(currentDate), [currentDate]);
   const currentMonth = currentDate.getMonth();
+  const today = new Date();
 
   const navigate = (direction: -1 | 0 | 1) => {
     setCurrentDate(shiftCalendarDate(currentDate, view, direction));
@@ -161,11 +166,22 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
       {view === "week" ? (
         <div>
           <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {WEEKDAY_HEADERS.map((day) => (
-              <div key={day} className="border-r border-slate-200 px-2 py-2 last:border-r-0 dark:border-slate-700">
-                {day}
-              </div>
-            ))}
+            {WEEKDAY_HEADERS.map((day, index) => {
+              const columnDate = weekDates[index];
+              const isToday = columnDate ? isSameCalendarDay(columnDate, today) : false;
+
+              return (
+                <div
+                  key={day}
+                  className={cn(
+                    "border-r border-slate-200 px-2 py-2 last:border-r-0 dark:border-slate-700",
+                    isToday && "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200"
+                  )}
+                >
+                  {day}
+                </div>
+              );
+            })}
           </div>
           <div className="grid grid-cols-7">
             {weekDates.map((date) => (
@@ -178,11 +194,21 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
       {view === "month" ? (
         <div>
           <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {WEEKDAY_HEADERS.map((day) => (
-              <div key={day} className="border-r border-slate-200 px-2 py-2 last:border-r-0 dark:border-slate-700">
-                {day}
-              </div>
-            ))}
+            {WEEKDAY_HEADERS.map((day, index) => {
+              const isToday = index === today.getDay();
+
+              return (
+                <div
+                  key={day}
+                  className={cn(
+                    "border-r border-slate-200 px-2 py-2 last:border-r-0 dark:border-slate-700",
+                    isToday && "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-200"
+                  )}
+                >
+                  {day}
+                </div>
+              );
+            })}
           </div>
           <div className="grid grid-cols-7">
             {monthDates.map((date) => (

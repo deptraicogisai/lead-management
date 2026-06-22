@@ -66,6 +66,22 @@ const mappingDuplicatesSchema = new Schema(
   { _id: false }
 );
 
+const mappingRevShareSchema = new Schema(
+  {
+    model: {
+      type: String,
+      enum: ["system-default", "static-percent", "fixed-price"],
+      default: "system-default",
+    },
+    percent: { type: Number, default: null },
+    fixedPrice: { type: Number, default: null },
+    rejectIfPingPriceLowerThanFixedPrice: { type: Boolean, default: true },
+    copyToOtherPublishers: { type: Boolean, default: false },
+    copyPublisherIds: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const mappingFieldSchema = new Schema({
   sourceVerticalFieldId: { type: String, required: false, trim: true },
   fieldName: { type: String, required: true, trim: true },
@@ -90,6 +106,7 @@ const verticalMappingSchema = new Schema(
     apiRequest: { type: apiRequestSchema, required: false },
     timezone: { type: String, trim: true, default: "New York (EST/EDT)" },
     duplicates: { type: mappingDuplicatesSchema, default: () => ({}) },
+    revShare: { type: mappingRevShareSchema, default: () => ({}) },
     generalFilters: { type: [mappingGeneralFilterSchema], default: [] },
     scheduleRules: { type: [mappingScheduleRuleSchema], default: [] },
   },

@@ -3,11 +3,13 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { resolveNewestFirstDisplayId, sortNewestFirst } from "@/lib/list-sort";
+import { normalizePublisherTag } from "@/lib/publisher-tag";
 
 type SellerPayload = {
   name?: string;
   email?: string;
   region?: string;
+  publisherTag?: string;
   status?: "Active" | "Inactive";
 };
 
@@ -17,6 +19,7 @@ function toSellerResponse(
     name: string;
     email: string;
     region: string;
+    publisherTag?: string;
     status: "Active" | "Inactive";
     createdAt?: Date;
     apiFields?: Array<{
@@ -36,6 +39,7 @@ function toSellerResponse(
     name: doc.name,
     email: doc.email,
     region: doc.region,
+    publisherTag: normalizePublisherTag(doc.publisherTag),
     status: doc.status,
     createdAt: doc.createdAt?.toISOString() ?? null,
     apiFields: (doc.apiFields ?? []).map((field) => ({
@@ -65,6 +69,7 @@ export async function GET(req: Request) {
           $or: [
             { name: { $regex: search, $options: "i" } },
             { email: { $regex: search, $options: "i" } },
+            { publisherTag: { $regex: search, $options: "i" } },
           ],
         }
       : {};
@@ -114,6 +119,7 @@ export async function POST(req: Request) {
       name: body.name.trim(),
       email: body.email.trim(),
       region: body.region?.trim() ?? "",
+      publisherTag: normalizePublisherTag(body.publisherTag),
       status: body.status,
     });
 

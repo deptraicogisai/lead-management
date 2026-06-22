@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Seller } from "@/lib/mock-data";
+import { TagSuggestInput } from "@/components/ui/tag-suggest-input";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { normalizePublisherTag } from "@/lib/publisher-tag";
 
 type SellerFormValues = {
   name: string;
   email: string;
+  publisherTag: string;
   status: Seller["status"];
 };
 
@@ -21,12 +24,45 @@ type SellerFormProps = {
 const defaultValues: SellerFormValues = {
   name: "",
   email: "",
+  publisherTag: "",
   status: "Active",
 };
 
 export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, onCancelEdit }: SellerFormProps) {
   const [form, setForm] = useState<SellerFormValues>(initialValues ?? defaultValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!initialValues) {
+      setForm(defaultValues);
+      return;
+    }
+
+    setForm(initialValues);
+  }, [
+    isEditing,
+    initialValues?.name,
+    initialValues?.email,
+    initialValues?.publisherTag,
+    initialValues?.status,
+  ]);
+
+  const loadTagSuggestions = async () => {
+    try {
+      const response = await fetch("/api/sellers/tags");
+      if (!response.ok) return;
+
+      const data = (await response.json()) as { tags?: string[] };
+      setTagSuggestions(Array.isArray(data.tags) ? data.tags : []);
+    } catch {
+      setTagSuggestions([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadTagSuggestions();
+  }, []);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,8 +76,10 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
       await onSubmitSeller({
         name: form.name.trim(),
         email: form.email.trim(),
+        publisherTag: normalizePublisherTag(form.publisherTag),
         status: form.status,
       });
+      await loadTagSuggestions();
       if (!isEditing) {
         setForm(defaultValues);
       }
@@ -71,6 +109,20 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
           placeholder="ops@northstar.com"
         />
         <FormError error={errors.email} />
+      </div>
+
+      <div>
+        <FieldLabel htmlFor="seller-publisher-tag" label="Publisher Tag" />
+        <TagSuggestInput
+          id="seller-publisher-tag"
+          value={form.publisherTag}
+          onChange={(publisherTag) => setForm((prev) => ({ ...prev, publisherTag }))}
+          suggestions={tagSuggestions}
+          placeholder="Internal"
+        />
+        <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+          Type at least 2 characters to see previously used tags, or enter a new tag.
+        </p>
       </div>
 
       <div>

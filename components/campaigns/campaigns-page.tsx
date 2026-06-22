@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Plus } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
 import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -23,6 +23,7 @@ import {
   type CampaignListRecord,
 } from "@/lib/campaign";
 import { toast } from "@/lib/toast";
+import { downloadCsv } from "@/lib/csv-export";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type VerticalOption = { id: string; name: string; label: string };
@@ -52,6 +53,54 @@ function createDefaultCampaignFilters() {
   };
 }
 
+type CampaignFilters = ReturnType<typeof createDefaultCampaignFilters>;
+
+function buildCampaignQuery(filters: CampaignFilters, page: number, pageSize: number) {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  if (filters.id) params.set("id", filters.id);
+  if (filters.name) params.set("name", filters.name);
+  if (filters.status !== "All") params.set("status", filters.status);
+  if (filters.productId) params.set("productId", filters.productId);
+  if (filters.buyerId) params.set("buyerId", filters.buyerId);
+  if (filters.type !== "All") params.set("type", filters.type);
+  if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
+  if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+
+  return params.toString();
+}
+
+const CAMPAIGN_EXPORT_HEADERS = [
+  "ID",
+  "Name",
+  "Status",
+  "Product",
+  "Price",
+  "Integration",
+  "Timezone",
+  "Buyer",
+  "Campaign Type",
+  "Created",
+] as const;
+
+function buildCampaignExportMatrix(items: CampaignListRecord[]) {
+  return items.map((row) => [
+    String(row.displayId),
+    row.name,
+    row.status,
+    row.productLabel,
+    row.minPrice.toFixed(2),
+    row.integrationLabel,
+    row.timezone,
+    row.buyerLabel,
+    row.campaignType,
+    formatCampaignDateTime(row.createdAt),
+  ]);
+}
+
 export function CampaignsPage() {
   const [rows, setRows] = useState<CampaignListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
@@ -70,6 +119,9 @@ export function CampaignsPage() {
   const [deleteTarget, setDeleteTarget] = useState<CampaignListRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -107,21 +159,7 @@ export function CampaignsPage() {
     beginLoad();
 
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-      });
-
-      if (appliedFilters.id) params.set("id", appliedFilters.id);
-      if (appliedFilters.name) params.set("name", appliedFilters.name);
-      if (appliedFilters.status !== "All") params.set("status", appliedFilters.status);
-      if (appliedFilters.productId) params.set("productId", appliedFilters.productId);
-      if (appliedFilters.buyerId) params.set("buyerId", appliedFilters.buyerId);
-      if (appliedFilters.type !== "All") params.set("type", appliedFilters.type);
-      if (appliedFilters.dateFrom) params.set("dateFrom", new Date(appliedFilters.dateFrom).toISOString());
-      if (appliedFilters.dateTo) params.set("dateTo", new Date(appliedFilters.dateTo).toISOString());
-
-      const response = await fetch(`/api/campaigns?${params.toString()}`);
+      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, page, pageSize)}`);
       if (!response.ok) return;
 
       const data = (await response.json()) as CampaignListResponse;
@@ -136,6 +174,70 @@ export function CampaignsPage() {
   useEffect(() => {
     void fetchCampaigns();
   }, [fetchCampaigns, reloadKey]);
+
+  useEffect(() => {
+    if (!exportOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [exportOpen]);
+
+  const fetchAllCampaigns = useCallback(async () => {
+    if (totalItems === 0) {
+      return [] as CampaignListRecord[];
+    }
+
+    const maxPageSize = 1000;
+    const pages = Math.ceil(totalItems / maxPageSize);
+    const allRows: CampaignListRecord[] = [];
+
+    for (let nextPage = 1; nextPage <= pages; nextPage += 1) {
+      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, nextPage, maxPageSize)}`);
+      if (!response.ok) {
+        throw new Error("Failed to export all campaigns.");
+      }
+
+      const data = (await response.json()) as CampaignListResponse;
+      allRows.push(...data.items);
+    }
+
+    return allRows;
+  }, [appliedFilters, totalItems]);
+
+  const handleExport = async (mode: "current-page" | "all-pages") => {
+    setIsExporting(true);
+    setExportOpen(false);
+
+    try {
+      if (mode === "all-pages") {
+        const allRows = await fetchAllCampaigns();
+        downloadCsv(
+          "campaigns-all.csv",
+          [...CAMPAIGN_EXPORT_HEADERS],
+          buildCampaignExportMatrix(allRows)
+        );
+        return;
+      }
+
+      downloadCsv(
+        "campaigns-current-page.csv",
+        [...CAMPAIGN_EXPORT_HEADERS],
+        buildCampaignExportMatrix(filteredRows)
+      );
+    } catch {
+      toast.error("Failed to export campaigns.", "Export");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const filteredRows = useMemo(() => {
     const query = tableSearch.trim().toLowerCase();
@@ -402,6 +504,35 @@ export function CampaignsPage() {
             selectedCount={selectedIds.length}
             actions={
               <>
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setExportOpen((current) => !current)}
+                    disabled={isExporting || isInitialLoad || isRefreshing}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500 dark:bg-emerald-600"
+                  >
+                    {isExporting ? "Exporting..." : "Export"}
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  {exportOpen ? (
+                    <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <button
+                        type="button"
+                        className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                        onClick={() => void handleExport("current-page")}
+                      >
+                        Current Page to CSV
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                        onClick={() => void handleExport("all-pages")}
+                      >
+                        All Page to CSV
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={openBulkDelete}

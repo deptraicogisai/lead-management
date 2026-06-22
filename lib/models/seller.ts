@@ -15,6 +15,7 @@ const sellerSchema = new Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true },
     region: { type: String, required: false, trim: true, default: "" },
+    publisherTag: { type: String, required: false, trim: true, default: "" },
     status: { type: String, enum: ["Active", "Inactive"], required: true },
     apiFields: { type: [apiFieldSchema], default: [] },
   },
@@ -62,4 +63,8 @@ export async function ensureSellerCollectionMigrated() {
   await sellerMigrationPromise;
 }
 
-export const SellerModel = models.Seller || model("Seller", sellerSchema);
+if (models.Seller) {
+  delete mongoose.models.Seller;
+}
+
+export const SellerModel = model("Seller", sellerSchema);

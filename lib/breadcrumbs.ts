@@ -1,4 +1,5 @@
 import { clientManagementNavItems } from "@/components/layout/client-management-nav-items";
+import { publisherManagementNavItems } from "@/components/layout/publisher-management-nav-items";
 import { reportSections } from "@/components/layout/report-nav-items";
 
 export type BreadcrumbItem = {
@@ -74,6 +75,7 @@ function buildPublisherApiBreadcrumbs(
   }
 
   return [
+    { label: "Publisher Management" },
     { label: "Publisher List", href: "/sellers" },
     ...(context.sellerName
       ? [{ label: context.sellerName, href: sellerHref }]
@@ -104,6 +106,12 @@ function resolveApiConfigContext(pathname: string, searchParams?: Pick<URLSearch
     apiName: searchParams?.get("apiName")?.trim() ?? "",
     verticalName: searchParams?.get("verticalName")?.trim() ?? "",
   };
+}
+
+function findPublisherManagementNav(pathname: string) {
+  return publisherManagementNavItems.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
 }
 
 function findClientManagementNav(pathname: string) {
@@ -145,12 +153,28 @@ function buildBuyersBreadcrumbs(pathname: string, overrideLabel?: string | null)
 function buildSellersBreadcrumbs(pathname: string) {
   if (pathname === "/sellers") {
     return {
-      items: withDashboard([{ label: "Publisher List" }]),
+      items: withDashboard([
+        { label: "Publisher Management" },
+        { label: "Publisher List" },
+      ]),
       pageTitle: "Publisher List",
     };
   }
 
   return null;
+}
+
+function buildPublisherManagementBreadcrumbs(pathname: string) {
+  const navItem = findPublisherManagementNav(pathname);
+  if (!navItem || pathname === "/sellers") return null;
+
+  return {
+    items: withDashboard([
+      { label: "Publisher Management" },
+      { label: navItem.label },
+    ]),
+    pageTitle: navItem.label,
+  };
 }
 
 function buildVerticalBreadcrumbs(pathname: string, searchParams?: Pick<URLSearchParams, "get"> | null) {
@@ -226,6 +250,7 @@ function buildApiConfigBreadcrumbs(pathname: string, searchParams?: Pick<URLSear
   if (pathname === "/api-config") {
     const items: BreadcrumbItem[] = hasPublisherContext(context)
       ? [
+          { label: "Publisher Management" },
           { label: "Publisher List", href: "/sellers" },
           { label: context.sellerName || "Publisher Detail" },
         ]
@@ -288,6 +313,11 @@ export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOpti
   const sellers = buildSellersBreadcrumbs(pathname);
   if (sellers) {
     return sellers;
+  }
+
+  const publisherManagement = buildPublisherManagementBreadcrumbs(pathname);
+  if (publisherManagement) {
+    return publisherManagement;
   }
 
   const verticals = buildVerticalBreadcrumbs(pathname, options.searchParams);

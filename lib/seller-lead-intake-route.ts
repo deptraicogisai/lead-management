@@ -11,6 +11,7 @@ import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
+import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 
 type MappingApiField = {
   _id?: { toString(): string };
@@ -503,6 +504,7 @@ export async function handleSellerLeadPost(req: Request) {
       payload,
       postedAt,
       origin,
+      revShareSettings: toMappingRevShareSettings((matchedMapping as { revShare?: MappingRevShareDoc }).revShare),
     });
 
     let responsePayload: Record<string, unknown>;
