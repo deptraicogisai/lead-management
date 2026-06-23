@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { BuyerRequestLogModel } from "@/lib/models/buyer-request-log";
 import type { BuyerLeadStatus } from "@/lib/models/lead-delivery";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
@@ -14,6 +15,7 @@ import {
   buildStructuredBuyerDeliveryPayload,
   type BuyerHttpRequestSnapshot,
 } from "@/lib/buyer-post-request";
+import { snapshotFetchResponseHeaders } from "@/lib/buyer-http-log";
 import {
   buildIntegrationRequest,
   buildIntegrationRuntimeConfig,
@@ -23,6 +25,12 @@ import {
   parseIntegrationResponse,
   type ParsedBuyerResponse,
 } from "@/lib/integration-runtime";
+import {
+  resolveAcceptedBuyerPrice,
+  resolveDeliveryPriceMode,
+  type CampaignPriceMode,
+} from "@/lib/lead-price";
+import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import {
   buildMockBuyerPostHeaders,
   MOCK_BUYER_POST_BODY_KEY,
@@ -43,6 +51,7 @@ export type BuyerDeliveryResult = {
   mappedValues: Record<string, string>;
   buyerRequest: BuyerHttpRequestSnapshot;
   responseBody: string;
+  responseHeaders: Record<string, string>;
   httpStatus: number;
   parsed: ParsedBuyerResponse;
   traceSteps: BuyerPostTraceStep[];
@@ -85,6 +94,7 @@ function assembleBuyerDeliveryResult(params: {
   errorReason: string;
   postLeadUrl: string;
   responseBody: string;
+  responseHeaders: Record<string, string>;
   httpStatus: number;
   parsed: ParsedBuyerResponse;
   traceSteps: BuyerPostTraceStep[];
@@ -103,6 +113,7 @@ function assembleBuyerDeliveryResult(params: {
     mappedValues: params.mappedValues,
     buyerRequest: params.buyerRequest,
     responseBody: params.responseBody,
+    responseHeaders: params.responseHeaders,
     httpStatus: params.httpStatus,
     parsed: params.parsed,
     traceSteps: params.traceSteps,
@@ -160,9 +171,14 @@ export async function deliverLeadToBuyer(params: {
   configValues: Record<string, string>;
   campaign?: Record<string, unknown>;
   minPrice: number;
+  pingTreeType?: PingTreeCampaignType;
   mockBuyerPostUrl?: string;
   mockBuyerPostOptions?: MockBuyerPostOptions;
 }): Promise<BuyerDeliveryResult> {
+  const campaignType: CampaignPriceMode = resolveDeliveryPriceMode({
+    pingTreeType: params.pingTreeType,
+    campaignType: params.campaign?.campaignType,
+  });
   let traceSteps: BuyerPostTraceStep[] = [];
   const prepared = prepareBuyerIntegrationRequest({
     integration: params.integration,
@@ -225,6 +241,7 @@ export async function deliverLeadToBuyer(params: {
       errorReason: "Post URL is not configured.",
       postLeadUrl: "",
       responseBody: "",
+      responseHeaders: {},
       httpStatus: 0,
       parsed: {
         soldSign: "",
@@ -252,17 +269,21 @@ export async function deliverLeadToBuyer(params: {
     ...buyerRequest.headers,
     "Content-Type": buyerRequest.headers["Content-Type"] || contentType,
   };
+  const mockHeaders = params.mockBuyerPostUrl ? buildMockBuyerPostHeaders(params.mockBuyerPostOptions) : {};
+  const sentHeaders = {
+    ...headers,
+    ...mockHeaders,
+  };
   const outboundRequest = buildBuyerHttpRequestSnapshot({
     url: postLeadUrl,
     method: buyerRequest.method,
-    headers,
-    body: requestMappingData,
+    headers: sentHeaders,
+    body: outboundRequestBody,
   });
   const timeoutMs = resolvePostTimeoutMs(configValues);
   const timeoutSeconds = timeoutMs / 1000;
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-  const mockHeaders = params.mockBuyerPostUrl ? buildMockBuyerPostHeaders(params.mockBuyerPostOptions) : {};
 
   traceSteps = appendBuyerPostTraceStep(traceSteps, {
     key: "post-timeout",
@@ -274,20 +295,19 @@ export async function deliverLeadToBuyer(params: {
 
   let httpStatus = 0;
   let responseBody = "";
+  let responseHeaders: Record<string, string> = {};
 
   try {
     const response = await fetch(postLeadUrl, {
       method: outboundRequest.method || "POST",
-      headers: {
-        ...headers,
-        ...mockHeaders,
-      },
+      headers: sentHeaders,
       body,
       signal: controller.signal,
     });
 
     httpStatus = response.status;
     responseBody = await response.text();
+    responseHeaders = snapshotFetchResponseHeaders(response);
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "http-post",
@@ -304,10 +324,14 @@ export async function deliverLeadToBuyer(params: {
       responseBody,
       params.campaign ?? {}
     );
-    const inferred = inferBuyerStatusFromParsedResponse(parsed, params.minPrice);
+    const inferred = inferBuyerStatusFromParsedResponse(parsed, params.minPrice, campaignType);
     const parseSuccess = inferred.status === "Accept";
     const parseError =
       inferred.reason || parsed.rejectReason || parsed.errorReason || undefined;
+    const resolvedPrice =
+      inferred.status === "Accept"
+        ? resolveAcceptedBuyerPrice(parsed, params.minPrice, campaignType)
+        : parsed.soldPrice;
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "parse-response",
@@ -336,6 +360,7 @@ export async function deliverLeadToBuyer(params: {
         errorReason: `Buyer returned HTTP ${httpStatus}.`,
         postLeadUrl,
         responseBody,
+        responseHeaders,
         httpStatus,
         parsed,
         traceSteps,
@@ -364,6 +389,7 @@ export async function deliverLeadToBuyer(params: {
         errorReason: `Buyer returned HTTP ${httpStatus}.`,
         postLeadUrl,
         responseBody,
+        responseHeaders,
         httpStatus,
         parsed,
         traceSteps,
@@ -376,13 +402,14 @@ export async function deliverLeadToBuyer(params: {
       mappedValues,
       buyerRequest: outboundRequest,
       buyerStatus: inferred.status,
-      price: parsed.soldPrice,
+      price: resolvedPrice,
       redirectUrl: parsed.redirectUrl,
       rejectSign: parsed.rejectSign,
       rejectReason: inferred.reason || parsed.rejectReason,
       errorReason: inferred.status === "Error" ? inferred.reason || parsed.errorReason : parsed.errorReason,
       postLeadUrl,
       responseBody,
+      responseHeaders,
       httpStatus,
       parsed,
       traceSteps,
@@ -413,6 +440,7 @@ export async function deliverLeadToBuyer(params: {
       errorReason,
       postLeadUrl,
       responseBody,
+      responseHeaders,
       httpStatus,
       parsed: {
         soldSign: "",
@@ -431,11 +459,14 @@ export async function deliverLeadToBuyer(params: {
 }
 
 export async function createBuyerDeliveryLog(params: {
+  sellerLeadRef?: string;
+  campaignRef?: string;
   sellerRef?: string;
   verticalRef?: string;
   buyerRef?: string;
   buyerCompany?: string;
   campaignName?: string;
+  campaignType?: "Redirect" | "Silent";
   postLeadUrl: string;
   publisherLead?: Record<string, unknown>;
   systemLead?: Record<string, unknown>;
@@ -443,6 +474,7 @@ export async function createBuyerDeliveryLog(params: {
   buyerRequest?: BuyerHttpRequestSnapshot;
   requestPayload: unknown;
   responseBody: string;
+  responseHeaders?: Record<string, string>;
   errorMessage?: string;
   deliveryStatus: "success" | "fail";
   httpStatus: number;
@@ -461,18 +493,62 @@ export async function createBuyerDeliveryLog(params: {
           trace: params.deliveryTrace ?? [],
         };
 
-  await BuyerRequestLogModel.create({
-    requestType: "buyer-delivery",
-    sellerRef: params.sellerRef,
-    verticalRef: params.verticalRef,
-    buyerRef: params.buyerRef,
-    buyerCompany: params.buyerCompany ?? "",
-    targetName: params.campaignName ?? "Buyer Delivery",
-    postLeadUrl: params.postLeadUrl,
-    requestPayload: structuredPayload,
-    responseBody: params.responseBody,
-    errorMessage: params.errorMessage ?? "",
-    deliveryStatus: params.deliveryStatus,
-    httpStatus: params.httpStatus,
-  });
+  const sellerLeadRef =
+    params.sellerLeadRef && Types.ObjectId.isValid(params.sellerLeadRef)
+      ? new Types.ObjectId(params.sellerLeadRef)
+      : undefined;
+  const campaignRef =
+    params.campaignRef && Types.ObjectId.isValid(params.campaignRef)
+      ? new Types.ObjectId(params.campaignRef)
+      : undefined;
+
+  if (sellerLeadRef && campaignRef) {
+    const existing = await BuyerRequestLogModel.findOne({
+      requestType: "buyer-delivery",
+      sellerLeadRef,
+      campaignRef,
+    })
+      .select({ _id: 1 })
+      .lean();
+
+    if (existing) {
+      return;
+    }
+  }
+
+  try {
+    await BuyerRequestLogModel.create({
+      requestType: "buyer-delivery",
+      sellerLeadRef,
+      campaignRef,
+      sellerRef: params.sellerRef,
+      verticalRef: params.verticalRef,
+      buyerRef: params.buyerRef,
+      buyerCompany: params.buyerCompany ?? "",
+      campaignName: params.campaignName?.trim() ?? "",
+      ...(params.campaignType === "Redirect" || params.campaignType === "Silent"
+        ? { campaignType: params.campaignType }
+        : {}),
+      targetName: params.campaignName ?? "Buyer Delivery",
+      postLeadUrl: params.postLeadUrl,
+      requestPayload: structuredPayload,
+      responseBody: params.responseBody,
+      responseHeaders: params.responseHeaders ?? {},
+      errorMessage: params.errorMessage ?? "",
+      deliveryStatus: params.deliveryStatus,
+      httpStatus: params.httpStatus,
+    });
+  } catch (error) {
+    if (
+      sellerLeadRef &&
+      campaignRef &&
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: number }).code === 11000
+    ) {
+      return;
+    }
+
+    console.error("Failed to create buyer delivery log:", error);
+  }
 }

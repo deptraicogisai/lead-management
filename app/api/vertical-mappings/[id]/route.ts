@@ -4,6 +4,7 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { getCustomMappingFields } from "@/lib/mapping-fields";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -148,7 +149,7 @@ export async function DELETE(_: Request, context: Params) {
     await ensureVerticalCollectionMigrated();
     await ensureVerticalMappingReferencesMigrated();
 
-    const mapping = await VerticalMappingModel.findByIdAndDelete(id).lean();
+    const mapping = await VerticalMappingModel.findByIdAndUpdate(id, softDeleteUpdate(), { new: true }).lean();
     if (!mapping) {
       return NextResponse.json({ message: "Vertical mapping not found." }, { status: 404 });
     }

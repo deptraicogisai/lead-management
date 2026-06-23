@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FieldLabel, FormError, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
+import { CancelButton, FieldLabel, FormError, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { MAPPING_API_TYPE_OPTIONS, type MappingApiType } from "@/lib/mapping-api-type";
 
-const STATUS_OPTIONS = ["Active", "Inactive"] as const;
+const API_STATUS_OPTIONS = ["Active", "Inactive", "Deleted"] as const;
+type ApiStatus = (typeof API_STATUS_OPTIONS)[number];
 
 type EditSellerApiModalProps = {
   open: boolean;
@@ -13,7 +15,8 @@ type EditSellerApiModalProps = {
     id: string;
     apiName: string;
     verticalName: string;
-    status: "Active" | "Inactive";
+    apiType: MappingApiType;
+    status: ApiStatus;
   } | null;
   onClose: () => void;
   onUpdated: () => void;
@@ -22,7 +25,8 @@ type EditSellerApiModalProps = {
 export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated }: EditSellerApiModalProps) {
   const [form, setForm] = useState({
     apiName: "",
-    status: "Active" as (typeof STATUS_OPTIONS)[number],
+    apiType: "Redirect" as MappingApiType,
+    status: "Active" as ApiStatus,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
@@ -33,6 +37,7 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
 
     setForm({
       apiName: mapping.apiName,
+      apiType: mapping.apiType,
       status: mapping.status,
     });
     setErrors({});
@@ -66,6 +71,7 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             apiName: form.apiName.trim(),
+            apiType: form.apiType,
             status: form.status,
           }),
         }
@@ -94,15 +100,12 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
       panelClassName="max-w-lg"
       actions={
         <>
-          <button
-            type="button"
+          <CancelButton type="button"
             onClick={handleClose}
             disabled={isSaving}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100"
-          >
-            Cancel
-          </button>
-          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()} className="bg-emerald-700 hover:bg-emerald-800">
+            
+          >Cancel</CancelButton>
+          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()}>
             {isSaving ? "Saving..." : "Save Changes"}
           </PrimaryButton>
         </>
@@ -126,6 +129,26 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
         </div>
 
         <div>
+          <FieldLabel htmlFor="edit-api-type" label="Type" />
+          <Select
+            id="edit-api-type"
+            value={form.apiType}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                apiType: event.target.value as MappingApiType,
+              }))
+            }
+          >
+            {MAPPING_API_TYPE_OPTIONS.map((apiType) => (
+              <option key={apiType} value={apiType}>
+                {apiType}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
           <FieldLabel htmlFor="edit-api-status" label="Status" />
           <Select
             id="edit-api-status"
@@ -133,11 +156,10 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                status: event.target.value as (typeof STATUS_OPTIONS)[number],
-              }))
+                status: event.target.value as ApiStatus }))
             }
           >
-            {STATUS_OPTIONS.map((status) => (
+            {API_STATUS_OPTIONS.map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>

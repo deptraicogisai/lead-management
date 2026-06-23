@@ -35,6 +35,7 @@ const verticalSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
+    status: { type: String, enum: ["Active", "Deleted"], default: "Active", index: true },
     fields: { type: [industryFieldSchema], default: [] },
   },
   { timestamps: true }
@@ -60,6 +61,11 @@ export async function ensureVerticalCollectionMigrated() {
       await verticalCollection.updateMany(
         {},
         { $unset: { industryId: "", verticalId: "", sellerId: "" } }
+      );
+
+      await verticalCollection.updateMany(
+        { status: { $exists: false } },
+        { $set: { status: "Active" } }
       );
 
       const verticals = await verticalCollection

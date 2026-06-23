@@ -2,8 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { CircleHelp, Copy, Download, Plus, Trash2 } from "lucide-react";
-import { ClearButton, SearchButton } from "@/components/ui/action-buttons";
+import { CircleHelp, Copy, Download } from "lucide-react";
+import {
+  AddNewButton,
+  CancelButton,
+  ClearButton,
+  DangerButton,
+  DeleteSelectedButton,
+  SearchButton,
+  TableActionButton,
+  TableActionLink,
+} from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
@@ -232,41 +241,35 @@ export default function IntegrationBuilderPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/integration-builder/${encodeURIComponent(row.id)}`}
-            className="rounded-lg border border-emerald-700 bg-emerald-800 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-          >
+          <TableActionLink href={`/integration-builder/${encodeURIComponent(row.id)}`}>
             Configure
-          </Link>
-          <button
+          </TableActionLink>
+          <TableActionButton
             type="button"
+            icon={Copy}
             onClick={() => {
               setCloneTarget(row);
               setCloneName(`${row.name} Copy`);
               setCloneError("");
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
-            <Copy size={13} />
-            <span>Clone</span>
-          </button>
-          <button
+            Clone
+          </TableActionButton>
+          <TableActionButton
             type="button"
+            icon={Download}
             onClick={() => void handleExportRecord(row)}
             disabled={exportingId === row.id}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500/40 dark:text-blue-200 dark:hover:bg-blue-500/10"
           >
-            <Download size={13} />
-            <span>{exportingId === row.id ? "Exporting..." : "Export"}</span>
-          </button>
-          <button
+            {exportingId === row.id ? "Exporting..." : "Export"}
+          </TableActionButton>
+          <TableActionButton
             type="button"
+            variant="danger"
             onClick={() => setDeleteConfirm({ mode: "single", record: row })}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
           >
-            <Trash2 size={13} />
-            <span>Remove</span>
-          </button>
+            Remove
+          </TableActionButton>
         </div>
       ),
     },
@@ -540,9 +543,9 @@ export default function IntegrationBuilderPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <SearchButton />
-              <ClearButton onClick={clearFilters} />
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+              <SearchButton type="button" />
+              <ClearButton type="button" onClick={clearFilters} />
             </div>
           </div>
 
@@ -556,24 +559,15 @@ export default function IntegrationBuilderPage() {
               selectedCount={selectedIds.length}
               actions={
                 <>
-                  <button
-                    type="button"
-                    onClick={handleOpenAddModal}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                  >
-                    <Plus size={15} />
-                    <span>Add New Record</span>
-                  </button>
-                  {selectedIds.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
-                      className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-                    >
-                      <Trash2 size={15} />
-                      <span>Remove ({selectedIds.length})</span>
-                    </button>
-                  ) : null}
+                  <DeleteSelectedButton
+                    count={selectedIds.length}
+                    label="Remove Selected"
+                    onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
+                    disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
+                  />
+                  <AddNewButton type="button" onClick={handleOpenAddModal}>
+                    Add New Record
+                  </AddNewButton>
                 </>
               }
             />
@@ -606,20 +600,8 @@ export default function IntegrationBuilderPage() {
         panelClassName="max-w-2xl"
         actions={
           <>
-            <button
-              type="button"
-              onClick={handleCloseAddModal}
-              disabled={isSaving}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              type="button"
-              onClick={() => void handleAddRecord()}
-              disabled={isSaving}
-              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-            >
+            <CancelButton type="button" onClick={handleCloseAddModal} disabled={isSaving} />
+            <PrimaryButton type="button" onClick={() => void handleAddRecord()} disabled={isSaving}>
               {isSaving ? "Adding..." : "Add"}
             </PrimaryButton>
           </>
@@ -716,20 +698,8 @@ export default function IntegrationBuilderPage() {
         panelClassName="max-w-lg"
         actions={
           <>
-            <button
-              type="button"
-              onClick={handleCloseCloneModal}
-              disabled={isCloning}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <PrimaryButton
-              type="button"
-              onClick={() => void handleCloneRecord()}
-              disabled={isCloning}
-              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-            >
+            <CancelButton type="button" onClick={handleCloseCloneModal} disabled={isCloning} />
+            <PrimaryButton type="button" onClick={() => void handleCloneRecord()} disabled={isCloning}>
               {isCloning ? "Cloning..." : "Clone"}
             </PrimaryButton>
           </>
@@ -770,25 +740,17 @@ export default function IntegrationBuilderPage() {
         }}
         actions={
           <>
-            <button
+            <CancelButton
               type="button"
               disabled={isDeleting}
               onClick={() => {
                 setDeleteConfirm(null);
                 setDeleteError("");
               }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isDeleting}
-              onClick={() => void handleConfirmDelete()}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 dark:bg-red-500 dark:hover:bg-red-400"
-            >
+            />
+            <DangerButton type="button" disabled={isDeleting} onClick={() => void handleConfirmDelete()}>
               {isDeleting ? "Removing..." : "Remove"}
-            </button>
+            </DangerButton>
           </>
         }
       />

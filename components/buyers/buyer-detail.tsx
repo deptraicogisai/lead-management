@@ -25,7 +25,9 @@ import { toast } from "@/lib/toast";
 import { BuyerPlDnplSettings } from "@/components/buyers/buyer-pl-dnpl-settings";
 import {
   normalizeBuyerStatus,
+  BUYER_STATUS_DETAIL_OPTIONS,
   type BuyerListRecord,
+  type BuyerStatus,
   type BuyerUpdatePayload,
 } from "@/lib/buyer";
 import type { IntegrationOption } from "@/lib/buyer-integrations";
@@ -96,7 +98,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const activeTabId = resolveBuyerTabId(searchParams.get("tab"));
   const [name, setName] = useState(buyer.name);
   const [email, setEmail] = useState(buyer.email);
-  const [status, setStatus] = useState<"Active" | "Inactive">(normalizeBuyerStatus(buyer.status));
+  const [status, setStatus] = useState<BuyerStatus>(normalizeBuyerStatus(buyer.status));
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
@@ -443,11 +445,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
             <select
               id="buyer-status"
               value={status}
-              onChange={(event) => setStatus(event.target.value as "Active" | "Inactive")}
+              onChange={(event) => setStatus(event.target.value as BuyerStatus)}
               className={selectClassName}
             >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+              {BUYER_STATUS_DETAIL_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           )}
           <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">

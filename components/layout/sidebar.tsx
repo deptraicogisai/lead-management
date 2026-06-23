@@ -11,6 +11,7 @@ import {
   LayoutList,
   PanelLeftClose,
   PanelLeftOpen,
+  ScrollText,
   Users,
 } from "lucide-react";
 import { clientManagementSections } from "@/components/layout/client-management-nav-items";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/verticals", label: "Vertical", icon: BriefcaseBusiness },
   { href: "/buyers", label: "Buyer List", icon: LayoutList },
   { href: "/documents", label: "Documents", icon: FileText },
+  { href: "/logs", label: "Logs", icon: ScrollText },
 ];
 
 function NavLink({

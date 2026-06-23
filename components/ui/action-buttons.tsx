@@ -1,7 +1,23 @@
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { ArrowLeft, Download, RotateCcw, Search, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Download, Plus, RotateCcw, Search, type LucideIcon } from "lucide-react";
+import {
+  CancelButton,
+  DangerButton,
+  WarningButton,
+} from "@/components/ui/form-controls";
+import {
+  dangerButtonClassName,
+  primaryButtonClassName,
+  secondaryButtonClassName,
+  tableActionButtonClassName,
+  tableActionDangerButtonClassName,
+  toolbarPrimaryButtonClassName,
+} from "@/lib/button-styles";
+import { IconText, buttonLabelText, inferTableActionIcon } from "@/lib/button-icons";
 import { cn } from "@/lib/utils";
+
+export { CancelButton, DangerButton, WarningButton };
 
 export const detailLinkClassName =
   "cursor-pointer font-medium text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200";
@@ -30,10 +46,7 @@ export function BackLink({ href, label = "Back", className }: BackLinkProps) {
   return (
     <Link
       href={href}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-slate-50 hover:text-blue-800 dark:border-slate-600 dark:text-blue-300 dark:hover:bg-slate-800 dark:hover:text-blue-200",
-        className
-      )}
+      className={cn(secondaryButtonClassName, className)}
     >
       <ArrowLeft size={16} />
       {label}
@@ -48,13 +61,11 @@ type IconActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const iconActionVariants = {
-  primary:
-    "border-emerald-700 bg-emerald-800 text-white hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500",
-  secondary:
-    "border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
-  danger: "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
+  primary: primaryButtonClassName,
+  secondary: secondaryButtonClassName,
+  danger: dangerButtonClassName,
   ghost:
-    "border-transparent bg-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
+    "border-transparent bg-transparent font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
 };
 
 export function IconActionButton({
@@ -65,15 +76,7 @@ export function IconActionButton({
   ...props
 }: IconActionButtonProps) {
   return (
-    <button
-      type="button"
-      {...props}
-      className={cn(
-        "inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
-        iconActionVariants[variant],
-        className
-      )}
-    >
+    <button type="button" {...props} className={cn(iconActionVariants[variant], "px-3 py-2", className)}>
       <Icon size={16} />
       {children}
     </button>
@@ -117,11 +120,81 @@ export function ExportButton({
       variant="primary"
       disabled={disabled}
       title={title ?? (disabled ? "Coming soon" : undefined)}
-      className={className}
+      className={cn(toolbarPrimaryButtonClassName, className)}
       {...props}
     >
       {children}
     </IconActionButton>
+  );
+}
+
+type AddNewButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon?: LucideIcon;
+  children: ReactNode;
+};
+
+export function AddNewButton({ icon: Icon = Plus, children, className, ...props }: AddNewButtonProps) {
+  return (
+    <button type="button" {...props} className={cn(toolbarPrimaryButtonClassName, className)}>
+      <Icon size={15} />
+      {children}
+    </button>
+  );
+}
+
+export { tableActionButtonClassName, tableActionDangerButtonClassName };
+
+type TableActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon?: LucideIcon | false;
+  variant?: "default" | "danger";
+};
+
+export function TableActionButton({
+  children,
+  icon,
+  variant = "default",
+  className,
+  ...props
+}: TableActionButtonProps) {
+  const label = buttonLabelText(children);
+  const resolvedIcon = icon === false ? null : (icon ?? inferTableActionIcon(label));
+  const baseClass = variant === "danger" ? tableActionDangerButtonClassName : tableActionButtonClassName;
+
+  return (
+    <button type="button" {...props} className={cn(baseClass, "inline-flex items-center gap-1", className)}>
+      {resolvedIcon ? <IconText icon={resolvedIcon} size={12}>{children}</IconText> : children}
+    </button>
+  );
+}
+
+type TableActionLinkProps = {
+  href: string;
+  children: ReactNode;
+  icon?: LucideIcon | false;
+  className?: string;
+};
+
+export function TableActionLink({ href, children, icon, className }: TableActionLinkProps) {
+  const label = buttonLabelText(children);
+  const resolvedIcon = icon === false ? null : (icon ?? inferTableActionIcon(label));
+
+  return (
+    <Link href={href} className={cn(tableActionButtonClassName, "inline-flex items-center gap-1", className)}>
+      {resolvedIcon ? <IconText icon={resolvedIcon} size={12}>{children}</IconText> : children}
+    </Link>
+  );
+}
+
+type DeleteSelectedButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  count: number;
+  label?: string;
+};
+
+export function DeleteSelectedButton({ count, label = "Delete Selected", className, ...props }: DeleteSelectedButtonProps) {
+  return (
+    <WarningButton className={className} {...props}>
+      {label} ({count})
+    </WarningButton>
   );
 }
 

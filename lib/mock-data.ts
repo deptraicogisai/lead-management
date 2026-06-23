@@ -5,7 +5,7 @@ export type Seller = {
   email: string;
   region: string;
   publisherTag?: string;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Deleted";
   createdAt?: string | null;
   apiFields?: ApiFieldConfig[];
 };
@@ -34,6 +34,7 @@ export type Vertical = {
   id: string;
   name: string;
   description: string;
+  status?: "Active" | "Deleted";
   sellerId?: string;
   fields?: ApiFieldConfig[];
 };

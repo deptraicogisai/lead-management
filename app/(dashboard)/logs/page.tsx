@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PrimaryButton } from "@/components/ui/form-controls";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
-import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
+import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 
@@ -17,10 +18,13 @@ type LogRow = {
   requestType: "seller-intake" | "buyer-delivery";
   sellerName: string;
   verticalName: string;
+  campaignName: string;
+  campaignType: string;
   targetName: string;
   postLeadUrl: string;
-  requestPayload: string;
+  requestPayload: Record<string, unknown>;
   responseBody: string;
+  responseHeaders: Record<string, string>;
   errorMessage: string;
   deliveryStatus: "success" | "fail";
   httpStatus: number;
@@ -55,12 +59,8 @@ function previewText(value: string) {
   return value.length > PREVIEW_LIMIT ? `${value.slice(0, PREVIEW_LIMIT)}...` : value;
 }
 
-function formatContent(value: string) {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
-  }
+function previewPayload(value: Record<string, unknown>) {
+  return previewText(JSON.stringify(value));
 }
 
 function formatRequestType(value: LogRow["requestType"]) {
@@ -71,8 +71,7 @@ export default function LogsPage() {
   const [rows, setRows] = useState<LogRow[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isDeleting, setIsDeleting] = useState(false);
-  const [modalTitle, setModalTitle] = useState<string | null>(null);
-  const [modalContent, setModalContent] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<LogRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -195,7 +194,22 @@ export default function LogsPage() {
       render: (row) => <span className="font-medium text-slate-800">{row.sellerName || "-"}</span>,
     },
     { key: "verticalName", label: "Vertical" },
-    { key: "targetName", label: "Target" },
+    {
+      key: "campaignName",
+      label: "Campaign",
+      render: (row) => <span className="font-medium text-slate-800 dark:text-slate-100">{row.campaignName || "—"}</span>,
+    },
+    {
+      key: "campaignType",
+      label: "Campaign Type",
+      render: (row) =>
+        row.campaignType ? (
+          <StatusBadge status={row.campaignType} />
+        ) : (
+          <span className="text-xs text-slate-500">—</span>
+        ),
+    },
+    { key: "targetName", label: "Buyer" },
     {
       key: "deliveryStatus",
       label: "Status",
@@ -223,17 +237,14 @@ export default function LogsPage() {
       render: (row) => (
         <div className="max-w-sm space-y-2">
           <pre className="rounded-xl bg-slate-50 p-3 whitespace-pre-wrap break-words text-xs leading-5 text-slate-700 dark:bg-slate-800 dark:text-slate-100">
-            {previewText(row.requestPayload)}
+            {previewPayload(row.requestPayload)}
           </pre>
           <button
             type="button"
-            onClick={() => {
-              setModalTitle(`Posted Data - ${row.targetName}`);
-              setModalContent(row.requestPayload);
-            }}
+            onClick={() => setSelectedLog(row)}
             className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
           >
-            Show Full Data
+            Open Log
           </button>
         </div>
       ),
@@ -252,18 +263,28 @@ export default function LogsPage() {
             {responseText !== "-" ? (
               <button
                 type="button"
-                onClick={() => {
-                  setModalTitle(`Response - ${row.targetName}`);
-                  setModalContent(responseText);
-                }}
+                onClick={() => setSelectedLog(row)}
                 className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
               >
-                Show Full Response
+                Open Log
               </button>
             ) : null}
           </div>
         );
       },
+    },
+    {
+      key: "actions",
+      label: "Log",
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => setSelectedLog(row)}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+        >
+          View
+        </button>
+      ),
     },
     {
       key: "createdAt",
@@ -277,7 +298,7 @@ export default function LogsPage() {
   const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
 
   return (
-    <PageSection>
+    <PageSection title="Logs">
       <div className="space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <ListTableToolbar
@@ -296,7 +317,7 @@ export default function LogsPage() {
               setPage(1);
               setSelectedIds([]);
             }}
-            filterPlaceholder="Type, seller, URL..."
+            filterPlaceholder="Type, seller, campaign, buyer, URL..."
             selectedCount={selectedIds.length}
             actions={
               <>
@@ -357,33 +378,31 @@ export default function LogsPage() {
         />
       </div>
 
-      <Modal
-        open={modalContent !== null}
-        title={modalTitle ?? "Log Detail"}
-        onClose={() => {
-          setModalTitle(null);
-          setModalContent(null);
-        }}
-        panelClassName="max-w-5xl"
-        actions={
-          <button
-            type="button"
-            onClick={() => {
-              setModalTitle(null);
-              setModalContent(null);
-            }}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400"
-          >
-            Close
-          </button>
+      <BuyerHttpLogSidebar
+        open={Boolean(selectedLog)}
+        onClose={() => setSelectedLog(null)}
+        title={selectedLog ? `Buyer Log — ${selectedLog.targetName}` : "Buyer Log"}
+        subtitle={
+          selectedLog
+            ? `${formatRequestType(selectedLog.requestType)} | ${selectedLog.sellerName || "—"} | ${selectedLog.verticalName || "—"}`
+            : undefined
         }
-      >
-        {modalContent ? (
-          <pre className="max-h-[70vh] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-            {formatContent(modalContent)}
-          </pre>
-        ) : null}
-      </Modal>
+        postedAt={selectedLog ? formatDateTime(selectedLog.createdAt) : undefined}
+        deliveryStatus={selectedLog?.deliveryStatus}
+        httpStatus={selectedLog?.httpStatus}
+        postLeadUrl={selectedLog?.postLeadUrl}
+        log={
+          selectedLog
+            ? resolveBuyerHttpExchangeFromLog({
+                requestPayload: selectedLog.requestPayload,
+                responseBody: selectedLog.responseBody,
+                responseHeaders: selectedLog.responseHeaders,
+                httpStatus: selectedLog.httpStatus,
+                errorMessage: selectedLog.errorMessage,
+              })
+            : { request: null, response: null }
+        }
+      />
     </PageSection>
   );
 }

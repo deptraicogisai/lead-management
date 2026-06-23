@@ -2,6 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CancelButton, PrimaryButton } from "@/components/ui/form-controls";
 import {
   DATE_RANGE_PRESETS,
   endOfDay,
@@ -374,20 +375,11 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
               {formatDateRangeDisplay(draft.from, draft.to)}
             </p>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApply}
-                className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-              >
+              <CancelButton type="button" onClick={handleCancel} />
+              <PrimaryButton type="button" onClick={handleApply}>
                 Apply
-              </button>
+              </PrimaryButton>
+
             </div>
           </div>
         </div>

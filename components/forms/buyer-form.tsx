@@ -76,7 +76,7 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
         </select>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-end gap-3">
         <PrimaryButton type="submit" disabled={isSaving}>
           {isSaving ? "Creating..." : "Create Buyer"}
         </PrimaryButton>

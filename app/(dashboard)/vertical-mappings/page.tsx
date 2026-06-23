@@ -322,10 +322,7 @@ export default function VerticalMappingsPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
-          <PrimaryButton type="button" onClick={handleSubmit}>
-            {editingId ? "Update Mapping" : "Create Mapping"}
-          </PrimaryButton>
+        <div className="mt-4 flex items-center justify-end gap-3">
           {editingId ? (
             <button
               type="button"
@@ -335,6 +332,9 @@ export default function VerticalMappingsPage() {
               Cancel
             </button>
           ) : null}
+          <PrimaryButton type="button" onClick={handleSubmit}>
+            {editingId ? "Update Mapping" : "Create Mapping"}
+          </PrimaryButton>
         </div>
       </Modal>
 

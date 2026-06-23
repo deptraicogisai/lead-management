@@ -7,10 +7,12 @@ import { BuyerRequestLogModel } from "@/lib/models/buyer-request-log";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
+import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
+import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 
 type MappingApiField = {
@@ -52,6 +54,7 @@ type SellerMapping = {
   _id?: { toString(): string };
   sellerRef?: { toString(): string } | string;
   verticalRef?: { toString(): string } | string;
+  apiType?: string | null;
   fields?: MappingApiField[];
   apiRequest?: MappingApiRequest | null;
   timezone?: string | null;
@@ -367,6 +370,7 @@ export async function handleSellerLeadPost(req: Request) {
 
     const matchedMapping = (await VerticalMappingModel.findOne({
       "apiRequest.apiKey": requestApiKey,
+      ...excludeDeletedStatusFilter(),
     }).lean()) as SellerMapping | null;
 
     if (!matchedMapping) {
@@ -507,18 +511,18 @@ export async function handleSellerLeadPost(req: Request) {
       revShareSettings: toMappingRevShareSettings((matchedMapping as { revShare?: MappingRevShareDoc }).revShare),
     });
 
+    const publisherApiType = normalizeMappingApiType(matchedMapping.apiType);
+
     let responsePayload: Record<string, unknown>;
 
     if (distribution.publisherStatus === "Sold") {
-      responsePayload = {
-        status: 1,
-        status_text: "Accepted",
-        redirect_url:
-          distribution.redirectUrl ||
-          `${origin}/reports/publisher/lead-details?leadId=${encodeURIComponent(leadId)}`,
-        price: distribution.soldPrice,
-        lead_id: leadId,
-      };
+      responsePayload = buildPublisherSoldResponse({
+        apiType: publisherApiType,
+        leadId,
+        origin,
+        redirectUrl: distribution.redirectUrl,
+        publisherResponsePrice: distribution.publisherResponsePrice,
+      });
     } else if (distribution.publisherStatus === "Test") {
       responsePayload = {
         status: 1,
@@ -581,7 +585,9 @@ export async function handleSellerLeadPost(req: Request) {
           : 400;
 
     return NextResponse.json(responsePayload, { status: httpStatus });
-  } catch {
+  } catch (error) {
+    console.error("Seller lead intake failed:", error);
+
     const responsePayload = {
       status: "error",
       reasons: [{ message: "Unexpected server error while processing lead." }],

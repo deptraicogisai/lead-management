@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { CancelButton, FieldLabel, FormError, Input, PrimaryButton, cancelButtonClassName } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import {
   PRESENT_LIST_EXPIRATION_OPTIONS,
   PRESENT_LIST_TYPE_OPTIONS,
-  type PresentListRecord,
-} from "@/lib/present-list";
+  type PresentListRecord } from "@/lib/present-list";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 
 type Option = { id: string; label: string };
@@ -25,8 +24,7 @@ export function PresentListCreateModal({
   verticalOptions,
   list = null,
   onClose,
-  onCreated,
-}: PresentListCreateModalProps) {
+  onCreated }: PresentListCreateModalProps) {
   const isEditing = Boolean(list);
   const [form, setForm] = useState({
     name: "",
@@ -34,8 +32,7 @@ export function PresentListCreateModal({
     applyToField: "",
     listType: "",
     defaultExpirationPeriod: "No expiration",
-    allowApiAccess: false,
-  });
+    allowApiAccess: false });
   const [fieldOptions, setFieldOptions] = useState<ApiFieldConfig[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -65,8 +62,7 @@ export function PresentListCreateModal({
         applyToField: list.applyToField,
         listType: list.listType,
         defaultExpirationPeriod: list.defaultExpirationPeriod || "No expiration",
-        allowApiAccess: list.allowApiAccess,
-      });
+        allowApiAccess: list.allowApiAccess });
     } else {
       setForm({
         name: "",
@@ -74,8 +70,7 @@ export function PresentListCreateModal({
         applyToField: "",
         listType: "",
         defaultExpirationPeriod: "No expiration",
-        allowApiAccess: false,
-      });
+        allowApiAccess: false });
     }
 
     setErrors({});
@@ -89,8 +84,7 @@ export function PresentListCreateModal({
       applyToField: "",
       listType: "",
       defaultExpirationPeriod: "No expiration",
-      allowApiAccess: false,
-    });
+      allowApiAccess: false });
     setFieldOptions([]);
     setErrors({});
     setIsSaving(false);
@@ -124,11 +118,9 @@ export function PresentListCreateModal({
                   applyToField: form.applyToField,
                   listType: form.listType,
                   defaultExpirationPeriod: form.defaultExpirationPeriod,
-                  allowApiAccess: form.allowApiAccess,
-                }
+                  allowApiAccess: form.allowApiAccess }
               : form
-          ),
-        }
+          ) }
       );
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) {
@@ -152,19 +144,16 @@ export function PresentListCreateModal({
       panelClassName="max-w-2xl"
       actions={
         <>
-          <button
-            type="button"
+          <CancelButton type="button"
             disabled={isSaving}
             onClick={handleClose}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100"
-          >
-            Cancel
-          </button>
+            
+          >Cancel</CancelButton>
           <PrimaryButton
             type="button"
             disabled={isSaving}
             onClick={() => void handleSubmit()}
-            className="bg-emerald-700 hover:bg-emerald-800"
+           
           >
             {isSaving ? "Saving..." : "Save"}
           </PrimaryButton>

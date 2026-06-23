@@ -3,15 +3,27 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  FileText,
+  Pencil,
+  Settings2,
+} from "lucide-react";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { CreateSellerApiModal } from "@/components/api-config/create-seller-api-modal";
 import { EditSellerApiModal } from "@/components/api-config/edit-seller-api-modal";
-import { IconActionButton } from "@/components/ui/action-buttons";
+import {
+  AddNewButton,
+  CancelButton,
+  DangerButton,
+  TableActionButton,
+  TableActionLink,
+  tableActionButtonClassName,
+} from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { IconText } from "@/lib/button-icons";
 import { cn } from "@/lib/utils";
 
 type SellerVertical = {
@@ -19,6 +31,7 @@ type SellerVertical = {
   verticalId: string;
   verticalName: string;
   apiName: string;
+  apiType: "Redirect" | "Silent";
   status: "Active" | "Inactive";
   apiRequest?: {
     apiKey: string;
@@ -79,6 +92,7 @@ export default function ApiConfigPage() {
   const verticalColumns: Column<SellerVertical>[] = [
     { key: "apiName", label: "API Name", render: (row) => <span className="font-medium">{row.apiName}</span> },
     { key: "verticalName", label: "Vertical Name" },
+    { key: "apiType", label: "Type", render: (row) => row.apiType },
     {
       key: "apiKey",
       label: "API Key",
@@ -100,36 +114,31 @@ export default function ApiConfigPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap items-center gap-2">
-          <IconActionButton
-            icon={Pencil}
-            variant="ghost"
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
-            onClick={() => setEditingRow(row)}
-          >
+          <TableActionButton icon={Pencil} onClick={() => setEditingRow(row)}>
             Edit
-          </IconActionButton>
-          <IconActionButton
-            icon={Trash2}
-            variant="danger"
-            className="rounded-lg px-2 py-1 text-xs"
-            onClick={() => setDeletingRow(row)}
-          >
+          </TableActionButton>
+          <TableActionButton variant="danger" onClick={() => setDeletingRow(row)}>
             Delete
-          </IconActionButton>
+          </TableActionButton>
           <Link
             href={`/api-config/document/${encodeURIComponent(row.id)}?sellerId=${encodeURIComponent(sellerId ?? "")}&sellerName=${encodeURIComponent(sellerName ?? "")}&apiName=${encodeURIComponent(row.apiName)}&verticalName=${encodeURIComponent(row.verticalName)}`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+            className={cn(
+              tableActionButtonClassName,
+              "inline-flex items-center gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+            )}
           >
-            Document
+            <IconText icon={FileText} size={12}>
+              Document
+            </IconText>
           </Link>
-          <Link
+          <TableActionLink
             href={`/api-config/${encodeURIComponent(sellerId ?? "")}/mappings/${encodeURIComponent(row.id)}/field-configuration?apiName=${encodeURIComponent(row.apiName)}&verticalName=${encodeURIComponent(row.verticalName)}&sellerName=${encodeURIComponent(sellerName ?? "")}`}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+            icon={Settings2}
           >
             View Fields Configuration
-          </Link>
+          </TableActionLink>
         </div>
       ),
     },
@@ -150,14 +159,7 @@ export default function ApiConfigPage() {
       <PageSection
         actions={
           sellerId ? (
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
-            >
-              <Plus size={16} />
-              Create API
-            </button>
+            <AddNewButton onClick={() => setIsCreateOpen(true)}>Create API</AddNewButton>
           ) : null
         }
       >
@@ -192,22 +194,12 @@ export default function ApiConfigPage() {
             }}
             actions={
               <>
-                <button
-                  type="button"
-                  disabled={isDeleting}
-                  onClick={() => setDeletingRow(null)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100"
-                >
+                <CancelButton disabled={isDeleting} onClick={() => setDeletingRow(null)}>
                   Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isDeleting}
-                  onClick={() => void handleDelete()}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                >
+                </CancelButton>
+                <DangerButton disabled={isDeleting} onClick={() => void handleDelete()}>
                   {isDeleting ? "Deleting..." : "Delete"}
-                </button>
+                </DangerButton>
               </>
             }
           />

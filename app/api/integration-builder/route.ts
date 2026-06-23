@@ -12,6 +12,7 @@ import {
 import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
 import {
   buildIntegrationBuilderImportCreateData,
+  buildIntegrationBuilderImportName,
   parseIntegrationBuilderImportSchema,
   resolveImportVerticalId,
 } from "@/lib/integration-builder-import";
@@ -98,7 +99,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: parsed.message }, { status: 400 });
       }
 
-      importName = parsed.schema.name.trim();
+      importName = buildIntegrationBuilderImportName(
+        parsed.schema.name,
+        (await IntegrationBuilderModel.find().select({ name: 1 }).lean()).map((record) => record.name)
+      );
       importVerticalId = resolveImportVerticalId(parsed.schema.productId, verticalIdsOldestFirst) ?? "";
 
       if (!importVerticalId || !Types.ObjectId.isValid(importVerticalId)) {

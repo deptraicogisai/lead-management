@@ -37,7 +37,7 @@ export function Modal({ open, title, description, children, actions, onClose, pa
         </div>
 
         {children ? <div className="mt-4 overflow-y-auto pr-1">{children}</div> : null}
-        {actions ? <div className="mt-6 flex items-center justify-end gap-3">{actions}</div> : null}
+        {actions ? <div className="mt-6 flex w-full items-center justify-end gap-3">{actions}</div> : null}
       </div>
     </div>
   );

@@ -19,6 +19,9 @@ export type BuyerLeadDetailsRow = {
   errorReason: string;
   postLeadUrl: string;
   httpStatus: number;
+  requestPayload: Record<string, unknown> | null;
+  responseBody: string;
+  responseHeaders: Record<string, string>;
   postedAt: string;
   validationErrors: string[];
 };

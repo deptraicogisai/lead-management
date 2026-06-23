@@ -3,16 +3,19 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { sortNewestFirst } from "@/lib/list-sort";
+import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type VerticalPayload = {
   name?: string;
   description?: string;
+  status?: "Active" | "Deleted";
 };
 
 function toVerticalResponse(doc: {
   _id?: { toString(): string };
   name: string;
   description: string;
+  status?: string | null;
   fields?: Array<{
     _id?: { toString(): string };
     fieldName: string;
@@ -31,6 +34,7 @@ function toVerticalResponse(doc: {
     id: doc._id?.toString() ?? "",
     name: doc.name,
     description: doc.description,
+    status: doc.status === "Deleted" ? "Deleted" : "Active",
     fields: (doc.fields ?? []).map((field) => ({
       id: field._id?.toString() ?? "",
       fieldName: field.fieldName,
@@ -58,14 +62,18 @@ export async function GET(req: Request) {
     const page = parsePageParam(searchParams.get("page"), 1);
     const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
     const search = normalizeSearchParam(searchParams.get("search"));
-    const filter = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { description: { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
+    const statusFilter = normalizeSearchParam(searchParams.get("status"));
+    const filter = mergeMongoFilters(
+      buildMongoStatusFilter(statusFilter || "All"),
+      search
+        ? {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { description: { $regex: search, $options: "i" } },
+            ],
+          }
+        : {}
+    );
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();

@@ -1,4 +1,4 @@
-export type BuyerStatus = "Active" | "Inactive" | "Disabled" | "Paused";
+export type BuyerStatus = "Active" | "Inactive" | "Disabled" | "Paused" | "Deleted";
 
 export type BuyerListRecord = {
   id: string;
@@ -29,7 +29,10 @@ export type BuyerCreatePayload = {
   status: "Active" | "Inactive";
 };
 
-export type BuyerUpdatePayload = BuyerCreatePayload & {
+export type BuyerUpdatePayload = {
+  name: string;
+  email: string;
+  status: BuyerStatus;
   integrationIds?: string[];
   allowedPublisherIds?: string[];
   blockedPublisherIds?: string[];
@@ -37,10 +40,19 @@ export type BuyerUpdatePayload = BuyerCreatePayload & {
   copyPlDnplToOtherBuyers?: boolean;
 };
 
-export function normalizeBuyerStatus(status?: BuyerStatus) {
-  if (status === "Active") return "Active";
+export function normalizeBuyerStatus(status?: string): BuyerStatus {
+  if (status === "Active" || status === "Deleted") {
+    return status;
+  }
+
+  if (status === "Disabled" || status === "Paused") {
+    return "Inactive";
+  }
+
   return "Inactive";
 }
+
+export const BUYER_STATUS_DETAIL_OPTIONS: BuyerStatus[] = ["Active", "Inactive", "Deleted"];
 
 export const BUYER_LABEL_OPTIONS = ["-", "LMS Sync"] as const;
 export const BUYER_TYPE_OPTIONS = ["-", "Custom", "Standard"] as const;

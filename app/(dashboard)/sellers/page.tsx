@@ -2,9 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
 import { SellerForm } from "@/components/forms/seller-form";
-import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
+import {
+  AddNewButton,
+  CancelButton,
+  ClearButton,
+  DangerButton,
+  DetailNameLink,
+  ExportButton,
+  SearchButton,
+  TableActionButton,
+  TableActionLink,
+} from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -266,26 +275,11 @@ export default function SellersPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={apiConfigHref(row)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            API Config
-          </Link>
-          <button
-            type="button"
-            onClick={() => handleEdit(row)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteTarget(row)}
-            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-          >
+          <TableActionLink href={apiConfigHref(row)}>API Config</TableActionLink>
+          <TableActionButton onClick={() => handleEdit(row)}>Edit</TableActionButton>
+          <TableActionButton variant="danger" onClick={() => setDeleteTarget(row)}>
             Delete
-          </button>
+          </TableActionButton>
         </div>
       ),
     },
@@ -366,14 +360,9 @@ export default function SellersPage() {
               actions={
                 <>
                   <ExportButton disabled />
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                  >
-                    <Plus size={15} />
+                  <AddNewButton type="button" onClick={handleCreate}>
                     Add New Publisher
-                  </button>
+                  </AddNewButton>
                 </>
               }
             />
@@ -440,20 +429,10 @@ export default function SellersPage() {
         onClose={() => setDeleteTarget(null)}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(null)}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
-            >
+            <CancelButton type="button" onClick={() => setDeleteTarget(null)} />
+            <DangerButton type="button" onClick={handleDelete}>
               Delete
-            </button>
+            </DangerButton>
           </>
         }
       />

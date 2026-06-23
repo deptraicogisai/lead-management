@@ -45,7 +45,7 @@ const campaignSchema = new Schema(
   {
     displayId: { type: Number, required: true, unique: true, index: true },
     name: { type: String, required: true, trim: true },
-    status: { type: String, enum: ["Active", "Paused", "Disabled"], default: "Active", index: true },
+    status: { type: String, enum: ["Active", "Paused", "Disabled", "Deleted"], default: "Active", index: true },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     buyerRef: { type: Schema.Types.ObjectId, ref: "Buyer", required: true, index: true },
     integrationRef: { type: Schema.Types.ObjectId, ref: "IntegrationBuilder", required: false },

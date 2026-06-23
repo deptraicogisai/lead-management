@@ -4,6 +4,7 @@ import type {
   IntegrationBuilderRequestMapping,
   IntegrationBuilderResponseMapping,
 } from "@/lib/integration-builder";
+import { validateBuyerPriceAgainstCampaign } from "@/lib/lead-price";
 
 export type IntegrationTemplateContext = {
   lead: Record<string, unknown>;
@@ -303,6 +304,21 @@ function isAcceptedSoldSign(value: string) {
   );
 }
 
+function normalizeParsedBuyerResponseAcceptIndicators(parsed: ParsedBuyerResponse): ParsedBuyerResponse {
+  const soldSign = parsed.soldSign.trim();
+  const errorReason = parsed.errorReason.trim();
+
+  if (!soldSign && isAcceptedSoldSign(errorReason)) {
+    return {
+      ...parsed,
+      soldSign: errorReason,
+      errorReason: "",
+    };
+  }
+
+  return parsed;
+}
+
 export function parseIntegrationResponse(
   responseMapping: IntegrationBuilderResponseMapping,
   rawResponseText: string,
@@ -421,21 +437,18 @@ export function parseIntegrationResponse(
     }
   }
 
-  return result;
+  return normalizeParsedBuyerResponseAcceptIndicators(result);
 }
 
-export function inferBuyerStatusFromParsedResponse(parsed: ParsedBuyerResponse, minPrice: number) {
+export function inferBuyerStatusFromParsedResponse(
+  parsed: ParsedBuyerResponse,
+  minPrice: number,
+  campaignType: "Redirect" | "Silent" = "Redirect"
+) {
   if (parsed.mappingError) {
     return {
       status: "Error" as const,
       reason: parsed.errorReason || "Response mapping error.",
-    };
-  }
-
-  if (parsed.errorReason) {
-    return {
-      status: "Error" as const,
-      reason: parsed.errorReason,
     };
   }
 
@@ -454,13 +467,22 @@ export function inferBuyerStatusFromParsedResponse(parsed: ParsedBuyerResponse, 
     soldComparable === "2";
 
   if (isAccept) {
-    if (parsed.soldPrice !== null && parsed.soldPrice < minPrice) {
-      return {
-        status: "Price Reject" as const,
-        reason: `Buyer price ${parsed.soldPrice} is below campaign min price ${minPrice}.`,
-      };
+    const priceValidation = validateBuyerPriceAgainstCampaign({
+      parsed,
+      minPrice,
+      campaignType,
+    });
+    if (priceValidation) {
+      return priceValidation;
     }
     return { status: "Accept" as const, reason: "" };
+  }
+
+  if (parsed.errorReason && !isAcceptedSoldSign(parsed.errorReason)) {
+    return {
+      status: "Error" as const,
+      reason: parsed.errorReason,
+    };
   }
 
   if (soldComparable.includes("timeout")) {

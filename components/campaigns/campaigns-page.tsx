@@ -2,12 +2,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
-import { ClearButton, DetailNameLink, SearchButton } from "@/components/ui/action-buttons";
+import {
+  AddNewButton,
+  CancelButton,
+  ClearButton,
+  DangerButton,
+  DeleteSelectedButton,
+  DetailNameLink,
+  SearchButton,
+  TableActionButton,
+  TableActionLink,
+} from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { FieldLabel, Input } from "@/components/ui/form-controls";
+import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { buildEmptySearchDateRange } from "@/lib/date-range";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
@@ -17,13 +27,22 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
-  CAMPAIGN_STATUS_OPTIONS,
+  CAMPAIGN_STATUS_FILTER_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
   formatCampaignDateTime,
   type CampaignListRecord,
+  type CampaignRecord,
 } from "@/lib/campaign";
+import { buildClonedCampaignName } from "@/lib/campaign-clone-name";
+import {
+  buildCampaignExportFileName,
+  buildCampaignExportPayload,
+  downloadJsonFile,
+  resolveCampaignExportProductId,
+} from "@/lib/campaign-export";
 import { toast } from "@/lib/toast";
 import { downloadCsv } from "@/lib/csv-export";
+import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type VerticalOption = { id: string; name: string; label: string };
@@ -121,6 +140,12 @@ export function CampaignsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [cloneTarget, setCloneTarget] = useState<CampaignListRecord | null>(null);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneMinPrice, setCloneMinPrice] = useState("0");
+  const [cloneError, setCloneError] = useState("");
+  const [isCloning, setIsCloning] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -211,6 +236,83 @@ export function CampaignsPage() {
 
     return allRows;
   }, [appliedFilters, totalItems]);
+
+  const handleExportRecord = async (row: CampaignListRecord) => {
+    setExportingId(row.id);
+
+    try {
+      const response = await fetch(`/api/campaigns/${encodeURIComponent(row.id)}`);
+      if (!response.ok) {
+        throw new Error("Failed to load campaign.");
+      }
+
+      const fullRecord = (await response.json()) as CampaignRecord;
+      const verticalIdsOldestFirst = verticalOptions.map((option) => option.id);
+      const productId = resolveCampaignExportProductId(fullRecord, verticalIdsOldestFirst);
+      const payload = buildCampaignExportPayload(fullRecord, productId);
+
+      downloadJsonFile(buildCampaignExportFileName(fullRecord.name), payload);
+      toast.success("Campaign exported successfully.", "Export");
+    } catch {
+      toast.error("Failed to export campaign.", "Export");
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  const handleCloseCloneModal = () => {
+    if (isCloning) return;
+    setCloneTarget(null);
+    setCloneName("");
+    setCloneMinPrice("0");
+    setCloneError("");
+  };
+
+  const handleCloneRecord = async () => {
+    if (!cloneTarget) return;
+
+    if (!cloneName.trim()) {
+      setCloneError("Name is required.");
+      return;
+    }
+
+    const minPrice = Number(cloneMinPrice);
+    if (!Number.isFinite(minPrice) || minPrice < 0) {
+      setCloneError("A valid min price is required.");
+      return;
+    }
+
+    setIsCloning(true);
+    setCloneError("");
+
+    try {
+      const response = await fetch(`/api/campaigns/${encodeURIComponent(cloneTarget.id)}/clone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: cloneName.trim(), minPrice }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        setCloneError(payload?.message ?? "Failed to clone campaign.");
+        return;
+      }
+
+      toast.success("Campaign cloned successfully.", "Clone");
+      handleCloseCloneModal();
+      setReloadKey((current) => current + 1);
+    } catch {
+      setCloneError("Failed to clone campaign.");
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
+  const clonePreviewName =
+    cloneTarget && cloneName.trim()
+      ? buildClonedCampaignName(cloneName, Number(cloneMinPrice) || 0)
+      : "";
 
   const handleExport = async (mode: "current-page" | "all-pages") => {
     setIsExporting(true);
@@ -366,19 +468,28 @@ export function CampaignsPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/campaigns/${row.id}`}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            View
-          </Link>
-          <button
+          <TableActionLink href={`/campaigns/${row.id}`}>View</TableActionLink>
+          <TableActionButton
             type="button"
-            onClick={() => openSingleDelete(row)}
-            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
+            onClick={() => {
+              setCloneTarget(row);
+              setCloneName(row.name);
+              setCloneMinPrice(String(row.minPrice));
+              setCloneError("");
+            }}
           >
+            Clone
+          </TableActionButton>
+          <TableActionButton
+            type="button"
+            onClick={() => void handleExportRecord(row)}
+            disabled={exportingId === row.id}
+          >
+            {exportingId === row.id ? "Exporting..." : "Export"}
+          </TableActionButton>
+          <TableActionButton variant="danger" onClick={() => openSingleDelete(row)}>
             Delete
-          </button>
+          </TableActionButton>
         </div>
       ),
     },
@@ -409,9 +520,10 @@ export function CampaignsPage() {
                 onChange={(e) => setDraftFilters((c) => ({ ...c, status: e.target.value }))}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
               >
-                <option value="All">All</option>
-                {CAMPAIGN_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{status}</option>
+                {CAMPAIGN_STATUS_FILTER_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
                 ))}
               </select>
             </div>
@@ -469,7 +581,7 @@ export function CampaignsPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
             <SearchButton
               onClick={() => {
                 setAppliedFilters(draftFilters);
@@ -504,13 +616,19 @@ export function CampaignsPage() {
             selectedCount={selectedIds.length}
             actions={
               <>
+                <DeleteSelectedButton
+                  count={selectedIds.length}
+                  onClick={openBulkDelete}
+                  disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
+                />
                 <div className="relative" ref={exportMenuRef}>
                   <button
                     type="button"
                     onClick={() => setExportOpen((current) => !current)}
                     disabled={isExporting || isInitialLoad || isRefreshing}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500 dark:bg-emerald-600"
+                    className={toolbarPrimaryButtonClassName}
                   >
+                    <Download size={16} />
                     {isExporting ? "Exporting..." : "Export"}
                     <ChevronDown className="h-4 w-4" />
                   </button>
@@ -533,22 +651,9 @@ export function CampaignsPage() {
                     </div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={openBulkDelete}
-                  disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
-                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-                >
-                  Delete Selected ({selectedIds.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                >
-                  <Plus size={15} />
+                <AddNewButton type="button" onClick={() => setIsCreateOpen(true)}>
                   Create New Campaign
-                </button>
+                </AddNewButton>
               </>
             }
           />
@@ -596,6 +701,61 @@ export function CampaignsPage() {
       />
 
       <Modal
+        open={cloneTarget !== null}
+        title="Clone Campaign"
+        description={
+          cloneTarget
+            ? `Create a copy of "${cloneTarget.name}" with all filters, schedule, and integration settings.`
+            : undefined
+        }
+        onClose={handleCloseCloneModal}
+        panelClassName="max-w-lg"
+        actions={
+          <>
+            <CancelButton type="button" onClick={handleCloseCloneModal} disabled={isCloning} />
+            <PrimaryButton type="button" onClick={() => void handleCloneRecord()} disabled={isCloning}>
+              {isCloning ? "Cloning..." : "Clone"}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <div className="grid gap-4">
+          <div>
+            <FieldLabel htmlFor="campaign-clone-name" label="Name" />
+            <Input
+              id="campaign-clone-name"
+              value={cloneName}
+              onChange={(event) => {
+                setCloneName(event.target.value);
+                if (cloneError) setCloneError("");
+              }}
+              placeholder="Enter campaign name"
+            />
+          </div>
+          <div>
+            <FieldLabel htmlFor="campaign-clone-min-price" label="Min Price" />
+            <Input
+              id="campaign-clone-min-price"
+              type="number"
+              min={0}
+              step="0.01"
+              value={cloneMinPrice}
+              onChange={(event) => {
+                setCloneMinPrice(event.target.value);
+                if (cloneError) setCloneError("");
+              }}
+            />
+          </div>
+          {clonePreviewName ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Campaign will be created as: <span className="font-medium">{clonePreviewName}</span>
+            </p>
+          ) : null}
+          <FormError error={cloneError} />
+        </div>
+      </Modal>
+
+      <Modal
         open={deleteMode !== null}
         title={deleteMode === "bulk" ? "Delete Selected Campaigns" : "Delete Campaign"}
         description={
@@ -608,22 +768,10 @@ export function CampaignsPage() {
         onClose={closeDeleteModal}
         actions={
           <>
-            <button
-              type="button"
-              disabled={isDeleting}
-              onClick={closeDeleteModal}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isDeleting}
-              onClick={() => void handleDelete()}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
-            >
+            <CancelButton type="button" disabled={isDeleting} onClick={closeDeleteModal} />
+            <DangerButton type="button" disabled={isDeleting} onClick={() => void handleDelete()}>
               {isDeleting ? "Deleting..." : "Delete"}
-            </button>
+            </DangerButton>
           </>
         }
       />

@@ -6,7 +6,47 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  buttonLabelText,
+  cancelIcon,
+  dangerIcon,
+  IconText,
+  inferPrimaryIcon,
+  warningIcon,
+} from "@/lib/button-icons";
+import {
+  buttonBaseClassName,
+  cancelButtonClassName,
+  compactPrimaryButtonClassName,
+  dangerButtonClassName,
+  paginationActiveClassName,
+  paginationInactiveClassName,
+  paginationNavButtonClassName,
+  primaryButtonClassName,
+  secondaryButtonClassName,
+  tableActionButtonClassName,
+  tableActionDangerButtonClassName,
+  toolbarPrimaryButtonClassName,
+  warningButtonClassName,
+} from "@/lib/button-styles";
+
+export {
+  buttonBaseClassName,
+  cancelButtonClassName,
+  compactPrimaryButtonClassName,
+  dangerButtonClassName,
+  primaryButtonClassName,
+  secondaryButtonClassName,
+  toolbarPrimaryButtonClassName,
+  warningButtonClassName,
+  paginationActiveClassName,
+  paginationInactiveClassName,
+  paginationNavButtonClassName,
+  tableActionButtonClassName,
+  tableActionDangerButtonClassName,
+} from "@/lib/button-styles";
 
 const fieldControlClassName =
   "w-full rounded-xl border border-slate-300 bg-white text-sm text-slate-800 outline-none transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
@@ -135,18 +175,106 @@ export function Checkbox({ checked, onChange, label, disabled, id, className }: 
   );
 }
 
-export function PrimaryButton({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { className, ...restProps } = props;
+export function PrimaryButton({
+  children,
+  icon,
+  iconSize = 16,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  const resolvedIcon = icon === false ? null : (icon ?? inferPrimaryIcon(buttonLabelText(children)));
 
   return (
-    <button
-      {...restProps}
-      className={cn(
-        "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-blue-300 disabled:hover:translate-y-0 disabled:hover:shadow-sm dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-400",
-        className
+    <button {...props} className={cn(primaryButtonClassName, className)}>
+      {resolvedIcon ? (
+        <IconText icon={resolvedIcon} size={iconSize}>
+          {children}
+        </IconText>
+      ) : (
+        children
       )}
-    >
-      {children}
+    </button>
+  );
+}
+
+export function SecondaryButton({
+  children,
+  icon,
+  iconSize = 16,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  const resolvedIcon = icon === false ? null : icon ?? null;
+
+  return (
+    <button {...props} className={cn(secondaryButtonClassName, className)}>
+      {resolvedIcon ? (
+        <IconText icon={resolvedIcon} size={iconSize}>
+          {children}
+        </IconText>
+      ) : (
+        children
+      )}
+    </button>
+  );
+}
+
+export function CancelButton({
+  children = "Cancel",
+  icon = cancelIcon,
+  iconSize = 16,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  return (
+    <button {...props} className={cn(cancelButtonClassName, className)}>
+      {icon === false ? (
+        children
+      ) : (
+        <IconText icon={icon} size={iconSize}>
+          {children}
+        </IconText>
+      )}
+    </button>
+  );
+}
+
+export function DangerButton({
+  children = "Delete",
+  icon = dangerIcon,
+  iconSize = 16,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  return (
+    <button {...props} className={cn(dangerButtonClassName, className)}>
+      {icon === false ? (
+        children
+      ) : (
+        <IconText icon={icon} size={iconSize}>
+          {children}
+        </IconText>
+      )}
+    </button>
+  );
+}
+
+export function WarningButton({
+  children,
+  icon = warningIcon,
+  iconSize = 16,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  return (
+    <button {...props} className={cn(warningButtonClassName, className)}>
+      {icon === false ? (
+        children
+      ) : (
+        <IconText icon={icon} size={iconSize}>
+          {children}
+        </IconText>
+      )}
     </button>
   );
 }

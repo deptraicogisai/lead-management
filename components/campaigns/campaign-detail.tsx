@@ -31,7 +31,7 @@ import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection, Spinner } from "@/components/ui/state";
 import {
-  CAMPAIGN_STATUS_OPTIONS,
+  CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
   DUPLICATE_METHOD_OPTIONS,
   DUPLICATE_PERIOD_OPTIONS,
@@ -530,7 +530,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-status" label="Status" />
                 <select id="detail-status" value={generalForm.status} onChange={(e) => setGeneralForm((c) => ({ ...c, status: e.target.value as CampaignRecord["status"] }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                  {CAMPAIGN_STATUS_OPTIONS.map((status) => (
+                  {CAMPAIGN_STATUS_DETAIL_OPTIONS.map((status) => (
                     <option key={status} value={status}>{status}</option>
                   ))}
                 </select>

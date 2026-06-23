@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, Minus, Plus, RefreshCw, Search } from "lucide-react";
+import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { ProductDocViewer } from "@/components/documents/product-doc-viewer";
 import {
   SyncProgressPanel,
@@ -392,7 +393,7 @@ export default function DocumentsPage() {
                 type="button"
                 onClick={() => setSyncMenuOpen((open) => !open)}
                 disabled={isSyncing || isCatalogLoading}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                className={toolbarPrimaryButtonClassName}
               >
                 <RefreshCw size={16} className={isSyncing ? "animate-spin" : undefined} />
                 {isSyncing

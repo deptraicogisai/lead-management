@@ -18,6 +18,7 @@ import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
 import { getAvailableIntegrationOptions, resolveBuyerIntegrations } from "@/lib/buyer-integrations";
 import { connectToDatabase } from "@/lib/mongodb";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 import { DEFAULT_POST_TIMEOUT_SECONDS, sanitizeIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import { toIntegrationBuilderRecord, type IntegrationBuilderConfigField } from "@/lib/integration-builder";
@@ -219,7 +220,7 @@ export async function DELETE(_: Request, context: Params) {
 
     await connectToDatabase();
 
-    const campaign = await CampaignModel.findByIdAndDelete(id);
+    const campaign = await CampaignModel.findByIdAndUpdate(id, softDeleteUpdate(), { new: true });
     if (!campaign) {
       return NextResponse.json({ message: "Campaign not found." }, { status: 404 });
     }

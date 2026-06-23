@@ -16,7 +16,7 @@ const sellerSchema = new Schema(
     email: { type: String, required: true, trim: true },
     region: { type: String, required: false, trim: true, default: "" },
     publisherTag: { type: String, required: false, trim: true, default: "" },
-    status: { type: String, enum: ["Active", "Inactive"], required: true },
+    status: { type: String, enum: ["Active", "Inactive", "Deleted"], required: true },
     apiFields: { type: [apiFieldSchema], default: [] },
   },
   { timestamps: true }

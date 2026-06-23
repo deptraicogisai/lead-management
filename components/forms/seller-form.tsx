@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Seller } from "@/lib/mock-data";
 import { TagSuggestInput } from "@/components/ui/tag-suggest-input";
-import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { FieldLabel, FormError, Input, PrimaryButton, CancelButton } from "@/components/ui/form-controls";
 import { normalizePublisherTag } from "@/lib/publisher-tag";
+
+const SELLER_STATUS_DETAIL_OPTIONS: Seller["status"][] = ["Active", "Inactive", "Deleted"];
 
 type SellerFormValues = {
   name: string;
@@ -133,22 +135,19 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
           onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as Seller["status"] }))}
           className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
         >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
+          {SELLER_STATUS_DETAIL_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
         </select>
       </div>
 
-      <div className="flex items-center gap-3">
-        <PrimaryButton type="submit">{isEditing ? "Update Publisher" : "Create Publisher"}</PrimaryButton>
+      <div className="flex items-center justify-end gap-3">
         {isEditing && onCancelEdit ? (
-          <button
-            type="button"
-            onClick={onCancelEdit}
-            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            Cancel
-          </button>
+          <CancelButton type="button" onClick={onCancelEdit} />
         ) : null}
+        <PrimaryButton type="submit">{isEditing ? "Update Publisher" : "Create Publisher"}</PrimaryButton>
       </div>
     </form>
   );

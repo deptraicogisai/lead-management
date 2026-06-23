@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { normalizePublisherTag } from "@/lib/publisher-tag";
 import { toSellerResponse } from "@/lib/seller-response";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,7 @@ type SellerPayload = {
   email?: string;
   region?: string;
   publisherTag?: string;
-  status?: "Active" | "Inactive";
+  status?: "Active" | "Inactive" | "Deleted";
 };
 
 export async function PATCH(req: Request, context: Params) {
@@ -52,12 +53,13 @@ export async function DELETE(_: Request, context: Params) {
     await connectToDatabase();
     await ensureSellerCollectionMigrated();
 
-    const seller = await SellerModel.findByIdAndDelete(id).lean();
+    const seller = await SellerModel.findByIdAndUpdate(id, softDeleteUpdate(), { new: true }).lean();
+
     if (!seller) {
       return NextResponse.json({ message: "Seller not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Seller deleted." });
+    return NextResponse.json({ message: "Seller deleted.", item: toSellerResponse(seller) });
   } catch {
     return NextResponse.json({ message: "Failed to delete seller." }, { status: 500 });
   }

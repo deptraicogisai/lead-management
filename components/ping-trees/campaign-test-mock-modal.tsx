@@ -8,7 +8,7 @@ import {
   type CampaignTestMockResponse,
 } from "@/lib/campaign-test-mock";
 import type { PingTreeCampaignCard } from "@/lib/ping-tree";
-import { FieldLabel, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
+import { FieldLabel, Input, PrimaryButton, Select, secondaryButtonClassName } from "@/components/ui/form-controls";
 
 type CampaignTestMockModalProps = {
   open: boolean;
@@ -166,7 +166,7 @@ export function CampaignTestMockModal({
           )}
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
           <button
             type="button"
             disabled={isSaving}
@@ -175,20 +175,17 @@ export function CampaignTestMockModal({
           >
             Clear mock
           </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={onClose}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSave()}>
-              {isSaving ? "Saving..." : "Save mock"}
-            </PrimaryButton>
-          </div>
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={onClose}
+            className={secondaryButtonClassName}
+          >
+            Cancel
+          </button>
+          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSave()}>
+            {isSaving ? "Saving..." : "Save mock"}
+          </PrimaryButton>
         </div>
       </div>
     </div>

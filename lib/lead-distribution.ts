@@ -28,6 +28,10 @@ import {
   resolvePublisherPriceFromRevShare,
   type MappingRevShareSettingsRecord,
 } from "@/lib/mapping-rev-share-settings";
+import {
+  resolvePublisherBuyerPrice,
+  shouldExposePublisherResponsePrice,
+} from "@/lib/lead-price";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { mergeMockBuyerPostOptions, normalizeCampaignTestMocks, type CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
@@ -69,9 +73,11 @@ export type CampaignDeliveryLog = {
   buyerRequest?: BuyerHttpRequestSnapshot;
   requestPayload?: Record<string, unknown> | null;
   responseBody?: string;
+  responseHeaders?: Record<string, string>;
   campaignValidationChecks?: BuyerPostValidationCheck[];
   campaignIntakeRuleGroups?: CampaignIntakeRuleGroup[];
   campaignTimezone?: string;
+  campaignMinPrice?: number;
   postedAt?: string;
 };
 
@@ -79,6 +85,7 @@ export type LeadDistributionResult = {
   publisherStatus: PublisherLeadStatus;
   redirectUrl: string;
   soldPrice: number | null;
+  publisherResponsePrice: number | null;
   campaignDeliveries: CampaignDeliveryLog[];
   buyerPostAttempts: BuyerPostAttemptSnapshot[];
   buyerPostHint?: string;
@@ -94,7 +101,20 @@ function isTestLeadPayload(payload: Record<string, unknown>) {
 }
 
 function orderPingTreeActiveCampaignIds(activeCampaignIds: string[]) {
-  return activeCampaignIds.map((campaignId) => campaignId?.trim() ?? "").filter(Boolean);
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const rawId of activeCampaignIds) {
+    const campaignId = rawId?.trim() ?? "";
+    if (!campaignId || seen.has(campaignId)) {
+      continue;
+    }
+
+    seen.add(campaignId);
+    ordered.push(campaignId);
+  }
+
+  return ordered;
 }
 
 function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
@@ -102,18 +122,8 @@ function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
 }
 
 function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: boolean): PublisherLeadStatus {
-  const redirectAccept = deliveries.find(
-    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
-  );
-  if (redirectAccept) {
+  if (deliveries.some((entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept")) {
     return "Sold";
-  }
-
-  if (hasRedirectDeliveries(deliveries)) {
-    if (hadPostError) {
-      return "Post Error";
-    }
-    return "Reject";
   }
 
   if (deliveries.some((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept")) {
@@ -128,8 +138,11 @@ function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: bool
 }
 
 function findAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
-  if (hasRedirectDeliveries(deliveries)) {
-    return deliveries.find((entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept");
+  const redirectAccept = deliveries.find(
+    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
+  );
+  if (redirectAccept) {
+    return redirectAccept;
   }
 
   return deliveries.find((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept");
@@ -412,6 +425,7 @@ async function processCampaignAttempt(params: {
       postLeadUrl: "",
       httpStatus: 0,
       traceSteps,
+      campaignMinPrice: campaign?.minPrice ?? 0,
     };
   }
 
@@ -443,6 +457,7 @@ async function processCampaignAttempt(params: {
         postLeadUrl: "",
         httpStatus: 0,
         traceSteps,
+        campaignMinPrice: campaign.minPrice ?? 0,
       },
       {
         campaign,
@@ -489,6 +504,7 @@ async function processCampaignAttempt(params: {
         postLeadUrl: "",
         httpStatus: 0,
         traceSteps,
+        campaignMinPrice: campaign.minPrice ?? 0,
       },
       {
         campaign,
@@ -559,6 +575,7 @@ async function processCampaignAttempt(params: {
   const campaignValidationChecks = validation.validationChecks;
   const campaignIntakeRuleGroups = validation.intakeRuleGroups;
   const campaignTimezone = validation.intakeSettings.timezone;
+  const campaignMinPrice = campaign.minPrice ?? 0;
 
   if (!validation.passed) {
     const skipped: CampaignDeliveryLog = {
@@ -581,6 +598,7 @@ async function processCampaignAttempt(params: {
       campaignValidationChecks,
       campaignIntakeRuleGroups,
       campaignTimezone,
+      campaignMinPrice,
       postedAt: params.postedAt.toISOString(),
     };
 
@@ -634,6 +652,7 @@ async function processCampaignAttempt(params: {
       campaignValidationChecks,
       campaignIntakeRuleGroups,
       campaignTimezone,
+      campaignMinPrice,
       postedAt: params.postedAt.toISOString(),
     };
 
@@ -686,6 +705,7 @@ async function processCampaignAttempt(params: {
       campaignValidationChecks,
       campaignIntakeRuleGroups,
       campaignTimezone,
+      campaignMinPrice,
     };
   }
 
@@ -731,6 +751,7 @@ async function processCampaignAttempt(params: {
       integrationId,
     }),
     minPrice: campaign.minPrice ?? 0,
+    pingTreeType: params.pingTreeType,
     mockBuyerPostUrl,
     mockBuyerPostOptions: params.mockBuyerPost
       ? mergeMockBuyerPostOptions(
@@ -744,11 +765,14 @@ async function processCampaignAttempt(params: {
   const buyerPostedAt = new Date().toISOString();
 
   await createBuyerDeliveryLog({
+    sellerLeadRef: params.sellerLeadId,
+    campaignRef: params.campaignId,
     sellerRef: params.sellerRefId,
     verticalRef: params.verticalRefId,
     buyerRef: buyerId,
     buyerCompany,
     campaignName,
+    campaignType: params.pingTreeType,
     postLeadUrl: delivery.postLeadUrl,
     publisherLead: delivery.publisherLead,
     systemLead: delivery.systemLead,
@@ -756,6 +780,7 @@ async function processCampaignAttempt(params: {
     buyerRequest: delivery.buyerRequest,
     requestPayload: delivery.requestPayload,
     responseBody: delivery.responseBody,
+    responseHeaders: delivery.responseHeaders,
     errorMessage: delivery.errorReason || delivery.rejectReason,
     deliveryStatus: delivery.buyerStatus === "Accept" ? "success" : "fail",
     httpStatus: delivery.httpStatus,
@@ -787,6 +812,7 @@ async function processCampaignAttempt(params: {
     postLeadUrl: delivery.postLeadUrl,
     requestPayload: structuredRequestPayload,
     responseBody: delivery.responseBody,
+    responseHeaders: delivery.responseHeaders ?? {},
     httpStatus: delivery.httpStatus,
     deliveryTrace: traceSteps,
     duplicateFingerprint,
@@ -816,9 +842,11 @@ async function processCampaignAttempt(params: {
     buyerRequest: delivery.buyerRequest,
     requestPayload: delivery.requestPayload,
     responseBody: delivery.responseBody,
+    responseHeaders: delivery.responseHeaders,
     campaignValidationChecks,
     campaignIntakeRuleGroups,
     campaignTimezone,
+    campaignMinPrice,
     postedAt: buyerPostedAt,
   } satisfies CampaignDeliveryLog;
 }
@@ -857,6 +885,7 @@ async function processPingTree(params: {
     ? await CampaignModel.find({
         _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
         status: "Active",
+        campaignType: params.pingTreeType,
       })
         .select({ _id: 1 })
         .lean()
@@ -1023,9 +1052,10 @@ function buildDeliveryProgressAttempts(delivery: CampaignDeliveryLog): BuyerPost
           headers: {},
           body: {},
         }),
-      httpStatus: delivery.httpStatus,
-      responseBody: delivery.responseBody ?? "",
-      price: delivery.price,
+        httpStatus: delivery.httpStatus,
+        responseBody: delivery.responseBody ?? "",
+        responseHeaders: delivery.responseHeaders,
+        price: delivery.price,
       redirectUrl: delivery.redirectUrl,
       rejectReason: delivery.rejectReason,
       errorReason: delivery.errorReason,
@@ -1225,6 +1255,7 @@ export async function distributeLeadAfterIntake(params: {
       publisherStatus: "Test",
       redirectUrl: "",
       soldPrice: null,
+      publisherResponsePrice: null,
       campaignDeliveries: [],
       buyerPostAttempts: [],
       message: "Test lead received. Lead was not posted to buyers.",
@@ -1267,9 +1298,12 @@ export async function distributeLeadAfterIntake(params: {
   const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError);
 
   const redirectUrl = accepted?.redirectUrl ?? "";
-  const buyerPrice = accepted?.price ?? null;
+  const buyerPrice = resolvePublisherBuyerPrice(coreDeliveries, accepted);
   const revShareSettings = params.revShareSettings ?? defaultMappingRevShareSettings();
   const soldPrice = resolvePublisherPriceFromRevShare(buyerPrice, revShareSettings);
+  const publisherResponsePrice = shouldExposePublisherResponsePrice(coreDeliveries, accepted)
+    ? soldPrice
+    : null;
 
   await SellerLeadModel.updateOne(
     { _id: new Types.ObjectId(params.sellerLeadId) },
@@ -1323,6 +1357,7 @@ export async function distributeLeadAfterIntake(params: {
     publisherStatus,
     redirectUrl,
     soldPrice,
+    publisherResponsePrice,
     campaignDeliveries: allDeliveries,
     buyerPostAttempts,
     buyerPostHint,

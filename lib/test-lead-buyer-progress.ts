@@ -147,7 +147,7 @@ function buildQueuedPlaceholderAttempt(
     campaignValidationChecks: [],
     postedToBuyer: false,
     request: null,
-    response: { httpStatus: 0, body: "" },
+    response: { httpStatus: 0, headers: {}, body: "" },
     logId: pending.logId,
     pingTreeType: pending.pingTreeType,
     campaignOrder: pending.campaignOrder,

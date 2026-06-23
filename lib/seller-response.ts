@@ -15,7 +15,7 @@ export type SellerDocInput = {
   email: string;
   region?: string | null;
   publisherTag?: string | null;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Deleted";
   createdAt?: Date | string;
   apiFields?: unknown;
 };
@@ -27,7 +27,7 @@ export type SellerResponse = {
   email: string;
   region: string;
   publisherTag: string;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Deleted";
   createdAt: string | null;
   apiFields: Array<{
     id: string;

@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { CancelButton, FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { CAMPAIGN_TYPE_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/campaign";
+import type { CampaignExportPayload } from "@/lib/campaign-export";
+import { parseCampaignImportSchema } from "@/lib/campaign-import";
 
 type Option = { id: string; label: string };
+
+type CampaignCreateType = "new" | "import";
 
 type CampaignCreateModalProps = {
   open: boolean;
@@ -15,6 +19,9 @@ type CampaignCreateModalProps = {
   onCreated: () => void;
 };
 
+const formSelectClassName =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800";
+
 export function CampaignCreateModal({
   open,
   verticalOptions,
@@ -22,6 +29,7 @@ export function CampaignCreateModal({
   onClose,
   onCreated,
 }: CampaignCreateModalProps) {
+  const [createType, setCreateType] = useState<CampaignCreateType>("new");
   const [form, setForm] = useState({
     name: "",
     verticalId: "",
@@ -30,11 +38,16 @@ export function CampaignCreateModal({
     timezone: "",
     minPrice: "0",
   });
+  const [importSchema, setImportSchema] = useState<CampaignExportPayload | null>(null);
+  const [importSchemaFileName, setImportSchemaFileName] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   const reset = () => {
+    setCreateType("new");
     setForm({ name: "", verticalId: "", buyerId: "", campaignType: "", timezone: "", minPrice: "0" });
+    setImportSchema(null);
+    setImportSchemaFileName("");
     setErrors({});
     setIsSaving(false);
   };
@@ -44,13 +57,49 @@ export function CampaignCreateModal({
     onClose();
   };
 
+  const handleSchemaFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setImportSchema(null);
+      setImportSchemaFileName("");
+      return;
+    }
+
+    try {
+      const raw = JSON.parse(await file.text()) as unknown;
+      const parsed = parseCampaignImportSchema(raw);
+      if (!parsed.ok) {
+        setErrors({ schemaFile: parsed.message });
+        setImportSchema(null);
+        setImportSchemaFileName("");
+        return;
+      }
+
+      setImportSchema(parsed.schema);
+      setImportSchemaFileName(file.name);
+      setErrors((current) => ({ ...current, schemaFile: "" }));
+    } catch {
+      setErrors({ schemaFile: "Unable to read campaign JSON file." });
+      setImportSchema(null);
+      setImportSchemaFileName("");
+    }
+  };
+
   const handleSubmit = async () => {
     const nextErrors: Record<string, string> = {};
-    if (!form.name.trim()) nextErrors.name = "Name is required.";
-    if (!form.verticalId) nextErrors.verticalId = "Product is required.";
-    if (!form.buyerId) nextErrors.buyerId = "Buyer is required.";
-    if (!form.campaignType) nextErrors.campaignType = "Campaign type is required.";
-    if (!form.timezone) nextErrors.timezone = "Timezone is required.";
+
+    if (createType === "import") {
+      if (!importSchema) {
+        nextErrors.schemaFile = "Please select a valid campaign JSON file.";
+      }
+    } else {
+      if (!form.name.trim()) nextErrors.name = "Name is required.";
+      if (!form.verticalId) nextErrors.verticalId = "Product is required.";
+      if (!form.buyerId) nextErrors.buyerId = "Buyer is required.";
+      if (!form.campaignType) nextErrors.campaignType = "Campaign type is required.";
+      if (!form.timezone) nextErrors.timezone = "Timezone is required.";
+    }
+
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -60,15 +109,23 @@ export function CampaignCreateModal({
       const response = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          verticalId: form.verticalId,
-          buyerId: form.buyerId,
-          campaignType: form.campaignType,
-          timezone: form.timezone,
-          minPrice: Number(form.minPrice),
-          status: "Active",
-        }),
+        body: JSON.stringify(
+          createType === "import"
+            ? {
+                createType: "import",
+                importSchema,
+              }
+            : {
+                createType: "new",
+                name: form.name.trim(),
+                verticalId: form.verticalId,
+                buyerId: form.buyerId,
+                campaignType: form.campaignType,
+                timezone: form.timezone,
+                minPrice: Number(form.minPrice),
+                status: "Active",
+              }
+        ),
       });
 
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -94,10 +151,10 @@ export function CampaignCreateModal({
       panelClassName="max-w-2xl"
       actions={
         <>
-          <button type="button" disabled={isSaving} onClick={handleClose} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100">
+          <CancelButton type="button" disabled={isSaving} onClick={handleClose}>
             Cancel
-          </button>
-          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()} className="bg-emerald-700 hover:bg-emerald-800">
+          </CancelButton>
+          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()}>
             {isSaving ? "Adding..." : "Add"}
           </PrimaryButton>
         </>
@@ -105,54 +162,134 @@ export function CampaignCreateModal({
     >
       <div className="grid gap-4">
         <div>
-          <FieldLabel htmlFor="campaign-name" label="Name" />
-          <Input id="campaign-name" value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
-          <FormError error={errors.name} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="campaign-product" label="Product" />
-          <select id="campaign-product" value={form.verticalId} onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            <option value="">Please select product</option>
-            {verticalOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
+          <FieldLabel htmlFor="campaign-create-type" label="Type" />
+          <select
+            id="campaign-create-type"
+            value={createType}
+            onChange={(event) => {
+              const nextType = event.target.value as CampaignCreateType;
+              setCreateType(nextType);
+              setErrors((current) => ({ ...current, schemaFile: "" }));
+              if (nextType === "new") {
+                setImportSchema(null);
+                setImportSchemaFileName("");
+              }
+            }}
+            className={formSelectClassName}
+          >
+            <option value="new">New</option>
+            <option value="import">Import</option>
           </select>
-          <FormError error={errors.verticalId} />
         </div>
-        <div>
-          <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
-          <select id="campaign-buyer" value={form.buyerId} onChange={(e) => setForm((c) => ({ ...c, buyerId: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            <option value="">Please select buyer</option>
-            {buyerOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-          <FormError error={errors.buyerId} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="campaign-type" label="Campaign type" />
-          <select id="campaign-type" value={form.campaignType} onChange={(e) => setForm((c) => ({ ...c, campaignType: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            <option value="">Please select Campaign type</option>
-            {CAMPAIGN_TYPE_OPTIONS.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-          <FormError error={errors.campaignType} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
-          <select id="campaign-timezone" value={form.timezone} onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            <option value="">Please select timezone</option>
-            {TIMEZONE_OPTIONS.map((timezone) => (
-              <option key={timezone} value={timezone}>{timezone}</option>
-            ))}
-          </select>
-          <FormError error={errors.timezone} />
-        </div>
-        <div>
-          <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />
-          <Input id="campaign-min-price" type="number" min={0} step="0.01" value={form.minPrice} onChange={(e) => setForm((c) => ({ ...c, minPrice: e.target.value }))} />
-        </div>
+
+        {createType === "new" ? (
+          <>
+            <div>
+              <FieldLabel htmlFor="campaign-name" label="Name" />
+              <Input
+                id="campaign-name"
+                value={form.name}
+                onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
+              />
+              <FormError error={errors.name} />
+            </div>
+            <div>
+              <FieldLabel htmlFor="campaign-product" label="Product" />
+              <select
+                id="campaign-product"
+                value={form.verticalId}
+                onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value }))}
+                className={formSelectClassName}
+              >
+                <option value="">Please select product</option>
+                {verticalOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <FormError error={errors.verticalId} />
+            </div>
+            <div>
+              <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
+              <select
+                id="campaign-buyer"
+                value={form.buyerId}
+                onChange={(e) => setForm((c) => ({ ...c, buyerId: e.target.value }))}
+                className={formSelectClassName}
+              >
+                <option value="">Please select buyer</option>
+                {buyerOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <FormError error={errors.buyerId} />
+            </div>
+            <div>
+              <FieldLabel htmlFor="campaign-type" label="Campaign type" />
+              <select
+                id="campaign-type"
+                value={form.campaignType}
+                onChange={(e) => setForm((c) => ({ ...c, campaignType: e.target.value }))}
+                className={formSelectClassName}
+              >
+                <option value="">Please select Campaign type</option>
+                {CAMPAIGN_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              <FormError error={errors.campaignType} />
+            </div>
+            <div>
+              <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
+              <select
+                id="campaign-timezone"
+                value={form.timezone}
+                onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))}
+                className={formSelectClassName}
+              >
+                <option value="">Please select timezone</option>
+                {TIMEZONE_OPTIONS.map((timezone) => (
+                  <option key={timezone} value={timezone}>
+                    {timezone}
+                  </option>
+                ))}
+              </select>
+              <FormError error={errors.timezone} />
+            </div>
+            <div>
+              <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />
+              <Input
+                id="campaign-min-price"
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.minPrice}
+                onChange={(e) => setForm((c) => ({ ...c, minPrice: e.target.value }))}
+              />
+            </div>
+          </>
+        ) : (
+          <div>
+            <FieldLabel htmlFor="campaign-schema-file" label="Schema File" />
+            <input
+              id="campaign-schema-file"
+              type="file"
+              accept=".json,application/json"
+              onChange={(event) => void handleSchemaFileChange(event)}
+              className="block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600"
+            />
+            {importSchemaFileName ? (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Selected: {importSchemaFileName}</p>
+            ) : null}
+            <FormError error={errors.schemaFile} />
+          </div>
+        )}
+
         <FormError error={errors.form} />
       </div>
     </Modal>

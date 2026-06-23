@@ -13,6 +13,7 @@ import {
   resolveBuyerIntegrations,
 } from "@/lib/buyer-integrations";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
+import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type LegacyBuyerPayload = {
   firstName?: string;
@@ -72,6 +73,8 @@ export async function GET(req: Request) {
     const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 15);
     const search = normalizeSearchParam(searchParams.get("search"));
 
+    const statusFilter = normalizeSearchParam(searchParams.get("status"));
+
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureBuyerFieldsMigrated();
@@ -85,23 +88,26 @@ export async function GET(req: Request) {
       verticalIds = matchingVerticals.map((vertical) => vertical._id);
     }
 
-    const filter: Record<string, unknown> = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { company: { $regex: search, $options: "i" } },
-            { firstName: { $regex: search, $options: "i" } },
-            { lastName: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { phone: { $regex: search, $options: "i" } },
-            { buyerLabel: { $regex: search, $options: "i" } },
-            { buyerType: { $regex: search, $options: "i" } },
-            { personalManagerName: { $regex: search, $options: "i" } },
-            { status: { $regex: search, $options: "i" } },
-            ...(verticalIds.length > 0 ? [{ verticalRef: { $in: verticalIds.map((id) => id.toString()) } }] : []),
-          ],
-        }
-      : {};
+    const filter = mergeMongoFilters(
+      buildMongoStatusFilter(statusFilter || "All"),
+      search
+        ? {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { company: { $regex: search, $options: "i" } },
+              { firstName: { $regex: search, $options: "i" } },
+              { lastName: { $regex: search, $options: "i" } },
+              { email: { $regex: search, $options: "i" } },
+              { phone: { $regex: search, $options: "i" } },
+              { buyerLabel: { $regex: search, $options: "i" } },
+              { buyerType: { $regex: search, $options: "i" } },
+              { personalManagerName: { $regex: search, $options: "i" } },
+              { status: { $regex: search, $options: "i" } },
+              ...(verticalIds.length > 0 ? [{ verticalRef: { $in: verticalIds.map((id) => id.toString()) } }] : []),
+            ],
+          }
+        : {}
+    );
 
     const totalItems = hasListParams ? await BuyerModel.countDocuments(filter) : 0;
     const buyers = await BuyerModel.find(filter)

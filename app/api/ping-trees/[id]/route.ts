@@ -5,6 +5,7 @@ import { toCampaignRecord } from "@/lib/campaign";
 import { CampaignModel } from "@/lib/models/campaign";
 import { PingTreeModel } from "@/lib/models/ping-tree";
 import { connectToDatabase } from "@/lib/mongodb";
+import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { toPingTreeRecord, type PingTreeCampaignCard } from "@/lib/ping-tree";
 import { normalizeCampaignTestMocks, sanitizeCampaignTestMock } from "@/lib/campaign-test-mock";
 
@@ -57,7 +58,12 @@ export async function GET(_: Request, context: Params) {
 
     const lookup = await buildCampaignLookupContext();
     const treeCampaignType = tree.campaignType === "Silent" ? "Silent" : "Redirect";
-    const campaigns = await CampaignModel.find({ campaignType: treeCampaignType }).sort({ displayId: -1 }).lean();
+    const campaigns = await CampaignModel.find({
+      campaignType: treeCampaignType,
+      ...excludeDeletedStatusFilter(),
+    })
+      .sort({ displayId: -1 })
+      .lean();
     const records = campaigns.map((campaign) => toCampaignRecord(campaign, lookup));
 
     const activeIds = new Set(tree.activeCampaignIds ?? []);

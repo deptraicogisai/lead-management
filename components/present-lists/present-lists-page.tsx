@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
-import { ClearButton, DetailNameLink, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
+import { AddNewButton, ClearButton, DetailNameLink, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
@@ -93,39 +93,33 @@ export function PresentListsPage() {
         <Link href={`/present-lists/${row.id}`} className="group inline-flex">
           <IdBadge id={row.displayId} interactive />
         </Link>
-      ),
-    },
+      ) },
     { key: "product", label: "Product", sortValue: (row) => row.productLabel, render: (row) => row.productLabel },
     {
       key: "listType",
       label: "List Type",
-      render: (row) => <StatusBadge status={row.listType} />,
-    },
+      render: (row) => <StatusBadge status={row.listType} /> },
     {
       key: "name",
       label: "List Name",
-      render: (row) => <DetailNameLink href={`/present-lists/${row.id}`}>{row.name}</DetailNameLink>,
-    },
+      render: (row) => <DetailNameLink href={`/present-lists/${row.id}`}>{row.name}</DetailNameLink> },
     { key: "field", label: "Field Name", render: (row) => row.applyToField },
     { key: "size", label: "List Size", sortValue: (row) => row.listSize, render: (row) => row.listSize },
     { key: "autoUpdate", label: "Auto-Update Frequency", render: (row) => row.autoUpdateFrequency },
     {
       key: "apiAccess",
       label: "Allow API Access",
-      render: (row) => <StatusBadge status={row.allowApiAccess ? "Yes" : "No"} />,
-    },
+      render: (row) => <StatusBadge status={row.allowApiAccess ? "Yes" : "No"} /> },
     {
       key: "created",
       label: "Creation Time",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => formatPresentListDateTime(row.createdAt),
-    },
+      render: (row) => formatPresentListDateTime(row.createdAt) },
     {
       key: "updated",
       label: "Last Update Time",
       sortValue: (row) => new Date(row.updatedAt).getTime(),
-      render: (row) => formatPresentListDateTime(row.updatedAt),
-    },
+      render: (row) => formatPresentListDateTime(row.updatedAt) },
     {
       key: "actions",
       label: "Actions",
@@ -138,8 +132,7 @@ export function PresentListsPage() {
         >
           Edit
         </IconActionButton>
-      ),
-    },
+      ) },
   ];
 
   const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
@@ -174,7 +167,7 @@ export function PresentListsPage() {
               <Input id="pl-name-filter" value={draftFilters.name} onChange={(e) => setDraftFilters((c) => ({ ...c, name: e.target.value }))} />
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap justify-between gap-3">
+          <div className="mt-4 flex flex-wrap justify-end gap-3">
             <SearchButton onClick={() => { setAppliedFilters(draftFilters); setPage(1); }} />
             <ClearButton
               onClick={() => {
@@ -201,14 +194,10 @@ export function PresentListsPage() {
             tableFilter={tableFilter}
             onTableFilterChange={setTableFilter}
             actions={
-              <button
-                type="button"
+              <AddNewButton type="button"
                 onClick={() => setIsCreateOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-              >
-                <Plus size={15} />
-                Add new list
-              </button>
+                
+              >Add new list</AddNewButton>
             }
           />
 

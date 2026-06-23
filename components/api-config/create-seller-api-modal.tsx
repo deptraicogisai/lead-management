@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FieldLabel, FormError, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
+import { CancelButton, FieldLabel, FormError, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { MAPPING_API_TYPE_OPTIONS, type MappingApiType } from "@/lib/mapping-api-type";
 
 const STATUS_OPTIONS = ["Active", "Inactive"] as const;
 
@@ -24,6 +25,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
   const [form, setForm] = useState({
     apiName: "",
     verticalId: "",
+    apiType: "Redirect" as MappingApiType,
     status: "Active" as (typeof STATUS_OPTIONS)[number],
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -49,7 +51,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
   }, [open]);
 
   const reset = () => {
-    setForm({ apiName: "", verticalId: "", status: "Active" });
+    setForm({ apiName: "", verticalId: "", apiType: "Redirect", status: "Active" });
     setErrors({});
     setFormError("");
     setIsSaving(false);
@@ -77,6 +79,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
         body: JSON.stringify({
           apiName: form.apiName.trim(),
           verticalId: form.verticalId,
+          apiType: form.apiType,
           status: form.status,
         }),
       });
@@ -106,15 +109,12 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
       panelClassName="max-w-lg"
       actions={
         <>
-          <button
-            type="button"
+          <CancelButton type="button"
             onClick={handleClose}
             disabled={isSaving}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100"
-          >
-            Cancel
-          </button>
-          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()} className="bg-emerald-700 hover:bg-emerald-800">
+            
+          >Cancel</CancelButton>
+          <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()}>
             {isSaving ? "Creating..." : "Create API"}
           </PrimaryButton>
         </>
@@ -151,6 +151,26 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
         </div>
 
         <div>
+          <FieldLabel htmlFor="create-api-type" label="Type" />
+          <Select
+            id="create-api-type"
+            value={form.apiType}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                apiType: event.target.value as MappingApiType,
+              }))
+            }
+          >
+            {MAPPING_API_TYPE_OPTIONS.map((apiType) => (
+              <option key={apiType} value={apiType}>
+                {apiType}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
           <FieldLabel htmlFor="create-api-status" label="Status" />
           <Select
             id="create-api-status"
@@ -158,8 +178,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                status: event.target.value as (typeof STATUS_OPTIONS)[number],
-              }))
+                status: event.target.value as (typeof STATUS_OPTIONS)[number] }))
             }
           >
             {STATUS_OPTIONS.map((status) => (

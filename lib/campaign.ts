@@ -4,7 +4,7 @@ import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-
 
 export { getMaxRangeOptions, isGeneralFilterRangeValid };
 
-export type CampaignStatus = "Active" | "Paused" | "Disabled";
+export type CampaignStatus = "Active" | "Paused" | "Disabled" | "Deleted";
 export type CampaignType = "Redirect" | "Silent";
 export type DuplicateMethod = "Email" | "SSN + Email";
 export type ScheduleAction = "Post" | "Do not post";
@@ -96,6 +96,17 @@ export type CampaignListRecord = Pick<
 >;
 
 export const CAMPAIGN_STATUS_OPTIONS: CampaignStatus[] = ["Active", "Paused", "Disabled"];
+export const CAMPAIGN_STATUS_DETAIL_OPTIONS: CampaignStatus[] = ["Active", "Paused", "Disabled", "Deleted"];
+export const CAMPAIGN_STATUS_FILTER_OPTIONS = ["All", "Active", "Deleted", "Disabled", "Paused"] as const;
+
+export function buildCampaignListStatusFilter(statusFilter?: string | null): Record<string, unknown> {
+  const value = statusFilter?.trim() ?? "";
+  if (!value || value === "All") {
+    return {};
+  }
+
+  return { status: value };
+}
 export const CAMPAIGN_TYPE_OPTIONS: CampaignType[] = ["Redirect", "Silent"];
 export const DUPLICATE_METHOD_OPTIONS: DuplicateMethod[] = ["Email", "SSN + Email"];
 export const SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;

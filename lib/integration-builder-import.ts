@@ -74,6 +74,25 @@ export function resolveImportVerticalId(productId: number, verticalIdsOldestFirs
   return verticalIdsOldestFirst[productId - 1] ?? null;
 }
 
+export function buildIntegrationBuilderImportName(schemaName: string, existingNames: Iterable<string> = []) {
+  const baseName = schemaName.trim();
+  const existing = new Set([...existingNames].map((name) => name.trim().toLowerCase()));
+
+  const firstCandidate = `${baseName} (Import)`;
+  if (!existing.has(firstCandidate.toLowerCase())) {
+    return firstCandidate;
+  }
+
+  let counter = 2;
+  while (true) {
+    const candidate = `${baseName} (Import) ${counter}`;
+    if (!existing.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+    counter += 1;
+  }
+}
+
 export function buildIntegrationBuilderImportCreateData(
   schema: IntegrationBuilderExportPayload
 ): IntegrationBuilderImportCreateData {

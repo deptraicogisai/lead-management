@@ -3,12 +3,15 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated } from "@/lib/models/industry";
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
+import { normalizeMappingApiType, type MappingApiType } from "@/lib/mapping-api-type";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string; mappingId: string }> };
 
 type UpdateSellerVerticalPayload = {
   apiName?: string;
-  status?: "Active" | "Inactive";
+  status?: "Active" | "Inactive" | "Deleted";
+  apiType?: MappingApiType;
 };
 
 async function findSellerMapping(sellerId: string, mappingId: string) {
@@ -38,7 +41,8 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json({ message: "API Name is required." }, { status: 400 });
     }
 
-    const status = body.status === "Inactive" ? "Inactive" : "Active";
+    const status =
+      body.status === "Inactive" ? "Inactive" : body.status === "Deleted" ? "Deleted" : "Active";
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
@@ -51,6 +55,9 @@ export async function PATCH(req: Request, context: Params) {
 
     result.mapping.apiName = body.apiName.trim();
     result.mapping.status = status;
+    if (body.apiType) {
+      result.mapping.apiType = normalizeMappingApiType(body.apiType);
+    }
     await result.mapping.save();
 
     return NextResponse.json({ message: "Seller API updated." });
@@ -72,7 +79,8 @@ export async function DELETE(_: Request, context: Params) {
       return result.error;
     }
 
-    await result.mapping.deleteOne();
+    result.mapping.status = softDeleteUpdate().status;
+    await result.mapping.save();
 
     return NextResponse.json({ message: "Seller API deleted." });
   } catch {

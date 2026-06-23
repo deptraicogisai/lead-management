@@ -2,6 +2,7 @@
 
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
+import { paginationActiveClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 
 type ListTableToolbarProps = {
@@ -45,9 +46,7 @@ export function ListTableToolbar({
                 onClick={() => onPageSizeChange(size)}
                 className={cn(
                   "px-3 py-2 text-sm font-medium transition",
-                  pageSize === size
-                    ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                    : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  pageSize === size ? paginationActiveClassName : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                 )}
               >
                 {size}

@@ -13,6 +13,7 @@ export type BuyerHttpRequestSnapshot = {
 
 export type BuyerHttpResponseSnapshot = {
   httpStatus: number;
+  headers: Record<string, string>;
   body: string;
 };
 
@@ -114,6 +115,7 @@ export function buildBuyerPostAttemptSnapshot(params: {
   request: BuyerHttpRequestSnapshot;
   httpStatus: number;
   responseBody: string;
+  responseHeaders?: Record<string, string>;
   price?: number | null;
   redirectUrl?: string;
   rejectReason?: string;
@@ -146,6 +148,7 @@ export function buildBuyerPostAttemptSnapshot(params: {
     request: params.request,
     response: {
       httpStatus: params.httpStatus,
+      headers: params.responseHeaders ?? {},
       body: params.responseBody,
     },
     logId: buildBuyerPostAttemptLogId(pingTreeType, campaignOrder),
@@ -190,6 +193,7 @@ export function buildCampaignValidationFailedAttemptSnapshot(params: {
     request: null,
     response: {
       httpStatus: 400,
+      headers: {},
       body: responseBody,
     },
     logId: buildBuyerPostAttemptLogId(pingTreeType, campaignOrder),

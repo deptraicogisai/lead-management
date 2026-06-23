@@ -14,6 +14,7 @@ import {
 } from "@/lib/buyer";
 import { BuyerModel, ensureBuyerFieldsMigrated } from "@/lib/models/buyer";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -252,7 +253,7 @@ export async function DELETE(_: Request, context: Params) {
     await connectToDatabase();
     await ensureBuyerFieldsMigrated();
 
-    const buyer = await BuyerModel.findByIdAndDelete(id).lean();
+    const buyer = await BuyerModel.findByIdAndUpdate(id, softDeleteUpdate(), { new: true }).lean();
 
     if (!buyer) {
       return NextResponse.json({ message: "Buyer not found." }, { status: 404 });

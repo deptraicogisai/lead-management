@@ -4,8 +4,10 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { SellerModel } from "@/lib/models/seller";
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
+import { normalizeMappingApiType, type MappingApiType } from "@/lib/mapping-api-type";
 import { buildCopiedFieldsFromVertical } from "@/lib/mapping-fields";
 import { sortNewestFirst } from "@/lib/list-sort";
+import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,11 +15,13 @@ type CreateSellerVerticalPayload = {
   apiName?: string;
   verticalId?: string;
   status?: "Active" | "Inactive";
+  apiType?: MappingApiType;
 };
 
 function toSellerVerticalResponse(mapping: {
   _id?: { toString(): string };
   apiName?: string | null;
+  apiType?: string | null;
   status?: string | null;
   apiRequest?: {
     apiKey: string;
@@ -32,14 +36,22 @@ function toSellerVerticalResponse(mapping: {
     verticalId: mapping.verticalId,
     verticalName: mapping.verticalName,
     apiName: mapping.apiName?.trim() || mapping.verticalName,
-    status: mapping.status === "Inactive" ? "Inactive" : "Active",
+    apiType: normalizeMappingApiType(mapping.apiType),
+    status:
+      mapping.status === "Inactive"
+        ? "Inactive"
+        : mapping.status === "Deleted"
+          ? "Deleted"
+          : "Active",
     apiRequest: mapping.apiRequest,
   };
 }
 
-export async function GET(_: Request, context: Params) {
+export async function GET(req: Request, context: Params) {
   try {
     const { id } = await context.params;
+    const { searchParams } = new URL(req.url);
+    const statusFilter = searchParams.get("status");
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureVerticalMappingReferencesMigrated();
@@ -49,7 +61,11 @@ export async function GET(_: Request, context: Params) {
       return NextResponse.json({ message: "Seller not found." }, { status: 404 });
     }
 
-    const mappings = await VerticalMappingModel.find({ sellerRef: seller._id }).sort(sortNewestFirst).lean();
+    const mappings = await VerticalMappingModel.find(
+      mergeMongoFilters(buildMongoStatusFilter(statusFilter || "All"), { sellerRef: seller._id })
+    )
+      .sort(sortNewestFirst)
+      .lean();
     const verticalRefs = mappings.map((mapping) => mapping.verticalRef).filter(Boolean);
 
     if (verticalRefs.length === 0) {
@@ -73,6 +89,7 @@ export async function GET(_: Request, context: Params) {
           return toSellerVerticalResponse({
             _id: mapping._id,
             apiName: mapping.apiName,
+            apiType: mapping.apiType,
             status: mapping.status,
             apiRequest: mapping.apiRequest,
             verticalId: vertical.id,
@@ -100,6 +117,7 @@ export async function POST(req: Request, context: Params) {
     }
 
     const status = body.status === "Inactive" ? "Inactive" : "Active";
+    const apiType = normalizeMappingApiType(body.apiType);
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
@@ -124,6 +142,7 @@ export async function POST(req: Request, context: Params) {
       sellerRef: seller._id,
       verticalRef: vertical._id,
       apiName: body.apiName.trim(),
+      apiType,
       status,
       fields: buildCopiedFieldsFromVertical(vertical.fields ?? []),
       apiRequest,
@@ -133,6 +152,7 @@ export async function POST(req: Request, context: Params) {
       toSellerVerticalResponse({
         _id: mapping._id,
         apiName: mapping.apiName,
+        apiType: mapping.apiType,
         status: mapping.status,
         apiRequest: mapping.apiRequest,
         verticalId: vertical._id.toString(),

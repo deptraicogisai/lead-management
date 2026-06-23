@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import { BuyerRequestLogModel } from "@/lib/models/buyer-request-log";
+import { dedupeBuyerRequestLogDocs } from "@/lib/buyer-request-log-dedupe";
 import { BuyerModel } from "@/lib/models/buyer";
+import { CampaignModel } from "@/lib/models/campaign";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
@@ -14,10 +16,14 @@ type BuyerRequestLogDoc = {
   verticalRef?: { toString(): string } | string | null;
   buyerRef?: { toString(): string } | string | null;
   buyerCompany?: string | null;
+  campaignRef?: { toString(): string } | string | null;
+  campaignName?: string | null;
+  campaignType?: string | null;
   targetName?: string | null;
   postLeadUrl: string;
   requestPayload: unknown;
   responseBody?: string | null;
+  responseHeaders?: Record<string, string> | null;
   errorMessage?: string | null;
   deliveryStatus: "success" | "fail";
   httpStatus: number;
@@ -70,6 +76,8 @@ export async function GET(req: Request) {
             { requestType: { $regex: search, $options: "i" } },
             { targetName: { $regex: search, $options: "i" } },
             { buyerCompany: { $regex: search, $options: "i" } },
+            { campaignName: { $regex: search, $options: "i" } },
+            { campaignType: { $regex: search, $options: "i" } },
             { postLeadUrl: { $regex: search, $options: "i" } },
             { deliveryStatus: { $regex: search, $options: "i" } },
             { errorMessage: { $regex: search, $options: "i" } },
@@ -79,42 +87,68 @@ export async function GET(req: Request) {
       : {};
 
     const totalItems = hasListParams ? await BuyerRequestLogModel.countDocuments(filter) : 0;
-    const logs = await BuyerRequestLogModel.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(hasListParams ? (page - 1) * pageSize : 0)
-      .limit(hasListParams ? pageSize : 0)
-      .lean();
+    const logs = dedupeBuyerRequestLogDocs(
+      await BuyerRequestLogModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(hasListParams ? (page - 1) * pageSize : 0)
+        .limit(hasListParams ? pageSize : 0)
+        .lean()
+    );
 
     const sellerRefs = logs.map((log) => log.sellerRef).filter(Boolean);
     const verticalRefs = logs.map((log) => log.verticalRef).filter(Boolean);
     const buyerRefs = logs.map((log) => log.buyerRef).filter(Boolean);
+    const campaignRefs = logs.map((log) => log.campaignRef).filter(Boolean);
 
-    const [sellers, verticals, buyers] = await Promise.all([
+    const [sellers, verticals, buyers, campaigns] = await Promise.all([
       SellerModel.find({ _id: { $in: sellerRefs } }, { name: 1 }).lean(),
       VerticalModel.find({ _id: { $in: verticalRefs } }, { name: 1 }).lean(),
       BuyerModel.find({ _id: { $in: buyerRefs } }, { company: 1 }).lean(),
+      campaignRefs.length > 0
+        ? CampaignModel.find({ _id: { $in: campaignRefs } }, { name: 1, campaignType: 1 }).lean()
+        : [],
     ]);
 
     const sellerNameById = new Map(sellers.map((seller) => [seller._id.toString(), seller.name]));
     const verticalNameById = new Map(verticals.map((vertical) => [vertical._id.toString(), vertical.name]));
     const buyerCompanyById = new Map(buyers.map((buyer) => [buyer._id.toString(), buyer.company]));
+    const campaignById = new Map(
+      campaigns.map((campaign) => [campaign._id?.toString() ?? "", campaign])
+    );
 
     const items = logs.map((log) => {
         const sellerId = toId(log.sellerRef);
         const verticalId = toId(log.verticalRef);
         const buyerId = toId(log.buyerRef);
+        const campaignId = toId(log.campaignRef);
+        const campaign = campaignById.get(campaignId);
+        const campaignName = log.campaignName?.trim() || campaign?.name?.trim() || "";
+        const campaignType =
+          log.campaignType === "Redirect" || log.campaignType === "Silent"
+            ? log.campaignType
+            : campaign?.campaignType === "Silent"
+              ? "Silent"
+              : campaign?.campaignType === "Redirect"
+                ? "Redirect"
+                : "";
 
         return {
           id: log._id?.toString() ?? "",
           requestType: log.requestType ?? "buyer-delivery",
           sellerName: sellerNameById.get(sellerId) ?? "",
           verticalName: verticalNameById.get(verticalId) ?? "",
+          campaignName,
+          campaignType,
           targetName: log.requestType === "seller-intake"
             ? (log.targetName?.trim() || "Seller Intake API")
             : (buyerCompanyById.get(buyerId) ?? log.targetName?.trim() ?? log.buyerCompany),
           postLeadUrl: log.postLeadUrl,
-          requestPayload: JSON.stringify(log.requestPayload ?? {}, null, 2),
+          requestPayload: log.requestPayload ?? {},
           responseBody: log.responseBody ?? "",
+          responseHeaders:
+            log.responseHeaders && typeof log.responseHeaders === "object" && !Array.isArray(log.responseHeaders)
+              ? (log.responseHeaders as Record<string, string>)
+              : {},
           errorMessage: log.errorMessage ?? "",
           deliveryStatus: log.deliveryStatus,
           httpStatus: log.httpStatus,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 
 type Params = { params: Promise<{ id: string }> };
@@ -7,12 +8,14 @@ type Params = { params: Promise<{ id: string }> };
 type VerticalPayload = {
   name?: string;
   description?: string;
+  status?: "Active" | "Deleted";
 };
 
 function toVerticalResponse(doc: {
   _id?: { toString(): string };
   name: string;
   description: string;
+  status?: string | null;
   fields?: Array<{
     _id?: { toString(): string };
     fieldName: string;
@@ -26,6 +29,7 @@ function toVerticalResponse(doc: {
     id: doc._id?.toString() ?? "",
     name: doc.name,
     description: doc.description,
+    status: doc.status === "Deleted" ? "Deleted" : "Active",
     fields: (doc.fields ?? []).map((field) => ({
       id: field._id?.toString() ?? "",
       fieldName: field.fieldName,
@@ -47,14 +51,16 @@ export async function PATCH(req: Request, context: Params) {
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
-    const vertical = await VerticalModel.findByIdAndUpdate(
-      id,
-      {
-        name: body.name.trim(),
-        description: body.description.trim(),
-      },
-      { new: true }
-    ).lean();
+    const updatePayload: Record<string, string> = {
+      name: body.name.trim(),
+      description: body.description.trim(),
+    };
+
+    if (body.status === "Active" || body.status === "Deleted") {
+      updatePayload.status = body.status;
+    }
+
+    const vertical = await VerticalModel.findByIdAndUpdate(id, updatePayload, { new: true }).lean();
 
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
@@ -72,7 +78,7 @@ export async function DELETE(_: Request, context: Params) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
 
-    const vertical = await VerticalModel.findByIdAndDelete(id).lean();
+    const vertical = await VerticalModel.findByIdAndUpdate(id, softDeleteUpdate(), { new: true }).lean();
     if (!vertical) {
       return NextResponse.json({ message: "Vertical not found." }, { status: 404 });
     }

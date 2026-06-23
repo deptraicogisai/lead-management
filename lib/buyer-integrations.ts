@@ -1,5 +1,6 @@
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
+import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 
 export type IntegrationOption = {
   id: string;
@@ -21,8 +22,8 @@ export async function getAvailableIntegrationOptions(): Promise<IntegrationOptio
   await ensureVerticalCollectionMigrated();
 
   const [integrations, verticals] = await Promise.all([
-    IntegrationBuilderModel.find().sort({ displayId: -1 }).lean(),
-    VerticalModel.find().select({ _id: 1, name: 1 }).lean(),
+    IntegrationBuilderModel.find(excludeDeletedStatusFilter()).sort({ displayId: -1 }).lean(),
+    VerticalModel.find(excludeDeletedStatusFilter()).select({ _id: 1, name: 1 }).lean(),
   ]);
 
   const verticalNameById = new Map(verticals.map((vertical) => [vertical._id.toString(), vertical.name]));

@@ -261,14 +261,11 @@ export function MappingRevShareSettingsTab({ sellerId, mappingId }: MappingRevSh
 
       <FormError error={formError} />
 
-      <PrimaryButton
-        type="button"
-        disabled={isSaving}
-        onClick={() => void handleSave()}
-        className="bg-emerald-800 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-      >
-        {isSaving ? "Saving..." : "Save All"}
-      </PrimaryButton>
+      <div className="flex justify-end">
+        <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSave()}>
+          {isSaving ? "Saving..." : "Save Data"}
+        </PrimaryButton>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
-import { FieldLabel, PrimaryButton } from "@/components/ui/form-controls";
+import { FieldLabel, PrimaryButton, primaryButtonClassName } from "@/components/ui/form-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DUPLICATE_METHOD_OPTIONS,
@@ -22,8 +22,7 @@ import {
   patchMultiSelectFilterPairEnabled,
   validateGeneralFilters,
   type CampaignGeneralFilter,
-  type CampaignScheduleRule,
-} from "@/lib/campaign";
+  type CampaignScheduleRule } from "@/lib/campaign";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import type { VerticalFieldOption } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
@@ -50,8 +49,7 @@ export function MappingIntakeSettingsTabs({
   mappingId,
   fields,
   forcedTab,
-  hideTabBar = false,
-}: MappingIntakeSettingsTabsProps) {
+  hideTabBar = false }: MappingIntakeSettingsTabsProps) {
   const [activeTab, setActiveTab] = useState<MappingIntakeTab>(forcedTab ?? "duplicates");
   const [settings, setSettings] = useState<MappingIntakeSettingsRecord | null>(null);
   const [duplicatesForm, setDuplicatesForm] = useState<MappingIntakeSettingsRecord["duplicates"] | null>(null);
@@ -102,8 +100,7 @@ export function MappingIntakeSettingsTabs({
       const response = await fetch(settingsUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ section, ...payload }),
-      });
+        body: JSON.stringify({ section, ...payload }) });
 
       const result = (await response.json().catch(() => null)) as MappingIntakeSettingsRecord | { message?: string } | null;
       if (!response.ok) {
@@ -128,16 +125,14 @@ export function MappingIntakeSettingsTabs({
     if (!settings) return;
     setSettings({
       ...settings,
-      generalFilters: patchGeneralFilter(settings.generalFilters, fieldId, patch),
-    });
+      generalFilters: patchGeneralFilter(settings.generalFilters, fieldId, patch) });
   };
 
   const setMultiSelectPairEnabled = (fieldName: string, enabled: boolean) => {
     if (!settings) return;
     setSettings({
       ...settings,
-      generalFilters: patchMultiSelectFilterPairEnabled(settings.generalFilters, fieldName, enabled),
-    });
+      generalFilters: patchMultiSelectFilterPairEnabled(settings.generalFilters, fieldName, enabled) });
   };
 
   const handleSaveFilters = () => {
@@ -165,8 +160,7 @@ export function MappingIntakeSettingsTabs({
     const response = await fetch(settingsUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "add-schedule-rule", rule }),
-    });
+      body: JSON.stringify({ action: "add-schedule-rule", rule }) });
 
     if (response.ok) {
       const data = (await response.json()) as MappingIntakeSettingsRecord;
@@ -282,20 +276,21 @@ export function MappingIntakeSettingsTabs({
               ))}
             </select>
           </div>
-          <PrimaryButton
-            type="button"
-            disabled={isSaving}
-            onClick={() =>
-              void saveSection(
-                "duplicates",
-                { duplicates: { ...duplicatesForm, duplicateSold: "OFF" } },
-                "Duplicates settings saved successfully."
-              )
-            }
-            className="bg-emerald-800 hover:bg-emerald-700"
-          >
-            {isSaving ? "Saving..." : "Save Duplicates Settings"}
-          </PrimaryButton>
+          <div className="flex justify-end">
+            <PrimaryButton
+              type="button"
+              disabled={isSaving}
+              onClick={() =>
+                void saveSection(
+                  "duplicates",
+                  { duplicates: { ...duplicatesForm, duplicateSold: "OFF" } },
+                  "Duplicates settings saved successfully."
+                )
+              }
+            >
+              {isSaving ? "Saving..." : "Save Duplicates Settings"}
+            </PrimaryButton>
+          </div>
         </div>
       ) : null}
 
@@ -307,7 +302,7 @@ export function MappingIntakeSettingsTabs({
               type="button"
               disabled={isSaving}
               onClick={handleSaveFilters}
-              className="bg-emerald-800 hover:bg-emerald-700"
+             
             >
               {isSaving ? "Saving..." : "Save Filters"}
             </PrimaryButton>
@@ -335,7 +330,7 @@ export function MappingIntakeSettingsTabs({
               type="button"
               disabled={isSaving}
               onClick={() => void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone: settings.timezone }, "Schedule settings saved successfully.")}
-              className="bg-emerald-800 hover:bg-emerald-700"
+             
             >
               {isSaving ? "Saving..." : "Save Schedule Settings"}
             </PrimaryButton>
@@ -362,17 +357,14 @@ export function MappingIntakeSettingsTabs({
             <p className="text-sm text-slate-600 dark:text-slate-300">
               {settings.scheduleRules.filter((rule) => rule.active).length} active rule(s) of {settings.scheduleRules.length} total.
             </p>
-            <button
-              type="button"
+            <PrimaryButton type="button"
               onClick={() => {
                 setEditingScheduleRule(null);
                 setScheduleRuleModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
-            >
-              <Plus size={16} />
-              Add Schedule Rule
-            </button>
+              
+            ><Plus size={16} />
+              Add Schedule Rule</PrimaryButton>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">

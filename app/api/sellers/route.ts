@@ -5,6 +5,7 @@ import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/
 import { resolveNewestFirstDisplayId, sortNewestFirst } from "@/lib/list-sort";
 import { normalizePublisherTag } from "@/lib/publisher-tag";
 import { toSellerResponse } from "@/lib/seller-response";
+import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type SellerPayload = {
   name?: string;
@@ -22,18 +23,23 @@ export async function GET(req: Request) {
     const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 15);
     const search = normalizeSearchParam(searchParams.get("search"));
 
+    const statusFilter = normalizeSearchParam(searchParams.get("status"));
+
     await connectToDatabase();
     await ensureSellerCollectionMigrated();
 
-    const filter: Record<string, unknown> = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { publisherTag: { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
+    const filter = mergeMongoFilters(
+      buildMongoStatusFilter(statusFilter || "All"),
+      search
+        ? {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { email: { $regex: search, $options: "i" } },
+              { publisherTag: { $regex: search, $options: "i" } },
+            ],
+          }
+        : {}
+    );
 
     if (!hasListParams) {
       const sellers = await SellerModel.find(filter).sort(sortNewestFirst).lean();

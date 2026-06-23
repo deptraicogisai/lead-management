@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { getPaginationItems } from "@/lib/pagination";
+import { paginationActiveClassName, paginationNavButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 
 type PaginationControlsProps = {
@@ -17,8 +18,7 @@ type PaginationControlsProps = {
   pageSizeOptions?: number[];
 };
 
-const navButtonClassName =
-  "inline-flex items-center gap-1 rounded-xl border border-slate-300 px-2.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
+const navButtonClassName = paginationNavButtonClassName;
 
 export function PaginationControls({
   page,
@@ -93,10 +93,8 @@ export function PaginationControls({
                   aria-label={`Page ${item}`}
                   aria-current={item === currentPage ? "page" : undefined}
                   className={cn(
-                    "min-w-9 rounded-xl px-2.5 py-2 text-sm font-medium transition",
-                    item === currentPage
-                      ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                      : "border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                    "min-w-9 rounded-xl px-2.5 py-2 font-medium transition",
+                    item === currentPage ? paginationActiveClassName : paginationNavButtonClassName
                   )}
                 >
                   {item}

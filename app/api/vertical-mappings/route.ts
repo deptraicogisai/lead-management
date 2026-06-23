@@ -7,6 +7,7 @@ import { getCustomMappingFields } from "@/lib/mapping-fields";
 import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { sortNewestFirst } from "@/lib/list-sort";
+import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type VerticalMappingPayload = {
   verticalId?: string;
@@ -51,7 +52,11 @@ function toMappingResponse(doc: {
     verticalId: doc.verticalId,
     sellerId: doc.sellerId,
     apiName: (doc as { apiName?: string | null }).apiName ?? "",
-    status: (doc as { status?: string | null }).status === "Inactive" ? "Inactive" : "Active",
+    status: (doc as { status?: string | null }).status === "Inactive"
+      ? "Inactive"
+      : (doc as { status?: string | null }).status === "Deleted"
+        ? "Deleted"
+        : "Active",
     apiRequest: doc.apiRequest,
     fields: getCustomMappingFields(fields, doc.verticalFields ?? []).map((field) => ({
       id: typeof field._id === "string" ? field._id : field._id?.toString() ?? "",
@@ -88,13 +93,17 @@ export async function GET(req: Request) {
       verticalIds = matchedVerticals.map((vertical) => vertical._id.toString());
     }
 
+    const statusFilter = normalizeSearchParam(searchParams.get("status"));
     const orConditions = search
       ? [
           ...(sellerIds.length > 0 ? [{ sellerRef: { $in: sellerIds } }] : []),
           ...(verticalIds.length > 0 ? [{ verticalRef: { $in: verticalIds } }] : []),
         ]
       : [];
-    const filter = search ? (orConditions.length > 0 ? { $or: orConditions } : { _id: null }) : {};
+    const filter = mergeMongoFilters(
+      buildMongoStatusFilter(statusFilter || "All"),
+      search ? (orConditions.length > 0 ? { $or: orConditions } : { _id: null }) : {}
+    );
 
     const totalItems = hasListParams ? await VerticalMappingModel.countDocuments(filter) : 0;
     const mappings = await VerticalMappingModel.find(filter)

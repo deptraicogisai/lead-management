@@ -77,7 +77,7 @@ const integrationBuilderSchema = new Schema(
   {
     displayId: { type: Number, required: true, unique: true, index: true },
     name: { type: String, required: true, trim: true },
-    status: { type: String, enum: ["Active", "Draft", "Paused"], required: true, default: "Active" },
+    status: { type: String, enum: ["Active", "Draft", "Paused", "Deleted"], required: true, default: "Active" },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     arrayMappings: { type: [arrayMappingEntrySchema], default: [] },
     requestMapping: { type: requestMappingSchema, required: false, default: undefined },

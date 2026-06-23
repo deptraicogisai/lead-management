@@ -2,9 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CircleHelp, Plus } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
-import { ClearButton, DetailNameLink, ExportButton, SearchButton } from "@/components/ui/action-buttons";
+import {
+  AddNewButton,
+  CancelButton,
+  ClearButton,
+  DangerButton,
+  DeleteSelectedButton,
+  DetailNameLink,
+  ExportButton,
+  SearchButton,
+  TableActionButton,
+  TableActionLink,
+} from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -288,19 +299,10 @@ export default function BuyersPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/buyers/${encodeURIComponent(row.id)}`}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            View
-          </Link>
-          <button
-            type="button"
-            onClick={() => openSingleDelete(row)}
-            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-          >
+          <TableActionLink href={`/buyers/${encodeURIComponent(row.id)}`}>View</TableActionLink>
+          <TableActionButton variant="danger" onClick={() => openSingleDelete(row)}>
             Delete
-          </button>
+          </TableActionButton>
         </div>
       ),
     },
@@ -344,7 +346,7 @@ export default function BuyersPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
               <SearchButton onClick={handleSearch} />
               <ClearButton onClick={clearFilters} />
             </div>
@@ -365,23 +367,15 @@ export default function BuyersPage() {
               selectedCount={selectedIds.length}
               actions={
                 <>
-                  <button
-                    type="button"
+                  <DeleteSelectedButton
+                    count={selectedIds.length}
                     onClick={openBulkDelete}
                     disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
-                    className="rounded-xl border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-                  >
-                    Delete Selected ({selectedIds.length})
-                  </button>
+                  />
                   <ExportButton disabled />
-                  <button
-                    type="button"
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-                  >
-                    <Plus size={15} />
+                  <AddNewButton type="button" onClick={() => setIsAddModalOpen(true)}>
                     Add New Buyer
-                  </button>
+                  </AddNewButton>
                 </>
               }
             />
@@ -437,22 +431,10 @@ export default function BuyersPage() {
         onClose={closeDeleteModal}
         actions={
           <>
-            <button
-              type="button"
-              disabled={isDeleting}
-              onClick={closeDeleteModal}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={isDeleting}
-              onClick={() => void handleDelete()}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
-            >
+            <CancelButton type="button" disabled={isDeleting} onClick={closeDeleteModal} />
+            <DangerButton type="button" disabled={isDeleting} onClick={() => void handleDelete()}>
               {isDeleting ? "Deleting..." : "Delete"}
-            </button>
+            </DangerButton>
           </>
         }
       />

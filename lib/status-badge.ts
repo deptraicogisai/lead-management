@@ -32,6 +32,11 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     solid: { background: "#16a34a", text: "#ffffff", border: "#15803d" },
     outline: { background: "#ecfdf5", text: "#14532d", border: "#16a34a" },
   },
+  deleted: {
+    pill: { background: "#e5e7eb", text: "#374151", border: "#9ca3af" },
+    solid: { background: "#6b7280", text: "#ffffff", border: "#4b5563" },
+    outline: { background: "#f9fafb", text: "#374151", border: "#9ca3af" },
+  },
   inactive: {
     pill: { background: "#d1d5db", text: "#1f2937", border: "#6b7280" },
     solid: { background: "#6b7280", text: "#ffffff", border: "#4b5563" },

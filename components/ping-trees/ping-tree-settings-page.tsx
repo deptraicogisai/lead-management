@@ -11,7 +11,7 @@ import {
   Search,
   Settings2,
 } from "lucide-react";
-import { Input } from "@/components/ui/form-controls";
+import { Input, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import { LoadingOverlay } from "@/components/ui/loading-indicator";
@@ -129,8 +129,10 @@ function ColumnStatsBar({ disabled, active, total }: { disabled: number; active:
   );
 }
 
-const greenControlClass =
-  "bg-emerald-800 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-emerald-700 dark:hover:bg-emerald-600";
+const greenControlClass = cn(
+  compactPrimaryButtonClassName,
+  "rounded disabled:cursor-not-allowed disabled:opacity-40"
+);
 
 function DropIndicator({ top, tone }: { top: number; tone: "active" | "inactive" }) {
   const isActive = tone === "active";
@@ -939,7 +941,7 @@ export function PingTreeSettingsPage() {
 
           <Link
             href="/campaigns"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100"
+            className={cancelButtonClassName}
           >
             View Campaigns
           </Link>

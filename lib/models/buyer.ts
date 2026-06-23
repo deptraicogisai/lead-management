@@ -28,7 +28,7 @@ const buyerSchema = new Schema(
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: false, index: true },
     apiKey: { type: String, default: "", trim: true },
     postLeadUrl: { type: String, default: "", trim: true },
-    status: { type: String, enum: ["Active", "Inactive", "Disabled", "Paused"], required: true, default: "Active" },
+    status: { type: String, enum: ["Active", "Inactive", "Disabled", "Paused", "Deleted"], required: true, default: "Active" },
     integrationRefs: [{ type: Schema.Types.ObjectId, ref: "IntegrationBuilder", default: [] }],
     allowedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],
     blockedPublisherRefs: [{ type: Schema.Types.ObjectId, ref: "Seller", default: [] }],

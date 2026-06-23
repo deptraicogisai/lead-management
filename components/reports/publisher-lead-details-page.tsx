@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Eye } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
+import { ClearButton, SearchButton, TableActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
@@ -22,6 +23,7 @@ import {
   type PublisherLeadFieldColumn,
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 
 type FilterOption = {
   id: string;
@@ -272,14 +274,9 @@ export function PublisherLeadDetailsPage() {
         sortValue: (row) => row.displayCode,
         render: (row) => (
           <div className="flex items-center gap-2 whitespace-nowrap">
-            <button
-              type="button"
-              onClick={() => setViewLead(row)}
-              className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-300"
-              aria-label={`View lead ${row.displayCode}`}
-            >
-              <Eye className="h-4 w-4" />
-            </button>
+            <TableActionButton type="button" onClick={() => setViewLead(row)}>
+              View
+            </TableActionButton>
             <span className="font-medium text-slate-800 dark:text-slate-100">{row.displayCode}</span>
           </div>
         ),
@@ -332,7 +329,7 @@ export function PublisherLeadDetailsPage() {
   const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
 
   return (
-    <PageSection>
+    <PageSection title="Publisher Lead Details">
       <div className="space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -399,26 +396,13 @@ export function PublisherLeadDetailsPage() {
                 />
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <p className="max-w-xl text-xs text-slate-500 dark:text-slate-400">
-                  Add lead parameters via System Management to extend filters and export columns.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleClearAll}
-                    className="text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-slate-100"
-                  >
-                    Clear all
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSearch}
-                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                  >
-                    Search
-                  </button>
-                </div>
+              <p className="mt-4 max-w-xl text-xs text-slate-500 dark:text-slate-400">
+                Add lead parameters via System Management to extend filters and export columns.
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                <SearchButton type="button" onClick={handleSearch} />
+                <ClearButton type="button" onClick={handleClearAll} />
               </div>
             </div>
 
@@ -444,8 +428,9 @@ export function PublisherLeadDetailsPage() {
                       type="button"
                       onClick={() => setExportOpen((current) => !current)}
                       disabled={isExporting}
-                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60 dark:border-emerald-500 dark:bg-emerald-600"
+                      className={toolbarPrimaryButtonClassName}
                     >
+                      <Download size={16} />
                       {isExporting ? "Exporting..." : "Export"}
                       <ChevronDown className="h-4 w-4" />
                     </button>

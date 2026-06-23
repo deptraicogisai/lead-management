@@ -124,6 +124,12 @@ export async function GET(req: Request) {
         errorReason: doc.errorReason ?? "",
         postLeadUrl: doc.postLeadUrl ?? "",
         httpStatus: doc.httpStatus ?? 0,
+        requestPayload: doc.requestPayload ?? null,
+        responseBody: doc.responseBody ?? "",
+        responseHeaders:
+          doc.responseHeaders && typeof doc.responseHeaders === "object" && !Array.isArray(doc.responseHeaders)
+            ? (doc.responseHeaders as Record<string, string>)
+            : {},
         postedAt: doc.postedAt ? new Date(doc.postedAt).toISOString() : "",
       };
     });

@@ -24,13 +24,15 @@ import { toast } from "@/lib/toast";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
-import type {
-  IntegrationBuilderArrayMappingEntry,
-  IntegrationBuilderConfigField,
-  IntegrationBuilderRequestMapping,
-  IntegrationBuilderRequestMappingDataRow,
-  IntegrationBuilderRequestMappingHeader,
-  IntegrationBuilderResponseMapping,
+import {
+  INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS,
+  type IntegrationBuilderArrayMappingEntry,
+  type IntegrationBuilderConfigField,
+  type IntegrationBuilderRequestMapping,
+  type IntegrationBuilderRequestMappingDataRow,
+  type IntegrationBuilderRequestMappingHeader,
+  type IntegrationBuilderResponseMapping,
+  type IntegrationBuilderStatus,
 } from "@/lib/integration-builder";
 import type { IntegrationBuilderResponseMappingField } from "@/lib/response-mapping";
 import {
@@ -320,7 +322,7 @@ type IntegrationBuilderDetailProps = {
   builder?: {
     id: string;
     name: string;
-    status: "Active" | "Draft" | "Paused";
+    status: IntegrationBuilderStatus;
     productLabel: string;
     verticalId: string;
     updatedAt: string;
@@ -364,7 +366,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const [payloadType, setPayloadType] = useState("Object");
   const [integrationName, setIntegrationName] = useState(builder?.name ?? "");
   useBreadcrumbLabel(integrationName || builder?.name || null);
-  const [generalStatus, setGeneralStatus] = useState(builder?.status ?? "Active");
+  const [generalStatus, setGeneralStatus] = useState<IntegrationBuilderStatus>(builder?.status ?? "Active");
   const [dateUpdated, setDateUpdated] = useState(builder?.updatedAt ?? "");
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
@@ -1002,12 +1004,14 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             <select
               id="builder-general-status"
               value={generalStatus}
-              onChange={(event) => setGeneralStatus(event.target.value as typeof generalStatus)}
+              onChange={(event) => setGeneralStatus(event.target.value as IntegrationBuilderStatus)}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
             >
-              <option value="Active">Active</option>
-              <option value="Draft">Draft</option>
-              <option value="Paused">Paused</option>
+              {INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
             </select>
           )}
           <div className="flex flex-col gap-2 pt-6 sm:flex-row">

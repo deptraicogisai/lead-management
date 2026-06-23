@@ -1,9 +1,8 @@
 import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
+import { softDeleteUpdate } from "@/lib/soft-delete";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
-import { BuyerModel } from "@/lib/models/buyer";
-import { CampaignModel } from "@/lib/models/campaign";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
   buildVerticalIndexMap,
@@ -286,26 +285,7 @@ export async function DELETE(_: Request, context: Params) {
       return NextResponse.json({ message: "Integration builder record not found." }, { status: 404 });
     }
 
-    const [linkedCampaign, linkedBuyer] = await Promise.all([
-      CampaignModel.findOne({ integrationRef: objectId }).select({ name: 1 }).lean(),
-      BuyerModel.findOne({ integrationRefs: objectId }).select({ company: 1 }).lean(),
-    ]);
-
-    if (linkedCampaign) {
-      return NextResponse.json(
-        { message: `Cannot remove this integration because it is used by campaign "${linkedCampaign.name}".` },
-        { status: 409 }
-      );
-    }
-
-    if (linkedBuyer) {
-      return NextResponse.json(
-        { message: `Cannot remove this integration because it is used by buyer "${linkedBuyer.company}".` },
-        { status: 409 }
-      );
-    }
-
-    await IntegrationBuilderModel.findByIdAndDelete(objectId);
+    await IntegrationBuilderModel.findByIdAndUpdate(objectId, softDeleteUpdate());
 
     return NextResponse.json({ message: "Integration builder record removed." });
   } catch {

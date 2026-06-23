@@ -32,6 +32,7 @@ const leadDeliverySchema = new Schema(
     postLeadUrl: { type: String, required: false, trim: true, default: "" },
     requestPayload: { type: Schema.Types.Mixed, required: false, default: null },
     responseBody: { type: String, required: false, trim: true, default: "" },
+    responseHeaders: { type: Schema.Types.Mixed, default: {} },
     deliveryTrace: { type: Schema.Types.Mixed, required: false, default: [] },
     httpStatus: { type: Number, required: false, default: 0 },
     duplicateFingerprint: { type: String, required: false, trim: true, index: true },
