@@ -1,5 +1,5 @@
 import type { TestLeadValidationCheck } from "@/lib/mapping-test-lead-intake";
-import { buildLeadRejectResponse, formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
+import { buildLeadRejectResponse, formatLeadRejectResponseBody, formatBuyerPostResponseBody, formatPublisherReasons } from "@/lib/mapping-lead-validation";
 import type {
   BuyerHttpRequestSnapshot,
   BuyerHttpResponseSnapshot,
@@ -84,7 +84,7 @@ export function resolvePublisherLogSnapshot(log: {
         : {
             status: 2,
             status_text: "reject",
-            reasons: [{ message: "Publisher intake validation failed." }],
+            reasons: formatPublisherReasons(["Publisher intake validation failed."]),
           },
     passed: false,
   };

@@ -22,6 +22,11 @@ import {
 } from "@/lib/buyer-post-trace";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
+import {
+  resolvePublisherPingTreeTypes,
+  SILENT_API_NO_BUYER_MESSAGE,
+  type MappingApiType,
+} from "@/lib/mapping-api-type";
 import { buildCampaignTemplateContext } from "@/lib/campaign-template";
 import {
   defaultMappingRevShareSettings,
@@ -322,6 +327,49 @@ async function resolvePingTreeCampaignIds(params: {
   return campaigns.map((campaign) => campaign._id?.toString() ?? "").filter(Boolean);
 }
 
+async function resolveEligiblePingTreeCampaignIds(params: {
+  pingTreeType: PingTreeCampaignType;
+  verticalRefId: string;
+  mockBuyerPost: boolean;
+}) {
+  await ensureDefaultPingTrees();
+  const tree = await PingTreeModel.findOne({ campaignType: params.pingTreeType }).lean();
+  if (!tree) {
+    return [] as string[];
+  }
+
+  const priorities =
+    tree.campaignPriorities instanceof Map
+      ? tree.campaignPriorities
+      : new Map(Object.entries((tree.campaignPriorities as Record<string, number> | undefined) ?? {}));
+
+  const orderedCampaignIds = await resolvePingTreeCampaignIds({
+    treeActiveCampaignIds: tree.activeCampaignIds ?? [],
+    priorities,
+    pingTreeType: params.pingTreeType,
+    verticalRefId: params.verticalRefId,
+    mockBuyerPost: params.mockBuyerPost,
+  });
+
+  if (orderedCampaignIds.length === 0) {
+    return [] as string[];
+  }
+
+  const activeCampaigns = await CampaignModel.find({
+    _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
+    status: "Active",
+    campaignType: params.pingTreeType,
+  })
+    .select({ _id: 1 })
+    .lean();
+
+  const activeCampaignIdSet = new Set(
+    activeCampaigns.map((campaign) => campaign._id?.toString() ?? "").filter(Boolean)
+  );
+
+  return orderedCampaignIds.filter((campaignId) => activeCampaignIdSet.has(campaignId));
+}
+
 async function loadPingTreeCampaignTestMocks(pingTreeType: PingTreeCampaignType) {
   await ensureDefaultPingTrees();
   const tree = await PingTreeModel.findOne({ campaignType: pingTreeType }).lean();
@@ -338,7 +386,9 @@ async function buildFallbackTestLeadBuyerDelivery(params: {
   sellerLeadId: string;
   sellerRefId: string;
   mockBuyerPostOptions?: MockBuyerPostOptions;
+  publisherApiType?: MappingApiType;
 }) {
+  const allowedPingTreeTypes = new Set(resolvePublisherPingTreeTypes(params.publisherApiType ?? "Redirect"));
   const campaigns = await CampaignModel.find({
     status: "Active",
     verticalRef: new Types.ObjectId(params.verticalRefId),
@@ -351,6 +401,9 @@ async function buildFallbackTestLeadBuyerDelivery(params: {
     if (!campaignId) continue;
 
     const pingTreeType = campaign.campaignType === "Silent" ? "Silent" : "Redirect";
+    if (!allowedPingTreeTypes.has(pingTreeType)) {
+      continue;
+    }
     const campaignTestMocks = await loadPingTreeCampaignTestMocks(pingTreeType);
 
     const result = await processCampaignAttempt({
@@ -864,36 +917,15 @@ async function processPingTree(params: {
   stopOnAccept: boolean;
   progress?: LeadDistributionProgressHandlers;
 }) {
-  await ensureDefaultPingTrees();
-  const tree = await PingTreeModel.findOne({ campaignType: params.pingTreeType }).lean();
-  if (!tree) {
-    return [] as CampaignDeliveryLog[];
-  }
-
-  const priorities = tree.campaignPriorities instanceof Map
-    ? tree.campaignPriorities
-    : new Map(Object.entries((tree.campaignPriorities as Record<string, number> | undefined) ?? {}));
-
-  const orderedCampaignIds = await resolvePingTreeCampaignIds({
-    treeActiveCampaignIds: tree.activeCampaignIds ?? [],
-    priorities,
+  const filteredCampaignIds = await resolveEligiblePingTreeCampaignIds({
     pingTreeType: params.pingTreeType,
     verticalRefId: params.verticalRefId,
     mockBuyerPost: params.mockBuyerPost,
   });
-  const activeCampaigns = orderedCampaignIds.length
-    ? await CampaignModel.find({
-        _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
-        status: "Active",
-        campaignType: params.pingTreeType,
-      })
-        .select({ _id: 1 })
-        .lean()
-    : [];
-  const activeCampaignIdSet = new Set(
-    activeCampaigns.map((campaign) => campaign._id?.toString() ?? "").filter(Boolean)
-  );
-  const filteredCampaignIds = orderedCampaignIds.filter((campaignId) => activeCampaignIdSet.has(campaignId));
+  if (filteredCampaignIds.length === 0) {
+    return [] as CampaignDeliveryLog[];
+  }
+
   const campaignTestMocks = await loadPingTreeCampaignTestMocks(params.pingTreeType);
   const deliveries: CampaignDeliveryLog[] = [];
   const parallelPosts = params.pingTreeType === "Silent";
@@ -1165,23 +1197,14 @@ export type { PendingBuyerPostCampaign };
 
 export async function listPendingBuyerPostCampaigns(
   verticalRefId: string,
-  mockBuyerPost = true
+  mockBuyerPost = true,
+  publisherApiType: MappingApiType = "Redirect"
 ): Promise<PendingBuyerPostCampaign[]> {
   await ensureDefaultPingTrees();
   const pending: PendingBuyerPostCampaign[] = [];
 
-  for (const pingTreeType of ["Redirect", "Silent"] as const) {
-    const tree = await PingTreeModel.findOne({ campaignType: pingTreeType }).lean();
-    if (!tree) continue;
-
-    const priorities =
-      tree.campaignPriorities instanceof Map
-        ? tree.campaignPriorities
-        : new Map(Object.entries((tree.campaignPriorities as Record<string, number> | undefined) ?? {}));
-
-    const orderedCampaignIds = await resolvePingTreeCampaignIds({
-      treeActiveCampaignIds: tree.activeCampaignIds ?? [],
-      priorities,
+  for (const pingTreeType of resolvePublisherPingTreeTypes(publisherApiType)) {
+    const orderedCampaignIds = await resolveEligiblePingTreeCampaignIds({
       pingTreeType,
       verticalRefId,
       mockBuyerPost,
@@ -1192,6 +1215,7 @@ export async function listPendingBuyerPostCampaigns(
     const campaigns = await CampaignModel.find({
       _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
       status: "Active",
+      campaignType: pingTreeType,
     })
       .select({ name: 1, buyerRef: 1, status: 1 })
       .lean();
@@ -1243,8 +1267,10 @@ export async function distributeLeadAfterIntake(params: {
   mockBuyerPostOptions?: MockBuyerPostOptions;
   revShareSettings?: MappingRevShareSettingsRecord;
   progress?: LeadDistributionProgressHandlers;
+  publisherApiType?: MappingApiType;
 }): Promise<LeadDistributionResult> {
   const isTestLead = isTestLeadPayload(params.payload);
+  const publisherApiType = params.publisherApiType ?? "Redirect";
   if (isTestLead && !params.postToBuyer) {
     await SellerLeadModel.updateOne(
       { _id: new Types.ObjectId(params.sellerLeadId) },
@@ -1262,36 +1288,52 @@ export async function distributeLeadAfterIntake(params: {
     };
   }
 
-  const [redirectDeliveries, silentDeliveries] = await Promise.all([
-    processPingTree({
-      pingTreeType: "Redirect",
-      sellerLeadId: params.sellerLeadId,
-      sellerRefId: params.sellerRefId,
-      verticalRefId: params.verticalRefId,
-      payload: params.payload,
-      postedAt: params.postedAt,
-      origin: params.origin,
-      mockBuyerPost: Boolean(params.mockBuyerPost),
-      mockBuyerPostOptions: params.mockBuyerPostOptions,
-      stopOnAccept: true,
-      progress: params.progress,
-    }),
-    processPingTree({
+  if (publisherApiType === "Silent") {
+    const silentCampaignIds = await resolveEligiblePingTreeCampaignIds({
       pingTreeType: "Silent",
-      sellerLeadId: params.sellerLeadId,
-      sellerRefId: params.sellerRefId,
       verticalRefId: params.verticalRefId,
-      payload: params.payload,
-      postedAt: params.postedAt,
-      origin: params.origin,
       mockBuyerPost: Boolean(params.mockBuyerPost),
-      mockBuyerPostOptions: params.mockBuyerPostOptions,
-      stopOnAccept: false,
-      progress: params.progress,
-    }),
-  ]);
+    });
 
-  const coreDeliveries = [...redirectDeliveries, ...silentDeliveries];
+    if (silentCampaignIds.length === 0) {
+      await SellerLeadModel.updateOne(
+        { _id: new Types.ObjectId(params.sellerLeadId) },
+        { $set: { publisherStatus: "Reject", isTestLead } }
+      );
+
+      return {
+        publisherStatus: "Reject",
+        redirectUrl: "",
+        soldPrice: null,
+        publisherResponsePrice: null,
+        campaignDeliveries: [],
+        buyerPostAttempts: [],
+        buyerPostHint: SILENT_API_NO_BUYER_MESSAGE,
+        message: SILENT_API_NO_BUYER_MESSAGE,
+      };
+    }
+  }
+
+  const pingTreeTypes = resolvePublisherPingTreeTypes(publisherApiType);
+  const deliveryResults = await Promise.all(
+    pingTreeTypes.map((pingTreeType) =>
+      processPingTree({
+        pingTreeType,
+        sellerLeadId: params.sellerLeadId,
+        sellerRefId: params.sellerRefId,
+        verticalRefId: params.verticalRefId,
+        payload: params.payload,
+        postedAt: params.postedAt,
+        origin: params.origin,
+        mockBuyerPost: Boolean(params.mockBuyerPost),
+        mockBuyerPostOptions: params.mockBuyerPostOptions,
+        stopOnAccept: pingTreeType === "Redirect",
+        progress: params.progress,
+      })
+    )
+  );
+
+  const coreDeliveries = deliveryResults.flat();
 
   const accepted = findAcceptedDelivery(coreDeliveries);
   const hadPostError = resolvePublisherPostError(coreDeliveries);
@@ -1329,6 +1371,7 @@ export async function distributeLeadAfterIntake(params: {
           sellerLeadId: params.sellerLeadId,
           sellerRefId: params.sellerRefId,
           mockBuyerPostOptions: params.mockBuyerPostOptions,
+          publisherApiType,
         })
       : null;
 

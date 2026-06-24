@@ -178,12 +178,57 @@ export function buildDuplicateExistsQuery(
   return buildPayloadFieldValueMatch(`payload.${emailField}`, duplicateKey);
 }
 
+export type PublisherReasons = string | Array<{ message: string }>;
+
+export function formatPublisherReasons(messages: string[]): PublisherReasons {
+  const normalized = messages.map((message) => message.trim()).filter(Boolean);
+  if (normalized.length <= 1) {
+    return normalized[0] ?? "";
+  }
+
+  return normalized.map((message) => ({ message }));
+}
+
 export function buildLeadRejectResponse(reasons: string[]) {
   return {
     status: 2,
     status_text: "reject" as const,
-    reasons: reasons.map((message) => ({ message })),
+    reasons: formatPublisherReasons(reasons),
   };
+}
+
+function normalizePublisherReasonsForDisplay(value: unknown): PublisherReasons {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  const messages = value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+
+      if (item && typeof item === "object" && "message" in item) {
+        return String((item as { message: unknown }).message ?? "").trim();
+      }
+
+      return "";
+    })
+    .filter(Boolean);
+
+  return formatPublisherReasons(messages);
+}
+
+export function resolvePublisherReasonMessage(reasons: PublisherReasons): string {
+  if (typeof reasons === "string") {
+    return reasons;
+  }
+
+  return reasons[0]?.message?.trim() ?? "";
 }
 
 export function formatLeadRejectResponseBody(body: Record<string, unknown> | null | undefined) {
@@ -194,7 +239,7 @@ export function formatLeadRejectResponseBody(body: Record<string, unknown> | nul
   return {
     status: typeof body.status === "number" ? body.status : 2,
     status_text: typeof body.status_text === "string" ? body.status_text : "reject",
-    reasons: Array.isArray(body.reasons) ? body.reasons : [],
+    reasons: normalizePublisherReasonsForDisplay(body.reasons),
   };
 }
 

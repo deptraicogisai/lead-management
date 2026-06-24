@@ -1,9 +1,17 @@
+import type { PingTreeCampaignType } from "@/lib/ping-tree";
+
 export type MappingApiType = "Redirect" | "Silent";
 
 export const MAPPING_API_TYPE_OPTIONS: MappingApiType[] = ["Redirect", "Silent"];
 
+export const SILENT_API_NO_BUYER_MESSAGE = "Buyer not found.";
+
 export function normalizeMappingApiType(value: unknown): MappingApiType {
   return value === "Silent" ? "Silent" : "Redirect";
+}
+
+export function resolvePublisherPingTreeTypes(apiType: MappingApiType): PingTreeCampaignType[] {
+  return apiType === "Silent" ? ["Silent"] : ["Redirect", "Silent"];
 }
 
 export function shouldIncludePublisherRedirectUrl(apiType: MappingApiType) {

@@ -20,6 +20,7 @@ import {
 } from "@/lib/mapping-intake-settings";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { distributeLeadAfterIntake, listPendingBuyerPostCampaigns } from "@/lib/lead-distribution";
+import { normalizeMappingApiType } from "@/lib/mapping-api-type";
 import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 import { buildInitialBuyerPostQueue } from "@/lib/test-lead-buyer-progress";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
@@ -277,8 +278,14 @@ export async function runMappingTestLeadSubmit(params: {
     createdLeadId = createdLead._id?.toString() ?? "";
 
     if (validationResult.passed && params.postToBuyer && createdLeadId && params.verticalRef) {
+      const publisherApiType = normalizeMappingApiType((params.mappingDoc as { apiType?: string | null }).apiType);
+
       if (params.buyerPostProgress?.onPending) {
-        const pendingCampaigns = await listPendingBuyerPostCampaigns(params.verticalRef.toString(), true);
+        const pendingCampaigns = await listPendingBuyerPostCampaigns(
+          params.verticalRef.toString(),
+          true,
+          publisherApiType
+        );
         await params.buyerPostProgress.onPending(
           buildInitialBuyerPostQueue(pendingCampaigns, postedAt.toISOString())
         );
@@ -299,6 +306,7 @@ export async function runMappingTestLeadSubmit(params: {
           onBuyerPostProcessing: params.buyerPostProgress?.onProcessing,
           onBuyerPostAttempt: params.buyerPostProgress?.onAttempt,
         },
+        publisherApiType,
       });
 
       buyerPostAttempts = distribution.buyerPostAttempts;

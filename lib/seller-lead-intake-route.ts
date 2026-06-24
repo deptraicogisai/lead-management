@@ -9,7 +9,12 @@ import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/model
 import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
-import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
+import {
+  buildLeadRejectResponse,
+  formatPublisherReasons,
+  resolvePublisherReasonMessage,
+  type PublisherReasons,
+} from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
@@ -327,14 +332,14 @@ export async function handleSellerLeadPost(req: Request) {
 
       const responsePayload = {
         status: "error",
-        reasons: [{ message: "Payload must be a JSON object." }],
+        reasons: formatPublisherReasons(["Payload must be a JSON object."]),
       };
 
       await createSellerIntakeLog({
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 400,
       });
@@ -353,14 +358,14 @@ export async function handleSellerLeadPost(req: Request) {
     if (!requestApiKey) {
       const responsePayload = {
         status: "error" as const,
-        reasons: [{ message: "Authentication failed. API key is required." }],
+        reasons: formatPublisherReasons(["Authentication failed. API key is required."]),
       };
 
       await createSellerIntakeLog({
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 401,
       });
@@ -376,14 +381,14 @@ export async function handleSellerLeadPost(req: Request) {
     if (!matchedMapping) {
       const responsePayload = {
         status: "error" as const,
-        reasons: [{ message: "Authentication failed. Invalid API key." }],
+        reasons: formatPublisherReasons(["Authentication failed. Invalid API key."]),
       };
 
       await createSellerIntakeLog({
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 401,
       });
@@ -395,14 +400,14 @@ export async function handleSellerLeadPost(req: Request) {
     if (!Types.ObjectId.isValid(sellerRefId)) {
       const responsePayload = {
         status: "error",
-        reasons: [{ message: "Publisher not found for this API key." }],
+        reasons: formatPublisherReasons(["Publisher not found for this API key."]),
       };
 
       await createSellerIntakeLog({
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 404,
       });
@@ -414,14 +419,14 @@ export async function handleSellerLeadPost(req: Request) {
     if (!seller) {
       const responsePayload = {
         status: "error",
-        reasons: [{ message: "Publisher not found for this API key." }],
+        reasons: formatPublisherReasons(["Publisher not found for this API key."]),
       };
 
       await createSellerIntakeLog({
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 404,
       });
@@ -449,7 +454,7 @@ export async function handleSellerLeadPost(req: Request) {
         endpointUrl,
         requestPayload: body,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 400,
       });
@@ -500,6 +505,7 @@ export async function handleSellerLeadPost(req: Request) {
 
     const leadId = createdLead._id?.toString() ?? "";
     const origin = new URL(req.url).origin;
+    const publisherApiType = normalizeMappingApiType(matchedMapping.apiType);
 
     const distribution = await distributeLeadAfterIntake({
       sellerLeadId: leadId,
@@ -509,9 +515,8 @@ export async function handleSellerLeadPost(req: Request) {
       postedAt,
       origin,
       revShareSettings: toMappingRevShareSettings((matchedMapping as { revShare?: MappingRevShareDoc }).revShare),
+      publisherApiType,
     });
-
-    const publisherApiType = normalizeMappingApiType(matchedMapping.apiType);
 
     let responsePayload: Record<string, unknown>;
 
@@ -536,7 +541,7 @@ export async function handleSellerLeadPost(req: Request) {
       );
       responsePayload = {
         status: "error",
-        reasons: [{ message: distribution.message }],
+        reasons: formatPublisherReasons([distribution.message]),
         lead_id: leadId,
         ...(postErrorDelivery?.errorReason ? { buyer_post_error: postErrorDelivery.errorReason } : {}),
         ...(postErrorDelivery?.postLeadUrl ? { post_lead_url: postErrorDelivery.postLeadUrl } : {}),
@@ -557,8 +562,7 @@ export async function handleSellerLeadPost(req: Request) {
       responsePayload = {
         status: 0,
         status_text: "Rejected",
-        reasons: [{ message: distribution.message }],
-        lead_id: leadId,
+        reasons: formatPublisherReasons([distribution.message]),
         ...(primaryAttempt?.rejectReason ? { buyer_reject_reason: primaryAttempt.rejectReason } : {}),
         ...(primaryAttempt?.buyerStatus ? { buyer_status: primaryAttempt.buyerStatus } : {}),
         ...(primaryAttempt?.responseBody
@@ -590,7 +594,7 @@ export async function handleSellerLeadPost(req: Request) {
 
     const responsePayload = {
       status: "error",
-      reasons: [{ message: "Unexpected server error while processing lead." }],
+      reasons: formatPublisherReasons(["Unexpected server error while processing lead."]),
     };
 
     try {
@@ -601,7 +605,7 @@ export async function handleSellerLeadPost(req: Request) {
         endpointUrl: endpointUrl || new URL(req.url).pathname,
         requestPayload: requestPayloadForLog,
         responseBody: JSON.stringify(responsePayload),
-        errorMessage: responsePayload.reasons[0].message,
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
         deliveryStatus: "fail",
         httpStatus: 500,
       });

@@ -20,6 +20,7 @@ import {
   type DocumentationRequestTableRow,
 } from "@/lib/api-documentation-requirements";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
+import { formatPublisherReasons } from "@/lib/mapping-lead-validation";
 import { buildFieldExampleRequest, buildFieldExampleValue } from "@/lib/lead-field-value";
 
 export type DocumentationField = {
@@ -97,7 +98,9 @@ export function buildApiDocumentationMarkdown(
   const outline = buildDocumentationOutline();
   const errorResponse = {
     status: "error",
-    reasons: [{ message: `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.` }],
+    reasons: formatPublisherReasons([
+      `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.`,
+    ]),
   };
   const leadResponseStatusSection = buildLeadResponseStatusMarkdown(outline);
 

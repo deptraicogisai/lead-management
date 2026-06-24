@@ -1,4 +1,5 @@
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
+import { formatPublisherReasons } from "@/lib/mapping-lead-validation";
 
 export const CAMPAIGN_TEST_MOCK_STATUS_OPTIONS = ["Accept", "Reject"] as const;
 
@@ -153,10 +154,9 @@ export function buildCampaignTestMockBuyerResponse(mock: CampaignTestMockRespons
   return {
     status: 2,
     status_text: "Reject",
-    reasons:
-      reasons.length > 0
-        ? reasons.map((message) => ({ message }))
-        : DEFAULT_CAMPAIGN_TEST_MOCK.reasons.map((message) => ({ message })),
+    reasons: formatPublisherReasons(
+      reasons.length > 0 ? reasons : [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons]
+    ),
   };
 }
 
@@ -249,6 +249,8 @@ export function buildMockBuyerResponseFromOptions(options: MockBuyerPostOptions)
   return {
     status: 2,
     status_text: "Reject",
-    reasons: reason ? [{ message: reason }] : [{ message: "Buyer declined the lead." }],
+    reasons: formatPublisherReasons(
+      reason ? [reason] : ["Buyer declined the lead."]
+    ),
   };
 }
