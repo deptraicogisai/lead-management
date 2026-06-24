@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download } from "lucide-react";
 import { ClearButton, SearchButton, TableActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -9,6 +9,7 @@ import { FieldLabel, Input } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
+import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
+import { cn } from "@/lib/utils";
 
 type FilterOption = {
   id: string;
@@ -99,6 +101,7 @@ export function PublisherLeadDetailsPage() {
   const [viewLead, setViewLead] = useState<PublisherLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateDraft = (patch: Partial<PublisherLeadDetailsFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
@@ -169,6 +172,21 @@ export function PublisherLeadDetailsPage() {
   useEffect(() => {
     void loadRows(appliedFilters, page, pageSize);
   }, [appliedFilters, page, pageSize, loadRows]);
+
+  useEffect(() => {
+    if (!exportOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [exportOpen]);
 
   const handleSearch = () => {
     setAppliedFilters({ ...draftFilters });
@@ -332,7 +350,7 @@ export function PublisherLeadDetailsPage() {
     <PageSection title="Publisher Lead Details">
       <div className="space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <FieldLabel htmlFor="lead-id" label="Lead ID" />
                   <Input
@@ -423,35 +441,33 @@ export function PublisherLeadDetailsPage() {
                 filterPlaceholder="Search table..."
                 selectedCount={selectedIds.length}
                 actions={
-                  <div className="relative">
+                  <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
                     <button
                       type="button"
                       onClick={() => setExportOpen((current) => !current)}
                       disabled={isExporting}
-                      className={toolbarPrimaryButtonClassName}
+                      className={cn(toolbarPrimaryButtonClassName, "w-full sm:w-auto")}
                     >
-                      <Download size={16} />
+                      <Download size={15} />
                       {isExporting ? "Exporting..." : "Export"}
                       <ChevronDown className="h-4 w-4" />
                     </button>
-                    {exportOpen ? (
-                      <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                        <button
-                          type="button"
-                          className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                          onClick={() => void handleExport("current-page")}
-                        >
-                          Current Page to csv
-                        </button>
-                        <button
-                          type="button"
-                          className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                          onClick={() => void handleExport("all-pages")}
-                        >
-                          All page to csv
-                        </button>
-                      </div>
-                    ) : null}
+                    <ToolbarDropdownMenu open={exportOpen}>
+                      <button
+                        type="button"
+                        className={toolbarDropdownItemClassName}
+                        onClick={() => void handleExport("current-page")}
+                      >
+                        Current Page to CSV
+                      </button>
+                      <button
+                        type="button"
+                        className={toolbarDropdownItemClassName}
+                        onClick={() => void handleExport("all-pages")}
+                      >
+                        All Page to CSV
+                      </button>
+                    </ToolbarDropdownMenu>
                   </div>
                 }
               />

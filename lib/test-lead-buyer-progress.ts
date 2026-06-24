@@ -402,7 +402,7 @@ export function buildDraftTestLeadLog(params: {
         }
       : {
           status: 2,
-          status_text: "reject",
+          status_text: "Rejected",
           reasons: [],
         },
     status: params.validationPassed ? 200 : 400,
@@ -414,7 +414,7 @@ export function buildDraftTestLeadLog(params: {
         }
       : {
           status: 2,
-          status_text: "reject",
+          status_text: "Rejected",
           reasons: [],
         },
     validationChecks: params.validationChecks,

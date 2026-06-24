@@ -280,16 +280,16 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
       </button>
 
       {open ? (
-        <div className="absolute left-0 z-30 mt-2 w-[min(760px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex">
-            <div className="w-40 shrink-0 border-r border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-900/70">
+        <div className="absolute left-0 z-30 mt-2 w-[min(100vw-1.5rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:w-[min(760px,calc(100vw-2rem))]">
+          <div className="flex flex-col md:flex-row">
+            <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2 md:w-40 md:flex-col md:overflow-x-visible md:border-b-0 md:border-r dark:border-slate-700 dark:bg-slate-900/70">
               {DATE_RANGE_PRESETS.map((preset) => (
                 <button
                   key={preset}
                   type="button"
                   onClick={() => applyPreset(preset)}
                   className={cn(
-                    "mb-1 block w-full rounded-lg px-3 py-2 text-left text-sm transition",
+                    "shrink-0 rounded-lg px-3 py-2 text-left text-sm transition md:mb-1 md:block md:w-full",
                     draft.preset === preset
                       ? "bg-sky-600 font-medium text-white"
                       : "text-slate-700 hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
@@ -300,8 +300,8 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
               ))}
             </div>
 
-            <div className="min-w-0 flex-1 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 p-3 sm:p-4">
+              <div className="mb-4 flex items-center justify-between gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() =>
@@ -316,7 +316,7 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                   <ChevronLeft className="h-4 w-4" />
                 </button>
 
-                <div className="grid flex-1 grid-cols-2 gap-6">
+                <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-6">
                   <p className="text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
                     {getMonthLabel(draft.leftMonth.getFullYear(), draft.leftMonth.getMonth())}
                   </p>
@@ -340,7 +340,7 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                 <MonthGrid
                   monthDate={draft.leftMonth}
                   rangeFrom={draft.from}
@@ -355,7 +355,7 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                 />
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-6 border-t border-slate-200 pt-4 dark:border-slate-700">
+              <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2 sm:gap-6 dark:border-slate-700">
                 <TimeSelects
                   label="Start Time"
                   date={draft.from}
@@ -370,11 +370,11 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 dark:border-slate-700 dark:bg-slate-900/70">
             <p className="truncate text-xs text-slate-600 dark:text-slate-300">
               {formatDateRangeDisplay(draft.from, draft.to)}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2">
               <CancelButton type="button" onClick={handleCancel} />
               <PrimaryButton type="button" onClick={handleApply}>
                 Apply

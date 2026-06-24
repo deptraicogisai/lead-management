@@ -12,6 +12,7 @@ import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
 import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
+import { LOGS_LIST_LOAD_DELAY_MS, waitForListLoadingTestDelay } from "@/lib/list-loading-delay";
 
 type LogRow = {
   id: string;
@@ -86,6 +87,8 @@ export default function LogsPage() {
       beginLoad();
 
       try {
+        await waitForListLoadingTestDelay(LOGS_LIST_LOAD_DELAY_MS);
+
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(pageSize),

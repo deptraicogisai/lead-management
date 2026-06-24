@@ -6,6 +6,7 @@ import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedu
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
+import { SectionLoading } from "@/components/ui/loading-indicator";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { FieldLabel, PrimaryButton, primaryButtonClassName } from "@/components/ui/form-controls";
@@ -200,7 +201,7 @@ export function MappingIntakeSettingsTabs({
   };
 
   if (isLoading || !settings || !duplicatesForm) {
-    return <p className="text-sm text-slate-500">Loading intake settings...</p>;
+    return <SectionLoading message="Loading intake settings..." minHeightClassName="min-h-[180px]" />;
   }
 
   return (

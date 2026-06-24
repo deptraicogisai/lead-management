@@ -316,7 +316,7 @@ export default function BuyersPage() {
       <PageSection>
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Agent</label>
                 <select

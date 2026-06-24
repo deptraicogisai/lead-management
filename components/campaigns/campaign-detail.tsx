@@ -29,7 +29,8 @@ import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PageSection, Spinner } from "@/components/ui/state";
+import { SectionLoading } from "@/components/ui/loading-indicator";
+import { PageSection } from "@/components/ui/state";
 import {
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
@@ -458,10 +459,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   if (isLoading || !campaign) {
     return (
       <PageSection>
-        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-          <Spinner />
-          <span>Loading campaign...</span>
-        </div>
+        <SectionLoading message="Loading campaign..." />
       </PageSection>
     );
   }

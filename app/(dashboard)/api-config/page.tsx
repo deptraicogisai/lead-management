@@ -21,9 +21,11 @@ import {
 } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { IconText } from "@/lib/button-icons";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import { cn } from "@/lib/utils";
 
 type SellerVertical = {
@@ -45,7 +47,7 @@ export default function ApiConfigPage() {
   const sellerId = searchParams.get("sellerId");
   const sellerName = searchParams.get("sellerName");
   const [verticals, setVerticals] = useState<SellerVertical[]>([]);
-  const [isVerticalLoading, setIsVerticalLoading] = useState(false);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<SellerVertical | null>(null);
   const [deletingRow, setDeletingRow] = useState<SellerVertical | null>(null);
@@ -54,16 +56,16 @@ export default function ApiConfigPage() {
   const fetchVerticals = useCallback(async () => {
     if (!sellerId) return;
 
-    setIsVerticalLoading(true);
+    beginLoad();
     try {
       const response = await fetch(`/api/sellers/${encodeURIComponent(sellerId)}/verticals`);
       if (!response.ok) return;
       const data = (await response.json()) as SellerVertical[];
       setVerticals(data);
     } finally {
-      setIsVerticalLoading(false);
+      endLoad();
     }
-  }, [sellerId]);
+  }, [sellerId, beginLoad, endLoad]);
 
   useEffect(() => {
     void fetchVerticals();
@@ -163,11 +165,18 @@ export default function ApiConfigPage() {
           ) : null
         }
       >
-        <DataTable<SellerVertical>
-          columns={verticalColumns}
-          rows={verticalRows}
-          emptyMessage={isVerticalLoading ? "Loading APIs..." : "No APIs configured for this seller yet."}
-        />
+        <ListTableContainer
+          isInitialLoad={Boolean(sellerId) && isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading APIs"
+          skeletonRows={8}
+        >
+          <DataTable<SellerVertical>
+            columns={verticalColumns}
+            rows={verticalRows}
+            emptyMessage="No APIs configured for this seller yet."
+          />
+        </ListTableContainer>
       </PageSection>
 
       {sellerId ? (

@@ -100,7 +100,7 @@ function renderSingleFilterCard(
 
           return (
             <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <FieldLabel htmlFor={`${filter.fieldId}-min`} label="Min" />
                   <Select
@@ -219,7 +219,7 @@ export function GeneralFiltersGrid({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {displayItems.map((item) => {
         if (item.kind === "multi-select") {
           const isInteractive = item.included.enabled;

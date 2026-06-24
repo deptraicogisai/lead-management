@@ -50,3 +50,27 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
     </nav>
   );
 }
+
+export function MobilePageTitle({ items, className }: BreadcrumbsProps) {
+  if (items.length === 0) return null;
+
+  const current = items[items.length - 1];
+  const parent = items.length > 1 ? items[items.length - 2] : null;
+
+  return (
+    <div className={cn("min-w-0", className)}>
+      {parent?.href ? (
+        <Link
+          href={parent.href}
+          className="mb-0.5 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400"
+        >
+          <ChevronRight size={12} className="rotate-180" />
+          <span className="truncate">{parent.label}</span>
+        </Link>
+      ) : parent ? (
+        <p className="mb-0.5 truncate text-xs font-medium text-slate-500 dark:text-slate-400">{parent.label}</p>
+      ) : null}
+      <h1 className="truncate text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">{current.label}</h1>
+    </div>
+  );
+}

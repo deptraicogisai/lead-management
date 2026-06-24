@@ -23,9 +23,9 @@ const STATIC_ROUTES: Record<string, { pageTitle: string }> = {
   "/leads": { pageTitle: "Leads" },
   "/logs": { pageTitle: "Logs" },
   "/distributions": { pageTitle: "Distributions" },
-  "/vertical-mappings": { pageTitle: "Vertical Mappings" },
   "/ping-tree-settings": { pageTitle: "Ping Tree Settings" },
   "/documents": { pageTitle: "Documents" },
+  "/settings": { pageTitle: "Settings" },
 };
 
 function withDashboard(items: BreadcrumbItem[]) {

@@ -11,13 +11,17 @@ import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import {
   buildLeadRejectResponse,
-  formatPublisherReasons,
   resolvePublisherReasonMessage,
   type PublisherReasons,
 } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
+import {
+  buildPublisherAcceptedResponse,
+  buildPublisherErrorResponse,
+  buildPublisherRejectedResponse,
+} from "@/lib/publisher-response-status";
 import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 
 type MappingApiField = {
@@ -330,10 +334,7 @@ export async function handleSellerLeadPost(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       await connectToDatabase();
 
-      const responsePayload = {
-        status: "error",
-        reasons: formatPublisherReasons(["Payload must be a JSON object."]),
-      };
+      const responsePayload = buildPublisherRejectedResponse(["Payload must be a JSON object."]);
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -356,10 +357,7 @@ export async function handleSellerLeadPost(req: Request) {
     await ensureSellerLeadReferencesMigrated();
 
     if (!requestApiKey) {
-      const responsePayload = {
-        status: "error" as const,
-        reasons: formatPublisherReasons(["Authentication failed. API key is required."]),
-      };
+      const responsePayload = buildPublisherErrorResponse(["Authentication failed. API key is required."]);
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -379,10 +377,7 @@ export async function handleSellerLeadPost(req: Request) {
     }).lean()) as SellerMapping | null;
 
     if (!matchedMapping) {
-      const responsePayload = {
-        status: "error" as const,
-        reasons: formatPublisherReasons(["Authentication failed. Invalid API key."]),
-      };
+      const responsePayload = buildPublisherErrorResponse(["Authentication failed. Invalid API key."]);
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -398,10 +393,7 @@ export async function handleSellerLeadPost(req: Request) {
 
     const sellerRefId = normalizeRef(matchedMapping.sellerRef as RefValue) ?? "";
     if (!Types.ObjectId.isValid(sellerRefId)) {
-      const responsePayload = {
-        status: "error",
-        reasons: formatPublisherReasons(["Publisher not found for this API key."]),
-      };
+      const responsePayload = buildPublisherErrorResponse(["Publisher not found for this API key."]);
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -417,10 +409,7 @@ export async function handleSellerLeadPost(req: Request) {
 
     const seller = await SellerModel.findById(sellerRefId).lean();
     if (!seller) {
-      const responsePayload = {
-        status: "error",
-        reasons: formatPublisherReasons(["Publisher not found for this API key."]),
-      };
+      const responsePayload = buildPublisherErrorResponse(["Publisher not found for this API key."]);
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -529,24 +518,20 @@ export async function handleSellerLeadPost(req: Request) {
         publisherResponsePrice: distribution.publisherResponsePrice,
       });
     } else if (distribution.publisherStatus === "Test") {
-      responsePayload = {
-        status: 1,
-        status_text: "Accepted",
+      responsePayload = buildPublisherAcceptedResponse({
         message: distribution.message,
         lead_id: leadId,
-      };
+      });
     } else if (distribution.publisherStatus === "Post Error") {
       const postErrorDelivery = distribution.campaignDeliveries.find(
         (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
       );
-      responsePayload = {
-        status: "error",
-        reasons: formatPublisherReasons([distribution.message]),
+      responsePayload = buildPublisherErrorResponse([distribution.message], {
         lead_id: leadId,
         ...(postErrorDelivery?.errorReason ? { buyer_post_error: postErrorDelivery.errorReason } : {}),
         ...(postErrorDelivery?.postLeadUrl ? { post_lead_url: postErrorDelivery.postLeadUrl } : {}),
         ...(postErrorDelivery?.httpStatus ? { buyer_http_status: postErrorDelivery.httpStatus } : {}),
-      };
+      });
     } else {
       const redirectAttempt = distribution.campaignDeliveries.find(
         (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
@@ -559,16 +544,13 @@ export async function handleSellerLeadPost(req: Request) {
         silentAttempt ??
         distribution.campaignDeliveries.find((entry) => entry.buyerStatus !== "Skipped");
 
-      responsePayload = {
-        status: 0,
-        status_text: "Rejected",
-        reasons: formatPublisherReasons([distribution.message]),
+      responsePayload = buildPublisherRejectedResponse([distribution.message], {
         ...(primaryAttempt?.rejectReason ? { buyer_reject_reason: primaryAttempt.rejectReason } : {}),
         ...(primaryAttempt?.buyerStatus ? { buyer_status: primaryAttempt.buyerStatus } : {}),
         ...(primaryAttempt?.responseBody
           ? { buyer_response: String(primaryAttempt.responseBody).slice(0, 500) }
           : {}),
-      };
+      });
     }
 
     await createSellerIntakeLog({
@@ -592,10 +574,9 @@ export async function handleSellerLeadPost(req: Request) {
   } catch (error) {
     console.error("Seller lead intake failed:", error);
 
-    const responsePayload = {
-      status: "error",
-      reasons: formatPublisherReasons(["Unexpected server error while processing lead."]),
-    };
+    const responsePayload = buildPublisherErrorResponse([
+      "Unexpected server error while processing lead.",
+    ]);
 
     try {
       await connectToDatabase();

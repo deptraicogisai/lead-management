@@ -13,8 +13,8 @@ type DashboardChromeProps = {
 
 function HeaderFallback() {
   return (
-    <header className="sticky top-0 z-10 mb-6 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="h-5 w-64 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+    <header className="mobile-app-header sticky top-0 z-30 mb-0 border-b border-slate-200 bg-white px-3 py-3 lg:mb-6 lg:rounded-2xl lg:border lg:px-6 lg:py-4 lg:shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="h-6 w-40 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
     </header>
   );
 }
@@ -25,7 +25,7 @@ export function DashboardChrome({ session, children }: DashboardChromeProps) {
       <Suspense fallback={<HeaderFallback />}>
         <Header session={session} />
       </Suspense>
-      {children}
+      <div className="mobile-page-content">{children}</div>
       <ToastProvider />
     </BreadcrumbProvider>
   );

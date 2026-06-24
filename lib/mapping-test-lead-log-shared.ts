@@ -83,7 +83,7 @@ export function resolvePublisherLogSnapshot(log: {
         ? (log.responseBody as Record<string, unknown>)
         : {
             status: 2,
-            status_text: "reject",
+            status_text: "Rejected",
             reasons: formatPublisherReasons(["Publisher intake validation failed."]),
           },
     passed: false,

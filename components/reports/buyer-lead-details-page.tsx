@@ -189,7 +189,7 @@ export function BuyerLeadDetailsPage() {
     <PageSection title="Buyer Lead Details">
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div>
               <FieldLabel htmlFor="buyer-lead-id" label="Lead ID" />
               <Input

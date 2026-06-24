@@ -20,7 +20,9 @@ import {
   type DocumentationRequestTableRow,
 } from "@/lib/api-documentation-requirements";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
-import { formatPublisherReasons } from "@/lib/mapping-lead-validation";
+import type { MappingApiType } from "@/lib/mapping-api-type";
+import { normalizeMappingApiType, shouldIncludePublisherRedirectUrl } from "@/lib/mapping-api-type";
+import { buildPublisherErrorResponse } from "@/lib/publisher-response-status";
 import { buildFieldExampleRequest, buildFieldExampleValue } from "@/lib/lead-field-value";
 
 export type DocumentationField = {
@@ -46,6 +48,7 @@ export type DocumentationContext = {
   apiKey: string;
   method: string;
   sellerName?: string;
+  apiType?: MappingApiType;
 };
 
 // Use PDFKit's built-in fonts so PDF generation works on serverless
@@ -95,13 +98,11 @@ export function buildApiDocumentationMarkdown(
   intakeSettings: MappingIntakeSettingsRecord
 ) {
   const exampleRequest = buildExampleRequest(fields);
-  const outline = buildDocumentationOutline();
-  const errorResponse = {
-    status: "error",
-    reasons: formatPublisherReasons([
-      `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.`,
-    ]),
-  };
+  const apiType = normalizeMappingApiType(context.apiType);
+  const outline = buildDocumentationOutline(apiType);
+  const errorResponse = buildPublisherErrorResponse([
+    `${fields[0]?.description || fields[0]?.fieldName || "Required field"} is required.`,
+  ]);
   const leadResponseStatusSection = buildLeadResponseStatusMarkdown(outline);
 
   return `## ${outline.overview.label}
@@ -541,7 +542,8 @@ export async function generateApiDocumentationPdfBuffer(
   const exampleRequest = buildExampleRequest(fields);
   const errorRows = buildErrorRows(fields);
   const overviewParagraphs = buildOverviewParagraphs(context.verticalName);
-  const outline = buildDocumentationOutline();
+  const apiType = normalizeMappingApiType(context.apiType);
+  const outline = buildDocumentationOutline(apiType);
   const requestTableRows = buildDocumentationRequestTableRows(intakeSettings, fields, formatAcceptedValues);
 
   const doc = new PDFDocument({
@@ -596,7 +598,12 @@ export async function generateApiDocumentationPdfBuffer(
     doc,
     "The API returns a JSON body with a numeric status field indicating the lead processing result."
   );
-  writeBullet(doc, "1 — Sold: lead sold successfully; includes redirect_url.");
+  writeBullet(
+    doc,
+    shouldIncludePublisherRedirectUrl(apiType)
+      ? "1 — Accepted: lead accepted successfully; includes redirect_url."
+      : "1 — Accepted: lead accepted successfully; Silent APIs do not include redirect_url."
+  );
   writeBullet(doc, "2 — Reject: lead rejected.");
   writeBullet(doc, "3 — In Progress: lead is still being processed.");
   writeBullet(doc, "4 — Authorization Failed: API key or authorization credentials are missing or invalid.");

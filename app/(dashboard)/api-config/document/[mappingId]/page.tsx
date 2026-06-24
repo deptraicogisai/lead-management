@@ -11,10 +11,10 @@ import {
   buildDocumentationCodeSnippets,
   buildErrorRows,
   buildExampleRequest,
+  buildLeadResponseStatusDefinitions,
   buildOverviewParagraphs,
   formatAcceptedValues,
   getCodeTokenClassName,
-  LEAD_RESPONSE_STATUS_DEFINITIONS,
   tokenizeCode,
   tokenizeJson,
   type CodeLanguage,
@@ -26,7 +26,9 @@ import {
   type DocumentationRequestTableRow,
 } from "@/lib/api-documentation-requirements";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
-import { PageSection, Spinner } from "@/components/ui/state";
+import type { MappingApiType } from "@/lib/mapping-api-type";
+import { SectionLoading } from "@/components/ui/loading-indicator";
+import { PageSection } from "@/components/ui/state";
 import { cn } from "@/lib/utils";
 
 type DocumentContentResponse = {
@@ -37,6 +39,7 @@ type DocumentContentResponse = {
   apiKey: string;
   method: string;
   sellerName: string;
+  apiType: MappingApiType;
   fields: DocumentationField[];
   intakeSettings: MappingIntakeSettingsRecord;
 };
@@ -149,18 +152,23 @@ export default function ApiDocumentPreviewPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  const downloadUrl = mappingId ? `/api/vertical-mappings/${encodeURIComponent(mappingId)}/document?download=1` : "";
+  const downloadUrl =
+    sellerId && mappingId
+      ? `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/document?download=1`
+      : "";
   const backUrl = `/api-config?sellerId=${encodeURIComponent(sellerId)}&sellerName=${encodeURIComponent(sellerName ?? "")}`;
 
   useEffect(() => {
-    if (!mappingId) return;
+    if (!mappingId || !sellerId) return;
 
     const fetchDocumentContent = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await fetch(`/api/vertical-mappings/${encodeURIComponent(mappingId)}/document-content`);
+        const response = await fetch(
+          `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/document-content`
+        );
         const payload = (await response.json()) as DocumentContentResponse | { message?: string };
 
         if (!response.ok) {
@@ -177,7 +185,7 @@ export default function ApiDocumentPreviewPage() {
     };
 
     void fetchDocumentContent();
-  }, [mappingId]);
+  }, [mappingId, sellerId]);
 
   const exampleRequest = useMemo(
     () => (documentContent ? buildExampleRequest(documentContent.fields) : {}),
@@ -204,7 +212,14 @@ export default function ApiDocumentPreviewPage() {
         : [],
     [documentContent]
   );
-  const outline = useMemo(() => buildDocumentationOutline(), []);
+  const outline = useMemo(
+    () => buildDocumentationOutline(documentContent?.apiType ?? "Redirect"),
+    [documentContent?.apiType]
+  );
+  const responseStatusDefinitions = useMemo(
+    () => buildLeadResponseStatusDefinitions(documentContent?.apiType ?? "Redirect"),
+    [documentContent?.apiType]
+  );
 
   const handleDownload = async () => {
     if (!downloadUrl) return;
@@ -266,9 +281,7 @@ export default function ApiDocumentPreviewPage() {
             Missing mapping id.
           </div>
         ) : isLoading ? (
-          <div className="flex justify-center py-16">
-            <Spinner />
-          </div>
+          <SectionLoading message="Loading API documentation..." minHeightClassName="min-h-[320px]" />
         ) : error ? (
           <div className="rounded-xl border border-dashed border-red-300 bg-red-50 p-10 text-center text-red-700">
             {error}
@@ -383,7 +396,7 @@ export default function ApiDocumentPreviewPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {LEAD_RESPONSE_STATUS_DEFINITIONS.map((definition, index) => (
+                    {responseStatusDefinitions.map((definition, index) => (
                       <tr key={definition.statusCode} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <td className="border-b border-slate-100 px-4 py-3 font-mono text-xs">{definition.statusCode}</td>
                         <td className="border-b border-slate-100 px-4 py-3 font-medium text-slate-900">{definition.title}</td>

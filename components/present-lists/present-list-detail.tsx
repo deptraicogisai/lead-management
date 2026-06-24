@@ -10,7 +10,8 @@ import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/for
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { PageSection, Spinner } from "@/components/ui/state";
+import { SectionLoading } from "@/components/ui/loading-indicator";
+import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -185,10 +186,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
   if (isInitialLoad && !list) {
     return (
       <PageSection>
-        <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-          <Spinner />
-          <span>Loading list...</span>
-        </div>
+        <SectionLoading message="Loading list..." />
       </PageSection>
     );
   }

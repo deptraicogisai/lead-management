@@ -125,7 +125,7 @@ export function BuyerHttpLogSidebar({
     deliveryStatus !== "fail";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
       <button
         type="button"
         aria-label="Close buyer log sidebar"
@@ -133,11 +133,11 @@ export function BuyerHttpLogSidebar({
         onClick={onClose}
       />
 
-      <aside className="relative flex h-full w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+      <aside className="relative flex h-full w-full max-w-[100vw] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl sm:max-w-3xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="mobile-safe-top flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4 dark:border-slate-700">
           <div className="min-w-0 space-y-1">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{title}</h2>
-            {subtitle ? <p className="text-sm text-slate-600 dark:text-slate-300">{subtitle}</p> : null}
+            <h2 className="truncate text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-50">{title}</h2>
+            {subtitle ? <p className="text-xs text-slate-600 sm:text-sm dark:text-slate-300">{subtitle}</p> : null}
           </div>
           <button
             type="button"
@@ -148,7 +148,7 @@ export function BuyerHttpLogSidebar({
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
           <dl className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 dark:border-slate-700 dark:bg-slate-800/50">
             {postedAt ? <MetaItem label="Posted At" value={postedAt} /> : null}
             {buyerStatus ? <MetaItem label="Buyer Status" value={buyerStatus} /> : null}

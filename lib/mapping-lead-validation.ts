@@ -192,7 +192,7 @@ export function formatPublisherReasons(messages: string[]): PublisherReasons {
 export function buildLeadRejectResponse(reasons: string[]) {
   return {
     status: 2,
-    status_text: "reject" as const,
+    status_text: "Rejected" as const,
     reasons: formatPublisherReasons(reasons),
   };
 }
@@ -238,7 +238,7 @@ export function formatLeadRejectResponseBody(body: Record<string, unknown> | nul
 
   return {
     status: typeof body.status === "number" ? body.status : 2,
-    status_text: typeof body.status_text === "string" ? body.status_text : "reject",
+    status_text: typeof body.status_text === "string" ? body.status_text : "Rejected",
     reasons: normalizePublisherReasonsForDisplay(body.reasons),
   };
 }

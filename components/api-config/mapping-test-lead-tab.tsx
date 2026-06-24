@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox, FieldLabel, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { FilterTagBadges } from "@/components/ui/filter-tag-input";
-import { Spinner } from "@/components/ui/state";
+import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
 import {
@@ -955,9 +955,8 @@ function SystemBuyerFlow({ log }: { log: MappingTestLeadLogRecord }) {
           <BuyerPostTraceStepCard step={campaignValidationStep} index={0} />
 
           {log.postToBuyer && attempts.length === 0 ? (
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-              <Spinner />
-              <span>Preparing buyer posts...</span>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 dark:border-slate-700 dark:bg-slate-900/60">
+              <InlineLoading message="Preparing buyer posts..." />
             </div>
           ) : !buyerSnapshot.postedToBuyer && attempts.length === 0 ? (
             <JsonLogPanel title="Buyer Response" tone="error" data={formatLeadRejectResponseBody(buyerRejectBody)} />
@@ -1328,12 +1327,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   };
 
   if (isLoadingContext) {
-    return (
-      <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-        <Spinner />
-        <span>Loading test lead form...</span>
-      </div>
-    );
+    return <SectionLoading message="Loading test lead form..." minHeightClassName="min-h-[160px]" />;
   }
 
   return (

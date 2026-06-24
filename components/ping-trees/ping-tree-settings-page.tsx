@@ -14,9 +14,9 @@ import {
 import { Input, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
-import { LoadingOverlay } from "@/components/ui/loading-indicator";
+import { LoadingOverlay, SectionLoading } from "@/components/ui/loading-indicator";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PageSection, Spinner } from "@/components/ui/state";
+import { PageSection } from "@/components/ui/state";
 import {
   PING_TREE_CAMPAIGN_TYPE_TABS,
   type PingTreeCampaignCard,
@@ -122,9 +122,11 @@ function computeIndicatorTop(
 function ColumnStatsBar({ disabled, active, total }: { disabled: number; active: number; total: number }) {
   return (
     <div className="border-b border-sky-200 bg-sky-100 px-3 py-2 text-sm text-slate-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-slate-200">
-      <span className="font-medium">Disabled: {disabled}</span>
-      <span className="mx-3">Active: {active}</span>
-      <span>Total: {total}</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="font-medium">Disabled: {disabled}</span>
+        <span>Active: {active}</span>
+        <span>Total: {total}</span>
+      </div>
     </div>
   );
 }
@@ -248,17 +250,22 @@ function ActiveCampaignCard({
         isDragging ? "border-emerald-400 opacity-50" : "border-slate-300 dark:border-slate-600"
       )}
     >
-      <div className="flex items-start gap-3 p-2.5">
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:gap-3 sm:p-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start gap-2">
             <StatusBadge status={card.status} />
             <p className="text-sm leading-snug text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
           </div>
+          <p className="mt-2 text-sm font-semibold text-slate-800 sm:hidden dark:text-slate-100">
+            ${card.minPrice.toFixed(2)}
+          </p>
         </div>
 
-        <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
-          <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1">
+        <div className="w-full shrink-0 border-t border-slate-100 pt-3 sm:w-auto sm:border-0 sm:pt-0 sm:text-right dark:border-slate-800">
+          <p className="hidden text-sm font-semibold text-slate-800 sm:block dark:text-slate-100">
+            ${card.minPrice.toFixed(2)}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:justify-end">
             <DragHandle onPointerDown={onGripPointerDown} />
             <button
               type="button"
@@ -299,7 +306,7 @@ function ActiveCampaignCard({
               onSetPriority={onSetPriority}
             />
           </div>
-          <p className="mt-1 text-[10px] text-slate-400">#{index + 1}</p>
+          <p className="mt-1 text-[10px] text-slate-400 sm:text-right">#{index + 1}</p>
         </div>
       </div>
     </div>
@@ -338,17 +345,17 @@ function InactiveCampaignCard({
         isDragging ? "border-emerald-400 opacity-50" : "border-slate-300 dark:border-slate-600"
       )}
     >
-      <div className="flex items-start justify-between gap-2 p-2">
+      <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge status={card.status} compact />
-            <p className="truncate text-xs text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
+            <p className="text-xs leading-snug text-slate-800 dark:text-slate-100 sm:truncate">{formatCampaignLabel(card)}</p>
           </div>
         </div>
         <p className="shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2 py-1.5 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2.5 py-2 dark:border-slate-800 sm:px-2 sm:py-1.5">
         <DragHandle onPointerDown={onGripPointerDown} compact />
         <button
           type="button"
@@ -899,14 +906,14 @@ export function PingTreeSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="inline-flex gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800/60">
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 [-webkit-overflow-scrolling:touch] dark:border-slate-700 dark:bg-slate-800/60 sm:mx-0 sm:inline-flex sm:overflow-visible">
         {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => handleTabChange(tab)}
             className={cn(
-              "rounded-lg px-5 py-2 text-sm font-semibold transition-colors duration-150",
+              "shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-150 sm:px-5",
               activeTab === tab
                 ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600 dark:text-white"
                 : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-slate-100"
@@ -919,35 +926,29 @@ export function PingTreeSettingsPage() {
 
       {isLoading && !tree ? (
         <PageSection>
-          <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-            <Spinner />
-            <span>Loading ping tree...</span>
-          </div>
+          <SectionLoading message="Loading ping tree..." />
         </PageSection>
       ) : tree ? (
       <PageSection>
         <div className="relative">
           {isTabRefreshing ? <LoadingOverlay /> : null}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             {isDragging ? (
               <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
-                <ArrowDown size={14} className="rotate-180" />
+                <ArrowDown size={14} className="shrink-0 rotate-180" />
                 Drag using the crosshair icon. A line shows where the campaign will land.
               </p>
             ) : null}
             {isSaving ? <p className="text-sm text-slate-500">Saving...</p> : null}
           </div>
 
-          <Link
-            href="/campaigns"
-            className={cancelButtonClassName}
-          >
+          <Link href="/campaigns" className={cn(cancelButtonClassName, "w-full justify-center sm:w-auto")}>
             View Campaigns
           </Link>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
           <div
             ref={activeColumnRef}
             className={cn(
@@ -963,9 +964,9 @@ export function PingTreeSettingsPage() {
               total={activeStats.total}
             />
 
-            <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+            <div className="flex flex-col gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700 sm:flex-row sm:items-center sm:gap-3">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Ping Tree List</h3>
-              <div className="relative ml-auto min-w-[12rem] flex-1 sm:max-w-xs">
+              <div className="relative w-full sm:ml-auto sm:max-w-xs sm:flex-1">
                 <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={activeSearch}
@@ -976,7 +977,7 @@ export function PingTreeSettingsPage() {
               </div>
             </div>
 
-            <div ref={activeListRef} className="relative max-h-[72vh] flex-1 space-y-2 overflow-y-auto p-2">
+            <div ref={activeListRef} className="relative max-h-[min(52vh,28rem)] flex-1 space-y-2 overflow-y-auto p-2 sm:max-h-[72vh]">
               {filteredActiveList.length === 0 ? (
                 <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
                   {isDragging ? "Drop here to add to ping tree" : "No campaigns in ping tree"}
@@ -1033,9 +1034,9 @@ export function PingTreeSettingsPage() {
               total={inactiveStats.total}
             />
 
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+            <div className="flex flex-col gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700 sm:flex-row sm:items-center sm:gap-2">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Not In Ping Tree</h3>
-              <div className="relative ml-auto min-w-0 flex-1">
+              <div className="relative w-full sm:ml-auto sm:max-w-xs sm:flex-1">
                 <Filter size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={inactiveFilter}
@@ -1046,7 +1047,7 @@ export function PingTreeSettingsPage() {
               </div>
             </div>
 
-            <div ref={inactiveListRef} className="relative max-h-[72vh] flex-1 overflow-y-auto p-2">
+            <div ref={inactiveListRef} className="relative max-h-[min(52vh,28rem)] flex-1 overflow-y-auto p-2 sm:max-h-[72vh]">
               {filteredInactiveList.length === 0 ? (
                 <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
                   {isDragging ? "Drop here to remove from ping tree" : "All campaigns are in ping tree"}

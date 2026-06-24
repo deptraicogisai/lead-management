@@ -43,6 +43,8 @@ import {
 import { toast } from "@/lib/toast";
 import { downloadCsv } from "@/lib/csv-export";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
+import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
+import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type VerticalOption = { id: string; name: string; label: string };
@@ -503,7 +505,7 @@ export function CampaignsPage() {
       <PageSection>
         <div className="space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div>
               <FieldLabel htmlFor="campaign-id-filter" label="ID" />
               <Input id="campaign-id-filter" value={draftFilters.id} onChange={(e) => setDraftFilters((c) => ({ ...c, id: e.target.value }))} />
@@ -621,35 +623,33 @@ export function CampaignsPage() {
                   onClick={openBulkDelete}
                   disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
                 />
-                <div className="relative" ref={exportMenuRef}>
+                <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
                   <button
                     type="button"
                     onClick={() => setExportOpen((current) => !current)}
                     disabled={isExporting || isInitialLoad || isRefreshing}
-                    className={toolbarPrimaryButtonClassName}
+                    className={cn(toolbarPrimaryButtonClassName, "w-full sm:w-auto")}
                   >
-                    <Download size={16} />
+                    <Download size={15} />
                     {isExporting ? "Exporting..." : "Export"}
                     <ChevronDown className="h-4 w-4" />
                   </button>
-                  {exportOpen ? (
-                    <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <button
-                        type="button"
-                        className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                        onClick={() => void handleExport("current-page")}
-                      >
-                        Current Page to CSV
-                      </button>
-                      <button
-                        type="button"
-                        className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                        onClick={() => void handleExport("all-pages")}
-                      >
-                        All Page to CSV
-                      </button>
-                    </div>
-                  ) : null}
+                  <ToolbarDropdownMenu open={exportOpen}>
+                    <button
+                      type="button"
+                      className={toolbarDropdownItemClassName}
+                      onClick={() => void handleExport("current-page")}
+                    >
+                      Current Page to CSV
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarDropdownItemClassName}
+                      onClick={() => void handleExport("all-pages")}
+                    >
+                      All Page to CSV
+                    </button>
+                  </ToolbarDropdownMenu>
                 </div>
                 <AddNewButton type="button" onClick={() => setIsCreateOpen(true)}>
                   Create New Campaign

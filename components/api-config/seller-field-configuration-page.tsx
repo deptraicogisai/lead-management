@@ -8,10 +8,12 @@ import { MappingTestLeadTab } from "@/components/api-config/mapping-test-lead-ta
 import { useParams, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
 import { toast } from "@/lib/toast";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import { cn } from "@/lib/utils";
 import { formatVerticalFieldTypeLabel, type VerticalFieldOption } from "@/lib/vertical-field";
 
@@ -122,7 +124,8 @@ export function SellerFieldConfigurationPage() {
   const apiName = searchParams.get("apiName");
 
   const [fields, setFields] = useState<ApiField[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
+  const isTableLoading = isInitialLoad || isRefreshing;
   const [actionError, setActionError] = useState("");
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -145,7 +148,7 @@ export function SellerFieldConfigurationPage() {
   const fetchFields = async () => {
     if (!sellerId || !mappingId) return;
 
-    setIsLoading(true);
+    beginLoad();
     try {
       const response = await fetch(
         `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/field-configuration`
@@ -161,7 +164,7 @@ export function SellerFieldConfigurationPage() {
       setFields(data.map((field) => normalizeApiField(field)));
       setSelectedFieldIds((current) => current.filter((id) => data.some((field) => field.id === id)));
     } finally {
-      setIsLoading(false);
+      endLoad();
     }
   };
 
@@ -831,22 +834,24 @@ export function SellerFieldConfigurationPage() {
           <FormError error={actionError} />
         </div>
 
-        <DataTable<ApiField>
-          columns={columns}
-          rows={rows}
-          emptyMessage={
-            isLoading
-              ? "Loading fields..."
-              : "No field configuration yet. Fields will be copied from the vertical when available."
-          }
-          selectedRowIds={selectedFieldIds}
-          onToggleRow={handleToggleRow}
-          onToggleAllRows={handleToggleAllRows}
-          rowReorder={{
-            onReorder: handleReorderFields,
-            disabled: Boolean(editingFieldId) || isLoading,
-          }}
-        />
+        <ListTableContainer
+          isInitialLoad={Boolean(sellerId && mappingId) && isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading fields"
+        >
+          <DataTable<ApiField>
+            columns={columns}
+            rows={rows}
+            emptyMessage="No field configuration yet. Fields will be copied from the vertical when available."
+            selectedRowIds={selectedFieldIds}
+            onToggleRow={handleToggleRow}
+            onToggleAllRows={handleToggleAllRows}
+            rowReorder={{
+              onReorder: handleReorderFields,
+              disabled: Boolean(editingFieldId) || isTableLoading,
+            }}
+          />
+        </ListTableContainer>
         </>
         ) : sellerId && mappingId && activeTab === "rev-share" ? (
           <MappingRevShareSettingsTab sellerId={sellerId} mappingId={mappingId} />

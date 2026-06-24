@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyableValue } from "@/components/ui/copy-button";
-import { Spinner } from "@/components/ui/state";
+import { SectionLoading } from "@/components/ui/loading-indicator";
 import type { PhonexaProductDocument, PhonexaProductField } from "@/lib/phonexa-products";
 import { cn } from "@/lib/utils";
 
@@ -44,8 +44,9 @@ function FieldTable({
   return (
     <section className="space-y-3">
       <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-        <table className="w-full border-separate border-spacing-0 text-sm">
+      <div className="-mx-1 overflow-x-auto overscroll-x-contain px-1">
+        <div className="min-w-[640px] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+          <table className="w-full border-separate border-spacing-0 text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800/80">
             <tr>
               <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
@@ -84,6 +85,7 @@ function FieldTable({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </section>
   );
@@ -261,11 +263,7 @@ export function ProductDocViewer({
   const activeResponseContent = responseExampleTabs.find((tab) => tab.id === activeResponseTab)?.content ?? null;
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[420px] items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <SectionLoading message="Loading documentation..." minHeightClassName="min-h-[420px]" />;
   }
 
   if (error) {

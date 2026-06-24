@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { connectToDatabase } from "@/lib/mongodb";
 import { SellerModel } from "@/lib/models/seller";
-import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
+import { ensureVerticalMappingReferencesMigrated } from "@/lib/models/vertical-mapping";
 import { generateApiDocumentationPdfBuffer } from "@/lib/api-documentation";
 import { buildFullEndpointUrl } from "@/lib/api-documentation-content";
 import { toDocumentationField } from "@/lib/api-documentation-field";
@@ -10,10 +10,12 @@ import { getEffectiveMappingFields } from "@/lib/mapping-fields";
 import { ensureMappingApiRequest } from "@/lib/mapping-api-request";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
+import { normalizeMappingApiType } from "@/lib/mapping-api-type";
+import { findSellerVerticalMappingById } from "@/lib/seller-vertical-mapping";
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ id: string }> };
+type Params = { params: Promise<{ id: string; mappingId: string }> };
 
 type VerticalFieldDoc = {
   _id?: { toString(): string } | string;
@@ -36,38 +38,36 @@ function sanitizeFileName(value: string) {
 
 export async function GET(req: Request, context: Params) {
   try {
-    const { id } = await context.params;
+    const { id, mappingId } = await context.params;
     const requestUrl = new URL(req.url);
-    const { searchParams } = requestUrl;
-    const shouldDownload = searchParams.get("download") === "1";
+    const shouldDownload = requestUrl.searchParams.get("download") === "1";
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureVerticalMappingReferencesMigrated();
 
-    const mapping = await VerticalMappingModel.findById(id);
+    const mapping = await findSellerVerticalMappingById(id, mappingId);
     if (!mapping) {
-      return NextResponse.json({ message: "Vertical mapping not found." }, { status: 404 });
+      return NextResponse.json({ message: "Seller API not found." }, { status: 404 });
     }
 
     const apiRequest = await ensureMappingApiRequest(mapping);
     if (!apiRequest) {
-      return NextResponse.json({ message: "Vertical mapping references are invalid." }, { status: 400 });
+      return NextResponse.json({ message: "API mapping references are invalid." }, { status: 400 });
     }
 
     const [seller, vertical] = await Promise.all([
-      mapping.sellerRef ? SellerModel.findById(mapping.sellerRef, { name: 1 }).lean() : null,
+      SellerModel.findById(id, { name: 1 }).lean(),
       mapping.verticalRef ? VerticalModel.findById(mapping.verticalRef).lean() : null,
     ]);
 
     if (!seller || !vertical) {
-      return NextResponse.json({ message: "Vertical mapping references are invalid." }, { status: 400 });
+      return NextResponse.json({ message: "API mapping references are invalid." }, { status: 400 });
     }
 
-    const verticalName = vertical.name;
     const mappingFields = (mapping.fields as MappingFieldDoc[] | undefined) ?? [];
     const fields = getEffectiveMappingFields(
-      (vertical?.fields as VerticalFieldDoc[] | undefined) ?? [],
+      (vertical.fields as VerticalFieldDoc[] | undefined) ?? [],
       mappingFields
     ).map(toDocumentationField);
 
@@ -85,10 +85,11 @@ export async function GET(req: Request, context: Params) {
         sellerId: seller.name,
         sellerName: seller.name,
         verticalId: vertical.name,
-        verticalName,
+        verticalName: vertical.name,
         endpointUrl: buildFullEndpointUrl(requestUrl.origin, apiRequest.url),
         apiKey: apiRequest.apiKey,
         method: apiRequest.method,
+        apiType: normalizeMappingApiType(mapping.apiType),
       },
       fields,
       intakeSettings

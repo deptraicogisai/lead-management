@@ -6,12 +6,14 @@ import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
 import { toast } from "@/lib/toast";
+import { useListLoadState } from "@/lib/use-list-load-state";
 import { cn } from "@/lib/utils";
 import { formatVerticalFieldTypeLabel, type VerticalFieldOption } from "@/lib/vertical-field";
 
@@ -81,7 +83,8 @@ export default function IndustryFieldsPage() {
   const verticalName = searchParams.get("verticalName");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fields, setFields] = useState<ApiFieldConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
+  const isTableLoading = isInitialLoad || isRefreshing;
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -105,7 +108,7 @@ export default function IndustryFieldsPage() {
   const fetchFields = async () => {
     if (!verticalId) return;
 
-    setIsLoading(true);
+    beginLoad();
     try {
       const response = await fetch(`/api/industries/${encodeURIComponent(verticalId)}/fields`);
       if (!response.ok) return;
@@ -113,7 +116,7 @@ export default function IndustryFieldsPage() {
       setFields(data);
       setSelectedFieldIds((current) => current.filter((id) => data.some((field) => field.id === id)));
     } finally {
-      setIsLoading(false);
+      endLoad();
     }
   };
 
@@ -778,22 +781,24 @@ export default function IndustryFieldsPage() {
           <FormError error={actionError} />
         </div>
 
-        <DataTable<ApiFieldConfig>
-          columns={columns}
-          rows={rows}
-          emptyMessage={
-            isLoading
-              ? "Loading fields..."
-              : "No fields configured yet. Add a field or upload a JSON file to get started."
-          }
-          selectedRowIds={selectedFieldIds}
-          onToggleRow={handleToggleRow}
-          onToggleAllRows={handleToggleAllRows}
-          rowReorder={{
-            onReorder: handleReorderFields,
-            disabled: Boolean(editingFieldId) || isLoading,
-          }}
-        />
+        <ListTableContainer
+          isInitialLoad={Boolean(verticalId) && isInitialLoad}
+          isRefreshing={isRefreshing}
+          loadingMessage="Loading fields"
+        >
+          <DataTable<ApiFieldConfig>
+            columns={columns}
+            rows={rows}
+            emptyMessage="No fields configured yet. Add a field or upload a JSON file to get started."
+            selectedRowIds={selectedFieldIds}
+            onToggleRow={handleToggleRow}
+            onToggleAllRows={handleToggleAllRows}
+            rowReorder={{
+              onReorder: handleReorderFields,
+              disabled: Boolean(editingFieldId) || isTableLoading,
+            }}
+          />
+        </ListTableContainer>
       </PageSection>
 
       <Modal

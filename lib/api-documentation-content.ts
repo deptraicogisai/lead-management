@@ -1,4 +1,6 @@
 import { buildFieldExampleRequest, buildFieldExampleValue, getFieldOptionValues } from "@/lib/lead-field-value";
+import type { MappingApiType } from "@/lib/mapping-api-type";
+import { shouldIncludePublisherRedirectUrl } from "@/lib/mapping-api-type";
 
 export type DocumentationFieldOption = {
   label: string;
@@ -576,8 +578,9 @@ function nextSectionHeading(counter: { value: number }, title: string): Document
   };
 }
 
-export function buildDocumentationOutline(): DocumentationOutline {
+export function buildDocumentationOutline(apiType: MappingApiType = "Redirect"): DocumentationOutline {
   const counter = { value: 0 };
+  const leadResponseStatusDefinitions = buildLeadResponseStatusDefinitions(apiType);
 
   const overview = nextSectionHeading(counter, "Overview");
   const endpointInformation = nextSectionHeading(counter, "Endpoint Information");
@@ -586,7 +589,7 @@ export function buildDocumentationOutline(): DocumentationOutline {
   const exampleJsonRequest = nextSectionHeading(counter, "Example JSON Request");
   const codeSnippets = nextSectionHeading(counter, "Code Snippets");
   const responseStatus = nextSectionHeading(counter, "Response Status");
-  const responseStatusItems: DocumentationResponseStatusHeading[] = LEAD_RESPONSE_STATUS_DEFINITIONS.map(
+  const responseStatusItems: DocumentationResponseStatusHeading[] = leadResponseStatusDefinitions.map(
     (definition, index) => {
       const number = `${responseStatus.number}.${index + 1}`;
 
@@ -613,24 +616,17 @@ export function buildDocumentationOutline(): DocumentationOutline {
   };
 }
 
-export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = [
-  {
-    statusCode: 1,
-    title: "Accepted",
-    description: "The lead was accepted successfully. The response includes a redirect URL for the consumer.",
-    example: {
-      status: 1,
-      status_text: "Accepted",
-      redirect_url: "https://leads.system.com/redirect?id=81649f87d4e596a711d449970392ed67",
-    },
-  },
+const ACCEPTED_EXAMPLE_LEAD_ID = "81649f87d4e596a711d449970392ed67";
+const ACCEPTED_EXAMPLE_REDIRECT_URL = `https://leads.system.com/redirect?id=${ACCEPTED_EXAMPLE_LEAD_ID}`;
+
+const SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = [
   {
     statusCode: 2,
     title: "Reject",
     description: "The lead was rejected and will not be sold.",
     example: {
       status: 2,
-      status_text: "reject",
+      status_text: "Rejected",
       reasons: [
         { message: "Email is required." },
         { message: "State filter rejected. Allowed: AK. Received: AL." },
@@ -648,45 +644,79 @@ export const LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = 
   },
   {
     statusCode: 4,
-    title: "Authorization Failed",
-    description: "The request failed authorization. The API key is missing or invalid.",
+    title: "Authentication or Server Error",
+    description:
+      "The request failed due to authentication problems or an unexpected server error while processing the lead.",
     example: {
       status: 4,
-      errors: [
-        {
-          "Authorization Failed": "",
-        },
-      ],
+      status_text: "Authentication or server error",
+      reasons: "Authentication failed. API key is required.",
     },
   },
 ];
 
-export function buildSoldLeadResponse() {
-  return LEAD_RESPONSE_STATUS_DEFINITIONS[0].example;
+function buildAcceptedLeadResponseExample(apiType: MappingApiType): Record<string, unknown> {
+  const example: Record<string, unknown> = {
+    status: 1,
+    status_text: "Accepted",
+    lead_id: ACCEPTED_EXAMPLE_LEAD_ID,
+  };
+
+  if (shouldIncludePublisherRedirectUrl(apiType)) {
+    example.redirect_url = ACCEPTED_EXAMPLE_REDIRECT_URL;
+  }
+
+  return example;
+}
+
+function buildAcceptedLeadResponseDescription(apiType: MappingApiType) {
+  if (shouldIncludePublisherRedirectUrl(apiType)) {
+    return "The lead was accepted successfully.";
+  }
+
+  return "The lead was accepted successfully.";
+}
+
+export function buildLeadResponseStatusDefinitions(apiType: MappingApiType = "Redirect"): LeadResponseStatusDefinition[] {
+  return [
+    {
+      statusCode: 1,
+      title: "Accepted",
+      description: "The lead was accepted successfully.",
+      example: buildAcceptedLeadResponseExample(apiType),
+    },
+    ...SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS,
+  ];
+}
+
+export const LEAD_RESPONSE_STATUS_DEFINITIONS = buildLeadResponseStatusDefinitions("Redirect");
+
+export function buildSoldLeadResponse(apiType: MappingApiType = "Redirect") {
+  return buildAcceptedLeadResponseExample(apiType);
 }
 
 export function buildRejectLeadResponse() {
-  return LEAD_RESPONSE_STATUS_DEFINITIONS[1].example;
+  return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[0].example;
 }
 
 export function buildInProgressLeadResponse() {
-  return LEAD_RESPONSE_STATUS_DEFINITIONS[2].example;
+  return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[1].example;
 }
 
 export function buildAuthorizationFailedLeadResponse() {
-  return LEAD_RESPONSE_STATUS_DEFINITIONS[3].example;
+  return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[2].example;
 }
 
-export function buildSuccessResponse() {
-  return buildSoldLeadResponse();
+export function buildSuccessResponse(apiType: MappingApiType = "Redirect") {
+  return buildSoldLeadResponse(apiType);
 }
 
 export function buildLeadResponseStatusMarkdown(outline: DocumentationOutline) {
   const summaryTable = [
     "| Status | Name | Description |",
     "| --- | --- | --- |",
-    ...LEAD_RESPONSE_STATUS_DEFINITIONS.map(
-      (definition) => `| \`${definition.statusCode}\` | ${definition.title} | ${definition.description} |`
+    ...outline.responseStatusItems.map(
+      (item) => `| \`${item.definition.statusCode}\` | ${item.definition.title} | ${item.definition.description} |`
     ),
   ].join("\n");
 
