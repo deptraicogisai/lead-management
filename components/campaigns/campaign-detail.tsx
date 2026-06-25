@@ -229,8 +229,12 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     if (!campaign) return [];
 
     const allowedIds = new Set(buyerIntegrationIds);
-    return integrations.filter((item) => allowedIds.has(item.id));
-  }, [buyerIntegrationIds, campaign, integrations]);
+    return integrations.filter(
+      (item) =>
+        allowedIds.has(item.id) &&
+        (item.status === "Active" || item.id === integrationForm.integrationId)
+    );
+  }, [buyerIntegrationIds, campaign, integrations, integrationForm.integrationId]);
 
   useEffect(() => {
     if (!selectedIntegration) return;
@@ -788,12 +792,17 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                 <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-start">
                   <FieldLabel htmlFor="integration-select" label="Integration" required />
                   <div>
+                    <FormError error={integrationSelectError} />
                     <div className="flex min-w-0 items-center gap-2">
                     <select
                       id="integration-select"
                       value={integrationForm.integrationId}
                       onChange={(e) => handleIntegrationChange(e.target.value)}
-                      className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+                      className={cn(
+                        "min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
+                        Boolean(integrationSelectError) &&
+                          "animate-field-invalid border-red-400 focus:border-red-500 dark:border-red-500/70"
+                      )}
                     >
                       <option value="">Please select integration</option>
                       {availableBuyerIntegrations.map((item) => (
@@ -829,7 +838,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                       </span>
                     )}
                     </div>
-                    <FormError error={integrationSelectError} />
                     {availableBuyerIntegrations.length === 0 ? (
                       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                         No integrations are assigned to this buyer. Configure them in Buyer Integrations.

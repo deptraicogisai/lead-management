@@ -56,7 +56,7 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
     if (!mapping) return;
 
     const nextErrors: Record<string, string> = {};
-    if (!form.apiName.trim()) nextErrors.apiName = "API Name is required.";
+    if (!form.apiName.trim()) nextErrors.apiName = "Publisher Channel name is required.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -79,14 +79,14 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
 
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) {
-        setFormError(result?.message ?? "Failed to update API.");
+        setFormError(result?.message ?? "Failed to update publisher channel.");
         return;
       }
 
       onUpdated();
       handleClose();
     } catch {
-      setFormError("Failed to update API.");
+      setFormError("Failed to update publisher channel.");
     } finally {
       setIsSaving(false);
     }
@@ -95,7 +95,7 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
   return (
     <Modal
       open={open}
-      title="Edit API"
+      title="Edit Publisher Channel"
       onClose={handleClose}
       panelClassName="max-w-lg"
       actions={
@@ -112,15 +112,17 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
       }
     >
       <div className="space-y-4">
+        <FormError error={formError} />
         <div>
-          <FieldLabel htmlFor="edit-api-name" label="API Name" />
+          <FieldLabel htmlFor="edit-api-name" label="Publisher Channel" />
+          <FormError error={errors.apiName} />
           <Input
             id="edit-api-name"
             value={form.apiName}
+            invalid={Boolean(errors.apiName)}
             onChange={(event) => setForm((current) => ({ ...current, apiName: event.target.value }))}
-            placeholder="Enter API name"
+            placeholder="Enter publisher channel name"
           />
-          <FormError error={errors.apiName} />
         </div>
 
         <div>
@@ -166,8 +168,6 @@ export function EditSellerApiModal({ open, sellerId, mapping, onClose, onUpdated
             ))}
           </Select>
         </div>
-
-        <FormError error={formError} />
       </div>
     </Modal>
   );

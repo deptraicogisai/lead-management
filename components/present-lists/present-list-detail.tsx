@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SectionLoading } from "@/components/ui/loading-indicator";
+import { cn } from "@/lib/utils";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PAGE_SIZE_OPTIONS } from "@/lib/pagination";
@@ -315,14 +316,17 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
           </>
         }
       >
+        <FormError error={error} />
         <textarea
           value={valuesText}
           onChange={(e) => setValuesText(e.target.value)}
           rows={12}
           placeholder={"96017418\n96001013\n96001014"}
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
+          className={cn(
+            "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50",
+            Boolean(error) && "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70"
+          )}
         />
-        <FormError error={error} />
       </Modal>
 
       <Modal

@@ -98,6 +98,7 @@ const mappingFieldSchema = new Schema({
 
 const verticalMappingSchema = new Schema(
   {
+    displayId: { type: Number, required: false, unique: true, sparse: true, index: true },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: false, index: true },
     sellerRef: { type: Schema.Types.ObjectId, ref: "Seller", required: false, index: true },
     apiName: { type: String, trim: true, default: "" },
@@ -215,6 +216,44 @@ export async function ensureVerticalMappingReferencesMigrated() {
   }
 
   await referenceMigrationPromise;
+}
+
+let displayIdMigrationPromise: Promise<void> | null = null;
+
+export async function ensureVerticalMappingDisplayIdMigrated() {
+  if (!displayIdMigrationPromise) {
+    displayIdMigrationPromise = (async () => {
+      const mappings = await VerticalMappingModel.find().sort({ createdAt: 1 }).lean();
+      let nextDisplayId =
+        (
+          await VerticalMappingModel.findOne({ displayId: { $exists: true } })
+            .sort({ displayId: -1 })
+            .select({ displayId: 1 })
+            .lean()
+        )?.displayId ?? 0;
+
+      for (const mapping of mappings) {
+        if (!mapping.displayId) {
+          nextDisplayId += 1;
+          await VerticalMappingModel.updateOne({ _id: mapping._id }, { $set: { displayId: nextDisplayId } });
+        }
+      }
+    })().catch((error) => {
+      displayIdMigrationPromise = null;
+      throw error;
+    });
+  }
+
+  await displayIdMigrationPromise;
+}
+
+export async function getNextVerticalMappingDisplayId() {
+  await ensureVerticalMappingDisplayIdMigrated();
+  const latest = await VerticalMappingModel.findOne()
+    .sort({ displayId: -1 })
+    .select({ displayId: 1 })
+    .lean();
+  return (latest?.displayId ?? 0) + 1;
 }
 
 if (models.VerticalMapping) {

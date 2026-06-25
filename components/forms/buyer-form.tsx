@@ -40,25 +40,27 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
     <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
       <div>
         <FieldLabel htmlFor="buyer-name" label="Buyer Name" />
+        <FormError error={errors.name} />
         <Input
           id="buyer-name"
           value={form.name}
+          invalid={Boolean(errors.name)}
           onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           placeholder="Acme Financial"
         />
-        <FormError error={errors.name} />
       </div>
 
       <div>
         <FieldLabel htmlFor="buyer-email" label="Buyer Email" />
+        <FormError error={errors.email} />
         <Input
           id="buyer-email"
           type="email"
           value={form.email}
+          invalid={Boolean(errors.email)}
           onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
           placeholder="ops@acme.com"
         />
-        <FormError error={errors.email} />
       </div>
 
       <div>

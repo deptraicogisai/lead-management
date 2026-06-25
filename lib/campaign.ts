@@ -4,7 +4,7 @@ import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-
 
 export { getMaxRangeOptions, isGeneralFilterRangeValid };
 
-export type CampaignStatus = "Active" | "Paused" | "Disabled" | "Deleted";
+export type CampaignStatus = "Active" | "Disabled" | "Deleted";
 export type CampaignType = "Redirect" | "Silent";
 export type DuplicateMethod = "Email" | "SSN + Email";
 export type ScheduleAction = "Post" | "Do not post";
@@ -95,9 +95,9 @@ export type CampaignListRecord = Pick<
   | "createdAt"
 >;
 
-export const CAMPAIGN_STATUS_OPTIONS: CampaignStatus[] = ["Active", "Paused", "Disabled"];
-export const CAMPAIGN_STATUS_DETAIL_OPTIONS: CampaignStatus[] = ["Active", "Paused", "Disabled", "Deleted"];
-export const CAMPAIGN_STATUS_FILTER_OPTIONS = ["All", "Active", "Deleted", "Disabled", "Paused"] as const;
+export const CAMPAIGN_STATUS_OPTIONS: CampaignStatus[] = ["Active", "Disabled"];
+export const CAMPAIGN_STATUS_DETAIL_OPTIONS: CampaignStatus[] = ["Active", "Disabled", "Deleted"];
+export const CAMPAIGN_STATUS_FILTER_OPTIONS = ["All", "Active", "Deleted", "Disabled"] as const;
 
 export function buildCampaignListStatusFilter(statusFilter?: string | null): Record<string, unknown> {
   const value = statusFilter?.trim() ?? "";

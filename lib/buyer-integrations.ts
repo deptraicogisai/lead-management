@@ -1,5 +1,5 @@
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
-import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
+import { ensureIntegrationBuilderStatusMigrated, IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 
 export type IntegrationOption = {
@@ -20,6 +20,7 @@ export function formatIntegrationLabel(integration: {
 
 export async function getAvailableIntegrationOptions(): Promise<IntegrationOption[]> {
   await ensureVerticalCollectionMigrated();
+  await ensureIntegrationBuilderStatusMigrated();
 
   const [integrations, verticals] = await Promise.all([
     IntegrationBuilderModel.find(excludeDeletedStatusFilter()).sort({ displayId: -1 }).lean(),

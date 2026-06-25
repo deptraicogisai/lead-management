@@ -54,24 +54,26 @@ export function IndustryForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <FieldLabel htmlFor="industry-name" label="Vertical Name" />
+        <FormError error={errors.name} />
         <Input
           id="industry-name"
           value={form.name}
+          invalid={Boolean(errors.name)}
           onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
           placeholder="Mortgage"
         />
-        <FormError error={errors.name} />
       </div>
 
       <div>
         <FieldLabel htmlFor="industry-description" label="Description" />
+        <FormError error={errors.description} />
         <Input
           id="industry-description"
           value={form.description}
+          invalid={Boolean(errors.description)}
           onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
           placeholder="Describe this industry niche"
         />
-        <FormError error={errors.description} />
       </div>
 
       <div className="flex items-center justify-end gap-3">

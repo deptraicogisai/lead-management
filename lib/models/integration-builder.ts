@@ -77,7 +77,7 @@ const integrationBuilderSchema = new Schema(
   {
     displayId: { type: Number, required: true, unique: true, index: true },
     name: { type: String, required: true, trim: true },
-    status: { type: String, enum: ["Active", "Draft", "Paused", "Deleted"], required: true, default: "Active" },
+    status: { type: String, enum: ["Active", "Disabled", "Deleted"], required: true, default: "Active" },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     arrayMappings: { type: [arrayMappingEntrySchema], default: [] },
     requestMapping: { type: requestMappingSchema, required: false, default: undefined },
@@ -92,3 +92,19 @@ if (models.IntegrationBuilder) {
 }
 
 export const IntegrationBuilderModel = model("IntegrationBuilder", integrationBuilderSchema, "integration_builders");
+
+let integrationBuilderStatusMigrated = false;
+
+/** Convert legacy "Draft"/"Paused" integrations to "Disabled" since those statuses were removed. */
+export async function ensureIntegrationBuilderStatusMigrated() {
+  if (integrationBuilderStatusMigrated) {
+    return;
+  }
+
+  await IntegrationBuilderModel.updateMany(
+    { status: { $in: ["Draft", "Paused"] } },
+    { $set: { status: "Disabled" } }
+  );
+
+  integrationBuilderStatusMigrated = true;
+}

@@ -900,27 +900,30 @@ export default function IndustryFieldsPage() {
           </>
         }
       >
+        <FormError error={createErrors.form} />
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <FieldLabel htmlFor="create-field-name" label="Field Name" />
+            <FormError error={createErrors.fieldName} />
             <Input
               id="create-field-name"
               value={createDraft.fieldName}
+              invalid={Boolean(createErrors.fieldName)}
               onChange={(event) => updateCreateDraft({ fieldName: event.target.value })}
               placeholder="first_name"
             />
-            <FormError error={createErrors.fieldName} />
           </div>
 
           <div>
             <FieldLabel htmlFor="create-description" label="Description" />
+            <FormError error={createErrors.description} />
             <Input
               id="create-description"
               value={createDraft.description}
+              invalid={Boolean(createErrors.description)}
               onChange={(event) => updateCreateDraft({ description: event.target.value })}
               placeholder="First Name"
             />
-            <FormError error={createErrors.description} />
           </div>
 
           <div>
@@ -1001,22 +1004,21 @@ export default function IndustryFieldsPage() {
               {createDraft.emailDuplicateMode === "days" ? (
                 <div>
                   <FieldLabel htmlFor="create-email-duplicate-days" label="Duplicate Window (days)" />
+                  <FormError error={createErrors.emailDuplicateDays} />
                   <Input
                     id="create-email-duplicate-days"
                     type="number"
                     min={1}
                     value={createDraft.emailDuplicateDays}
+                    invalid={Boolean(createErrors.emailDuplicateDays)}
                     onChange={(event) => updateCreateDraft({ emailDuplicateDays: event.target.value })}
                     placeholder="30"
                   />
-                  <FormError error={createErrors.emailDuplicateDays} />
                 </div>
               ) : null}
             </>
           ) : null}
         </div>
-
-        <FormError error={createErrors.form} />
       </Modal>
 
       <Modal

@@ -3,6 +3,10 @@
 import { FieldLabel, FormError, Input } from "@/components/ui/form-controls";
 import { DEFAULT_POST_TIMEOUT_SECONDS } from "@/lib/campaign-integration-config";
 import type { IntegrationBuilderConfigField } from "@/lib/integration-builder";
+import { cn } from "@/lib/utils";
+
+const fieldErrorBorderClassName =
+  "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
 type CampaignIntegrationConfigFormProps = {
   fields: IntegrationBuilderConfigField[];
   values: Record<string, string>;
@@ -16,7 +20,8 @@ const selectClassName =
 function renderFieldControl(
   field: IntegrationBuilderConfigField,
   value: string,
-  onChange: (variableName: string, value: string) => void
+  onChange: (variableName: string, value: string) => void,
+  invalid: boolean
 ) {
   const inputId = `integration-config-${field.variableName}`;
 
@@ -26,7 +31,7 @@ function renderFieldControl(
         id={inputId}
         value={value}
         onChange={(event) => onChange(field.variableName, event.target.value)}
-        className={selectClassName}
+        className={cn(selectClassName, invalid && fieldErrorBorderClassName)}
       >
         <option value="">Select...</option>
         <option value="true">true</option>
@@ -42,6 +47,7 @@ function renderFieldControl(
         type="number"
         min={field.variableName === "timeout" ? 1 : undefined}
         value={value}
+        invalid={invalid}
         placeholder={field.variableName === "timeout" ? String(DEFAULT_POST_TIMEOUT_SECONDS) : undefined}
         onChange={(event) => onChange(field.variableName, event.target.value)}
       />
@@ -52,6 +58,7 @@ function renderFieldControl(
     <Input
       id={inputId}
       value={value}
+      invalid={invalid}
       onChange={(event) => onChange(field.variableName, event.target.value)}
       placeholder={field.label}
     />
@@ -82,8 +89,8 @@ export function CampaignIntegrationConfigForm({
             required={field.required}
           />
           <div>
-            {renderFieldControl(field, values[field.variableName] ?? "", onChange)}
             <FormError error={errors[field.variableName]} />
+            {renderFieldControl(field, values[field.variableName] ?? "", onChange, Boolean(errors[field.variableName]))}
           </div>
         </div>
       ))}

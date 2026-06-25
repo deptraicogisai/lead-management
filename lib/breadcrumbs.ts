@@ -71,7 +71,7 @@ function buildPublisherApiBreadcrumbs(
   tail: BreadcrumbItem[]
 ) {
   if (!hasPublisherContext(context)) {
-    return [{ label: "API Configuration", href: "/api-config" }, ...tail];
+    return [{ label: "Publisher Channel", href: "/api-config" }, ...tail];
   }
 
   return [
@@ -253,12 +253,13 @@ function buildApiConfigBreadcrumbs(pathname: string, searchParams?: Pick<URLSear
           { label: "Publisher Management" },
           { label: "Publisher List", href: "/sellers" },
           { label: context.sellerName || "Publisher Detail" },
+          { label: "Publisher Channel" },
         ]
-      : [{ label: "API Configuration" }];
+      : [{ label: "Publisher Channel" }];
 
     return {
       items: withDashboard(items),
-      pageTitle: context.sellerName || (hasPublisherContext(context) ? "Publisher Detail" : "API Configuration"),
+      pageTitle: "Publisher Channel",
     };
   }
 

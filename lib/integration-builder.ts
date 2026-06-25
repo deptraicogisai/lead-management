@@ -1,11 +1,10 @@
 import { normalizeResponseMapping } from "@/lib/response-mapping";
 
-export type IntegrationBuilderStatus = "Active" | "Draft" | "Paused" | "Deleted";
+export type IntegrationBuilderStatus = "Active" | "Disabled" | "Deleted";
 
 export const INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS: IntegrationBuilderStatus[] = [
   "Active",
-  "Draft",
-  "Paused",
+  "Disabled",
   "Deleted",
 ];
 

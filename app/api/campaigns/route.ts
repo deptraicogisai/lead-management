@@ -12,7 +12,7 @@ import {
 } from "@/lib/campaign";
 import { buildCampaignImportCreateData, buildCampaignImportName, parseCampaignImportSchema } from "@/lib/campaign-import";
 import type { CampaignExportPayload } from "@/lib/campaign-export";
-import { CampaignModel, getNextCampaignDisplayId } from "@/lib/models/campaign";
+import { CampaignModel, ensureCampaignStatusMigrated, getNextCampaignDisplayId } from "@/lib/models/campaign";
 import { BuyerModel, ensureBuyerFieldsMigrated } from "@/lib/models/buyer";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
@@ -56,6 +56,9 @@ export async function GET(req: Request) {
     const typeFilter = normalizeSearchParam(searchParams.get("type"));
     const dateFrom = parseDate(searchParams.get("dateFrom"));
     const dateTo = parseDate(searchParams.get("dateTo"));
+
+    await connectToDatabase();
+    await ensureCampaignStatusMigrated();
 
     const filter: Record<string, unknown> = {};
 

@@ -8,6 +8,7 @@ import {
   Pencil,
   Settings2,
 } from "lucide-react";
+import { IdBadge } from "@/components/ui/id-badge";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { CreateSellerApiModal } from "@/components/api-config/create-seller-api-modal";
 import { EditSellerApiModal } from "@/components/api-config/edit-seller-api-modal";
@@ -30,8 +31,10 @@ import { cn } from "@/lib/utils";
 
 type SellerVertical = {
   id: string;
+  displayId: number | null;
   verticalId: string;
   verticalName: string;
+  publisherName: string;
   apiName: string;
   apiType: "Redirect" | "Silent";
   status: "Active" | "Inactive";
@@ -92,7 +95,22 @@ export default function ApiConfigPage() {
   };
 
   const verticalColumns: Column<SellerVertical>[] = [
-    { key: "apiName", label: "API Name", render: (row) => <span className="font-medium">{row.apiName}</span> },
+    {
+      key: "displayId",
+      label: "ID",
+      sortValue: (row) => row.displayId ?? 0,
+      render: (row) => <IdBadge id={row.displayId ?? "-"} />,
+    },
+    {
+      key: "apiName",
+      label: "Publisher Channel",
+      render: (row) => <span className="font-medium">{row.apiName}</span>,
+    },
+    {
+      key: "publisherName",
+      label: "Publisher",
+      render: (row) => row.publisherName || sellerName || "—",
+    },
     { key: "verticalName", label: "Vertical Name" },
     { key: "apiType", label: "Type", render: (row) => row.apiType },
     {
@@ -150,31 +168,31 @@ export default function ApiConfigPage() {
     <div className="space-y-6">
       {sellerId ? (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Generating API config for seller: <span className="font-semibold">{sellerName ?? sellerId}</span>
+          Publisher channels for: <span className="font-semibold">{sellerName ?? sellerId}</span>
         </div>
       ) : (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Please open API config from the Publisher List for a specific publisher.
+          Please open Publisher Channel from the Publisher List for a specific publisher.
         </div>
       )}
 
       <PageSection
         actions={
           sellerId ? (
-            <AddNewButton onClick={() => setIsCreateOpen(true)}>Create API</AddNewButton>
+            <AddNewButton onClick={() => setIsCreateOpen(true)}>Create Publisher Channel</AddNewButton>
           ) : null
         }
       >
         <ListTableContainer
           isInitialLoad={Boolean(sellerId) && isInitialLoad}
           isRefreshing={isRefreshing}
-          loadingMessage="Loading APIs"
+          loadingMessage="Loading publisher channels"
           skeletonRows={8}
         >
           <DataTable<SellerVertical>
             columns={verticalColumns}
             rows={verticalRows}
-            emptyMessage="No APIs configured for this seller yet."
+            emptyMessage="No publisher channels configured for this publisher yet."
           />
         </ListTableContainer>
       </PageSection>
@@ -196,8 +214,8 @@ export default function ApiConfigPage() {
           />
           <Modal
             open={Boolean(deletingRow)}
-            title="Delete API"
-            description={`Delete API "${deletingRow?.apiName ?? ""}"? This action cannot be undone.`}
+            title="Delete Publisher Channel"
+            description={`Delete publisher channel "${deletingRow?.apiName ?? ""}"? This action cannot be undone.`}
             onClose={() => {
               if (!isDeleting) setDeletingRow(null);
             }}

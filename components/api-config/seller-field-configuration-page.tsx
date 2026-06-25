@@ -970,27 +970,30 @@ export function SellerFieldConfigurationPage() {
           </>
         }
       >
+        <FormError error={createErrors.form} />
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <FieldLabel htmlFor="create-mapping-field-name" label="Field Name" />
+            <FormError error={createErrors.fieldName} />
             <Input
               id="create-mapping-field-name"
               value={createDraft.fieldName}
+              invalid={Boolean(createErrors.fieldName)}
               onChange={(event) => updateCreateDraft({ fieldName: event.target.value })}
               placeholder="phone_number"
             />
-            <FormError error={createErrors.fieldName} />
           </div>
 
           <div>
             <FieldLabel htmlFor="create-mapping-description" label="Description" />
+            <FormError error={createErrors.description} />
             <Input
               id="create-mapping-description"
               value={createDraft.description}
+              invalid={Boolean(createErrors.description)}
               onChange={(event) => updateCreateDraft({ description: event.target.value })}
               placeholder="Phone Number"
             />
-            <FormError error={createErrors.description} />
           </div>
 
           <div>
@@ -1082,15 +1085,16 @@ export function SellerFieldConfigurationPage() {
               {createDraft.emailDuplicateMode === "days" ? (
                 <div>
                   <FieldLabel htmlFor="create-mapping-email-duplicate-days" label="Duplicate Window (days)" />
+                  <FormError error={createErrors.emailDuplicateDays} />
                   <Input
                     id="create-mapping-email-duplicate-days"
                     type="number"
                     min={1}
                     value={createDraft.emailDuplicateDays}
+                    invalid={Boolean(createErrors.emailDuplicateDays)}
                     onChange={(event) => updateCreateDraft({ emailDuplicateDays: event.target.value })}
                     placeholder="30"
                   />
-                  <FormError error={createErrors.emailDuplicateDays} />
                 </div>
               ) : null}
             </>
@@ -1128,8 +1132,6 @@ export function SellerFieldConfigurationPage() {
             </div>
           )}
         </div>
-
-        <FormError error={createErrors.form} />
       </Modal>
 
       <Modal

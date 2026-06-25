@@ -5,7 +5,7 @@ type LoginBrandMarkProps = {
 export function LoginBrandMark({ className }: LoginBrandMarkProps) {
   return (
     <div className={className} aria-hidden="true">
-      <div className="mx-auto max-w-[300px] rounded-3xl border border-slate-100 bg-gradient-to-br from-emerald-50/80 via-blue-50/60 to-slate-50 p-4 dark:border-slate-700 dark:from-emerald-950/40 dark:via-slate-800 dark:to-slate-900">
+      <div className="mx-auto max-w-[220px] rounded-3xl border border-slate-100 bg-gradient-to-br from-emerald-50/80 via-blue-50/60 to-slate-50 p-3 sm:max-w-[300px] sm:p-4 dark:border-slate-700 dark:from-emerald-950/40 dark:via-slate-800 dark:to-slate-900">
         <svg
         viewBox="0 0 320 120"
         fill="none"
@@ -129,11 +129,11 @@ export function LoginBrandMark({ className }: LoginBrandMarkProps) {
       </svg>
       </div>
 
-      <div className="mt-4 text-center">
-        <p className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+      <div className="mt-3 text-center sm:mt-4">
+        <p className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl dark:text-slate-100">
           Lead<span className="text-emerald-700 dark:text-emerald-400">Flow</span>
         </p>
-        <p className="mt-1 text-xs font-medium uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+        <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.28em] text-slate-400 sm:text-xs dark:text-slate-500">
           Lead Management Platform
         </p>
       </div>

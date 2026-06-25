@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Download } from "lucide-react";
+import { ChevronDown, Download, RotateCcw } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
 import {
   AddNewButton,
@@ -139,6 +139,7 @@ export function CampaignsPage() {
   const [deleteMode, setDeleteMode] = useState<"single" | "bulk" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CampaignListRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -430,6 +431,34 @@ export function CampaignsPage() {
     }
   };
 
+  const handleRestore = async (row: CampaignListRecord) => {
+    setRestoringId(row.id);
+
+    try {
+      const [response] = await Promise.all([
+        fetch(`/api/campaigns/${encodeURIComponent(row.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ section: "general", status: "Disabled" }),
+        }),
+        new Promise((resolve) => setTimeout(resolve, 700)),
+      ]);
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        toast.error(result?.message ?? "Failed to restore campaign.");
+        return;
+      }
+
+      toast.success("Campaign restored.");
+      setReloadKey((current) => current + 1);
+    } catch {
+      toast.error("Failed to restore campaign.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const columns: Column<CampaignListRecord>[] = [
     {
       key: "id",
@@ -489,9 +518,26 @@ export function CampaignsPage() {
           >
             {exportingId === row.id ? "Exporting..." : "Export"}
           </TableActionButton>
-          <TableActionButton variant="danger" onClick={() => openSingleDelete(row)}>
-            Delete
-          </TableActionButton>
+          {row.status === "Deleted" ? (
+            <TableActionButton
+              type="button"
+              icon={false}
+              onClick={() => void handleRestore(row)}
+              disabled={restoringId === row.id}
+              className="min-w-[6.5rem] justify-center"
+            >
+              <RotateCcw
+                size={12}
+                aria-hidden
+                className={cn("shrink-0", restoringId === row.id && "animate-spin")}
+              />
+              {restoringId === row.id ? "Restoring..." : "Restore"}
+            </TableActionButton>
+          ) : (
+            <TableActionButton variant="danger" onClick={() => openSingleDelete(row)}>
+              Delete
+            </TableActionButton>
+          )}
         </div>
       ),
     },
@@ -760,9 +806,9 @@ export function CampaignsPage() {
         title={deleteMode === "bulk" ? "Delete Selected Campaigns" : "Delete Campaign"}
         description={
           deleteMode === "bulk"
-            ? `Delete ${selectedIds.length} selected campaign(s)? This action cannot be undone.`
+            ? `Delete ${selectedIds.length} selected campaign(s)? Their status will change to Deleted and can be restored later.`
             : deleteTarget
-              ? `Delete campaign "${deleteTarget.name}"? This action cannot be undone.`
+              ? `Delete campaign "${deleteTarget.name}"? Its status will change to Deleted and can be restored later.`
               : undefined
         }
         onClose={closeDeleteModal}

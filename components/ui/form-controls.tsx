@@ -54,11 +54,25 @@ const fieldControlClassName =
 const fieldControlDisabledClassName =
   "cursor-not-allowed bg-slate-100 text-slate-500 opacity-70 dark:bg-slate-900/60 dark:text-slate-400";
 
-export function FormError({ error }: { error?: string }) {
+export function FormError({ error, className }: { error?: string; className?: string }) {
   if (!error) return null;
 
-  return <p className="mt-1 text-xs text-red-600 dark:text-red-300">{error}</p>;
+  return (
+    <div
+      role="alert"
+      data-form-error="true"
+      className={cn(
+        "animate-field-error mb-2 rounded-lg border border-red-200 bg-red-100 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-200",
+        className
+      )}
+    >
+      {error}
+    </div>
+  );
 }
+
+const fieldInvalidClassName =
+  "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500 dark:focus:ring-red-500/25";
 
 export function FieldLabel({
   htmlFor,
@@ -77,16 +91,17 @@ export function FieldLabel({
   );
 }
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
-  { className, disabled, readOnly, tabIndex, ...restProps },
-  ref
-) {
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }
+>(function Input({ className, disabled, readOnly, tabIndex, invalid, ...restProps }, ref) {
   return (
     <input
       ref={ref}
       disabled={disabled}
       readOnly={disabled ? true : readOnly}
       tabIndex={disabled ? -1 : tabIndex}
+      aria-invalid={invalid || undefined}
       {...restProps}
       className={cn(
         "w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition duration-200 dark:placeholder:text-slate-400",
@@ -94,7 +109,8 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
           ? "pointer-events-none cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 caret-transparent selection:bg-transparent focus:border-slate-200 focus:ring-0 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400"
           : cn(
               fieldControlClassName,
-              "focus:-translate-y-px"
+              "focus:-translate-y-px",
+              invalid && fieldInvalidClassName
             ),
         className
       )}
@@ -102,20 +118,22 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   );
 });
 
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select(
-  { className, disabled, children, ...restProps },
-  ref
-) {
+export const Select = forwardRef<
+  HTMLSelectElement,
+  SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }
+>(function Select({ className, disabled, invalid, children, ...restProps }, ref) {
   return (
     <div className="relative">
       <select
         ref={ref}
         disabled={disabled}
+        aria-invalid={invalid || undefined}
         {...restProps}
         className={cn(
           fieldControlClassName,
           "appearance-none px-3 py-2.5 pr-10",
           disabled && fieldControlDisabledClassName,
+          invalid && fieldInvalidClassName,
           className
         )}
       >

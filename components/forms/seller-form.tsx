@@ -92,25 +92,27 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <FieldLabel htmlFor="seller-name" label="Publisher Name" />
+        <FormError error={errors.name} />
         <Input
           id="seller-name"
           value={form.name}
+          invalid={Boolean(errors.name)}
           onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           placeholder="NorthStar Media"
         />
-        <FormError error={errors.name} />
       </div>
 
       <div>
         <FieldLabel htmlFor="seller-email" label="Publisher Email" />
+        <FormError error={errors.email} />
         <Input
           id="seller-email"
           type="email"
           value={form.email}
+          invalid={Boolean(errors.email)}
           onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
           placeholder="ops@northstar.com"
         />
-        <FormError error={errors.email} />
       </div>
 
       <div>

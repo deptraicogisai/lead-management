@@ -64,7 +64,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
 
   const handleSubmit = async () => {
     const nextErrors: Record<string, string> = {};
-    if (!form.apiName.trim()) nextErrors.apiName = "API Name is required.";
+    if (!form.apiName.trim()) nextErrors.apiName = "Publisher Channel name is required.";
     if (!form.verticalId) nextErrors.verticalId = "Vertical is required.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -86,7 +86,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
 
       const result = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) {
-        setFormError(result?.message ?? "Failed to create API.");
+        setFormError(result?.message ?? "Failed to create publisher channel.");
         return;
       }
 
@@ -94,7 +94,7 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
       onCreated();
       onClose();
     } catch {
-      setFormError("Failed to create API.");
+      setFormError("Failed to create publisher channel.");
     } finally {
       setIsSaving(false);
     }
@@ -103,8 +103,8 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
   return (
     <Modal
       open={open}
-      title="Create API"
-      description="Each API receives a unique API key. A seller can have multiple APIs, including multiple APIs for the same vertical."
+      title="Create Publisher Channel"
+      description="Each publisher channel receives a unique API key. A publisher can have multiple channels, including multiple channels for the same vertical."
       onClose={handleClose}
       panelClassName="max-w-lg"
       actions={
@@ -115,28 +115,32 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
             
           >Cancel</CancelButton>
           <PrimaryButton type="button" disabled={isSaving} onClick={() => void handleSubmit()}>
-            {isSaving ? "Creating..." : "Create API"}
+            {isSaving ? "Creating..." : "Create Publisher Channel"}
           </PrimaryButton>
         </>
       }
     >
       <div className="space-y-4">
+        <FormError error={formError} />
         <div>
-          <FieldLabel htmlFor="create-api-name" label="API Name" />
+          <FieldLabel htmlFor="create-api-name" label="Publisher Channel" />
+          <FormError error={errors.apiName} />
           <Input
             id="create-api-name"
             value={form.apiName}
+            invalid={Boolean(errors.apiName)}
             onChange={(event) => setForm((current) => ({ ...current, apiName: event.target.value }))}
-            placeholder="Enter API name"
+            placeholder="Enter publisher channel name"
           />
-          <FormError error={errors.apiName} />
         </div>
 
         <div>
           <FieldLabel htmlFor="create-api-vertical" label="Vertical" />
+          <FormError error={errors.verticalId} />
           <Select
             id="create-api-vertical"
             value={form.verticalId}
+            invalid={Boolean(errors.verticalId)}
             disabled={isLoadingVerticals}
             onChange={(event) => setForm((current) => ({ ...current, verticalId: event.target.value }))}
           >
@@ -147,7 +151,6 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
               </option>
             ))}
           </Select>
-          <FormError error={errors.verticalId} />
         </div>
 
         <div>
@@ -188,8 +191,6 @@ export function CreateSellerApiModal({ open, sellerId, onClose, onCreated }: Cre
             ))}
           </Select>
         </div>
-
-        <FormError error={formError} />
       </div>
     </Modal>
   );

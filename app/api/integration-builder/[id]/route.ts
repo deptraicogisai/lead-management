@@ -134,7 +134,14 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json({ message: "Invalid integration builder id." }, { status: 400 });
     }
 
-    if (!body.name?.trim() && !body.arrayMappings && !body.requestMapping && !body.responseMapping && !body.configFields) {
+    if (
+      !body.name?.trim() &&
+      !body.status &&
+      !body.arrayMappings &&
+      !body.requestMapping &&
+      !body.responseMapping &&
+      !body.configFields
+    ) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
     }
 

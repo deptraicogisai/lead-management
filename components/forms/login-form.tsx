@@ -94,14 +94,15 @@ export function LoginForm() {
         <label htmlFor="login-identifier" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
           Email or username
         </label>
+        <FormError error={errors.identifier} />
         <Input
           id="login-identifier"
           autoComplete="username"
           value={identifier}
+          invalid={Boolean(errors.identifier)}
           onChange={(event) => setIdentifier(event.target.value)}
           placeholder="Enter your email or username"
         />
-        <FormError error={errors.identifier} />
       </div>
 
       <div className="space-y-2">
@@ -112,12 +113,14 @@ export function LoginForm() {
           <span className="text-xs font-medium text-slate-400 dark:text-slate-300">Secure access</span>
         </div>
 
+        <FormError error={errors.password} />
         <div className="relative">
           <Input
             id="login-password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             value={password}
+            invalid={Boolean(errors.password)}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Enter your password"
             className="pr-11"
@@ -131,7 +134,6 @@ export function LoginForm() {
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
-        <FormError error={errors.password} />
       </div>
 
       <div className="flex items-center justify-between gap-3">

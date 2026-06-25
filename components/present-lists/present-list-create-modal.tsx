@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { CancelButton, FieldLabel, FormError, Input, PrimaryButton, cancelButtonClassName } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { cn } from "@/lib/utils";
 import {
   PRESENT_LIST_EXPIRATION_OPTIONS,
   PRESENT_LIST_TYPE_OPTIONS,
   type PresentListRecord } from "@/lib/present-list";
 import type { ApiFieldConfig } from "@/lib/mock-data";
+
+const fieldErrorBorderClassName =
+  "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
 
 type Option = { id: string; label: string };
 
@@ -161,13 +165,15 @@ export function PresentListCreateModal({
       }
     >
       <div className="grid gap-4">
+        <FormError error={errors.form} />
         <div>
           <FieldLabel htmlFor="pl-name" label="PL/DNPL List Name" />
-          <Input id="pl-name" value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
           <FormError error={errors.name} />
+          <Input id="pl-name" value={form.name} invalid={Boolean(errors.name)} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
         </div>
         <div>
           <FieldLabel htmlFor="pl-product" label="Product" />
+          <FormError error={errors.verticalId} />
           {isEditing ? (
             <Input
               id="pl-product"
@@ -180,7 +186,10 @@ export function PresentListCreateModal({
               id="pl-product"
               value={form.verticalId}
               onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value, applyToField: "" }))}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+              className={cn(
+                "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
+                Boolean(errors.verticalId) && fieldErrorBorderClassName
+              )}
             >
               <option value="">Please select</option>
               {verticalOptions.map((option) => (
@@ -190,16 +199,19 @@ export function PresentListCreateModal({
               ))}
             </select>
           )}
-          <FormError error={errors.verticalId} />
         </div>
         <div>
           <FieldLabel htmlFor="pl-field" label="Apply To Field" />
+          <FormError error={errors.applyToField} />
           <select
             id="pl-field"
             value={form.applyToField}
             onChange={(e) => setForm((c) => ({ ...c, applyToField: e.target.value }))}
             disabled={!verticalId}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:disabled:bg-slate-800/80"
+            className={cn(
+              "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:disabled:bg-slate-800/80",
+              Boolean(errors.applyToField) && fieldErrorBorderClassName
+            )}
           >
             <option value="">Please select</option>
             {fieldOptions.map((field) => (
@@ -208,7 +220,6 @@ export function PresentListCreateModal({
               </option>
             ))}
           </select>
-          <FormError error={errors.applyToField} />
         </div>
         <div>
           <FieldLabel htmlFor="pl-expiration" label="Default Expiration Period" />
@@ -227,11 +238,15 @@ export function PresentListCreateModal({
         </div>
         <div>
           <FieldLabel htmlFor="pl-type" label="List Type" />
+          <FormError error={errors.listType} />
           <select
             id="pl-type"
             value={form.listType}
             onChange={(e) => setForm((c) => ({ ...c, listType: e.target.value }))}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+            className={cn(
+              "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
+              Boolean(errors.listType) && fieldErrorBorderClassName
+            )}
           >
             <option value="">Please select</option>
             {PRESENT_LIST_TYPE_OPTIONS.map((type) => (
@@ -240,7 +255,6 @@ export function PresentListCreateModal({
               </option>
             ))}
           </select>
-          <FormError error={errors.listType} />
         </div>
         {isEditing ? (
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
@@ -252,7 +266,6 @@ export function PresentListCreateModal({
             Allow API Access
           </label>
         ) : null}
-        <FormError error={errors.form} />
       </div>
     </Modal>
   );

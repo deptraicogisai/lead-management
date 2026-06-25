@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { SellerModel } from "@/lib/models/seller";
-import { ensureVerticalMappingReferencesMigrated, VerticalMappingModel } from "@/lib/models/vertical-mapping";
+import {
+  ensureVerticalMappingDisplayIdMigrated,
+  ensureVerticalMappingReferencesMigrated,
+  getNextVerticalMappingDisplayId,
+  VerticalMappingModel,
+} from "@/lib/models/vertical-mapping";
 import { generateUniqueMappingApiRequest } from "@/lib/mapping-api-request";
 import { normalizeMappingApiType, type MappingApiType } from "@/lib/mapping-api-type";
 import { buildCopiedFieldsFromVertical } from "@/lib/mapping-fields";
@@ -20,6 +25,7 @@ type CreateSellerVerticalPayload = {
 
 function toSellerVerticalResponse(mapping: {
   _id?: { toString(): string };
+  displayId?: number | null;
   apiName?: string | null;
   apiType?: string | null;
   status?: string | null;
@@ -30,11 +36,14 @@ function toSellerVerticalResponse(mapping: {
   } | null;
   verticalId: string;
   verticalName: string;
+  publisherName?: string;
 }) {
   return {
     id: mapping._id?.toString() ?? "",
+    displayId: mapping.displayId ?? null,
     verticalId: mapping.verticalId,
     verticalName: mapping.verticalName,
+    publisherName: mapping.publisherName?.trim() || "",
     apiName: mapping.apiName?.trim() || mapping.verticalName,
     apiType: normalizeMappingApiType(mapping.apiType),
     status:
@@ -55,8 +64,9 @@ export async function GET(req: Request, context: Params) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureVerticalMappingReferencesMigrated();
+    await ensureVerticalMappingDisplayIdMigrated();
 
-    const seller = await SellerModel.findById(id, { _id: 1 }).lean();
+    const seller = await SellerModel.findById(id, { _id: 1, name: 1 }).lean();
     if (!seller) {
       return NextResponse.json({ message: "Seller not found." }, { status: 404 });
     }
@@ -88,12 +98,14 @@ export async function GET(req: Request, context: Params) {
 
           return toSellerVerticalResponse({
             _id: mapping._id,
+            displayId: mapping.displayId,
             apiName: mapping.apiName,
             apiType: mapping.apiType,
             status: mapping.status,
             apiRequest: mapping.apiRequest,
             verticalId: vertical.id,
             verticalName: vertical.name,
+            publisherName: seller.name ?? "",
           });
         })
         .filter((mapping): mapping is NonNullable<typeof mapping> => Boolean(mapping))
@@ -109,7 +121,7 @@ export async function POST(req: Request, context: Params) {
     const body = (await req.json()) as CreateSellerVerticalPayload;
 
     if (!body.apiName?.trim()) {
-      return NextResponse.json({ message: "API Name is required." }, { status: 400 });
+      return NextResponse.json({ message: "Publisher Channel name is required." }, { status: 400 });
     }
 
     if (!body.verticalId?.trim()) {
@@ -122,6 +134,7 @@ export async function POST(req: Request, context: Params) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureVerticalMappingReferencesMigrated();
+    await ensureVerticalMappingDisplayIdMigrated();
 
     const [seller, vertical] = await Promise.all([
       SellerModel.findById(id),
@@ -139,6 +152,7 @@ export async function POST(req: Request, context: Params) {
     const apiRequest = await generateUniqueMappingApiRequest(seller._id.toString());
 
     const mapping = await VerticalMappingModel.create({
+      displayId: await getNextVerticalMappingDisplayId(),
       sellerRef: seller._id,
       verticalRef: vertical._id,
       apiName: body.apiName.trim(),
@@ -151,12 +165,14 @@ export async function POST(req: Request, context: Params) {
     return NextResponse.json(
       toSellerVerticalResponse({
         _id: mapping._id,
+        displayId: mapping.displayId,
         apiName: mapping.apiName,
         apiType: mapping.apiType,
         status: mapping.status,
         apiRequest: mapping.apiRequest,
         verticalId: vertical._id.toString(),
         verticalName: vertical.name,
+        publisherName: seller.name ?? "",
       }),
       { status: 201 }
     );

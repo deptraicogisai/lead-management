@@ -175,11 +175,20 @@ function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
   const primary =
     redirectAttempt ??
     silentAttempt ??
-    deliveries.find((entry) => entry.buyerStatus !== "Skipped") ??
-    deliveries[0];
+    deliveries.find((entry) => entry.buyerStatus !== "Skipped");
 
+  // No lead actually reached a buyer: campaign is not in the ping tree, every
+  // campaign is disabled, the buyer is disabled, or the integration is
+  // disabled/missing. Surface a filter/duplicate reason when one exists,
+  // otherwise report "Buyer not found." so the publisher always gets a
+  // consistent reject reason for these gate conditions.
   if (!primary) {
-    return "Lead was not sold to any buyer.";
+    const validationSkip = deliveries.find(
+      (entry) => entry.buyerStatus === "Skipped" && entry.validationErrors.length > 0
+    );
+    return validationSkip
+      ? validationSkip.validationErrors.join(" | ")
+      : SILENT_API_NO_BUYER_MESSAGE;
   }
 
   if (primary.buyerStatus === "Price Reject" || primary.buyerStatus === "Price Conflict") {
@@ -190,10 +199,6 @@ function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
     return primary.rejectReason
       ? `Lead was not sold: ${primary.rejectReason}`
       : "Lead was not sold to any buyer.";
-  }
-
-  if (primary.buyerStatus === "Skipped" && primary.validationErrors.length > 0) {
-    return primary.validationErrors.join(" | ");
   }
 
   return "Lead was not sold to any buyer.";
@@ -680,9 +685,9 @@ async function processCampaignAttempt(params: {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "integration-config",
       label: "Integration Configuration",
-      status: "error",
+      status: "skip",
       summary: errorReason,
-      result: errorStepResult(errorReason),
+      result: skippedStepResult(errorReason),
     });
 
     const log: CampaignDeliveryLog = {
@@ -692,7 +697,7 @@ async function processCampaignAttempt(params: {
       buyerCompany,
       pingTreeType: params.pingTreeType,
       campaignOrder: params.campaignOrder,
-      buyerStatus: "Error",
+      buyerStatus: "Skipped",
       validationErrors: [],
       price: null,
       redirectUrl: "",
@@ -717,7 +722,7 @@ async function processCampaignAttempt(params: {
       buyerRef: new Types.ObjectId(buyerId),
       pingTreeType: params.pingTreeType,
       campaignOrder: params.campaignOrder,
-      buyerStatus: "Error",
+      buyerStatus: "Skipped",
       errorReason,
       deliveryTrace: traceSteps,
       duplicateFingerprint,
@@ -733,9 +738,9 @@ async function processCampaignAttempt(params: {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "integration-config",
       label: "Integration Configuration",
-      status: "error",
+      status: "skip",
       summary: errorReason,
-      result: errorStepResult(errorReason),
+      result: skippedStepResult(errorReason),
     });
 
     return {
@@ -745,7 +750,41 @@ async function processCampaignAttempt(params: {
       buyerCompany,
       pingTreeType: params.pingTreeType,
       campaignOrder: params.campaignOrder,
-      buyerStatus: "Error" as const,
+      buyerStatus: "Skipped" as const,
+      validationErrors: [],
+      price: null,
+      redirectUrl: "",
+      rejectSign: "",
+      rejectReason: "",
+      errorReason,
+      postLeadUrl: "",
+      httpStatus: 0,
+      traceSteps,
+      campaignValidationChecks,
+      campaignIntakeRuleGroups,
+      campaignTimezone,
+      campaignMinPrice,
+    };
+  }
+
+  if (integration.status !== "Active") {
+    const errorReason = `Integration "${integration.name}" is "${integration.status}". Only Active integrations post to the buyer.`;
+    traceSteps = appendBuyerPostTraceStep(traceSteps, {
+      key: "integration-config",
+      label: "Integration Configuration",
+      status: "skip",
+      summary: errorReason,
+      result: skippedStepResult(errorReason),
+    });
+
+    return {
+      campaignId: params.campaignId,
+      campaignName,
+      buyerId,
+      buyerCompany,
+      pingTreeType: params.pingTreeType,
+      campaignOrder: params.campaignOrder,
+      buyerStatus: "Skipped" as const,
       validationErrors: [],
       price: null,
       redirectUrl: "",

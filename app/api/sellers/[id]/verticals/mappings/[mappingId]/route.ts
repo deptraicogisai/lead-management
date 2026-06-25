@@ -26,7 +26,7 @@ async function findSellerMapping(sellerId: string, mappingId: string) {
   });
 
   if (!mapping) {
-    return { error: NextResponse.json({ message: "Seller API not found." }, { status: 404 }) };
+    return { error: NextResponse.json({ message: "Publisher Channel not found." }, { status: 404 }) };
   }
 
   return { mapping };
@@ -38,7 +38,7 @@ export async function PATCH(req: Request, context: Params) {
     const body = (await req.json()) as UpdateSellerVerticalPayload;
 
     if (!body.apiName?.trim()) {
-      return NextResponse.json({ message: "API Name is required." }, { status: 400 });
+      return NextResponse.json({ message: "Publisher Channel name is required." }, { status: 400 });
     }
 
     const status =

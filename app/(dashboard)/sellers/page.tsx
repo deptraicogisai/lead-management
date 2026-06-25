@@ -275,7 +275,7 @@ export default function SellersPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <TableActionLink href={apiConfigHref(row)}>API Config</TableActionLink>
+          <TableActionLink href={apiConfigHref(row)}>Channel</TableActionLink>
           <TableActionButton onClick={() => handleEdit(row)}>Edit</TableActionButton>
           <TableActionButton variant="danger" onClick={() => setDeleteTarget(row)}>
             Delete

@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { CAMPAIGN_TYPE_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/campaign";
 import type { CampaignExportPayload } from "@/lib/campaign-export";
 import { parseCampaignImportSchema } from "@/lib/campaign-import";
+import { cn } from "@/lib/utils";
 
 type Option = { id: string; label: string };
 
@@ -21,6 +22,9 @@ type CampaignCreateModalProps = {
 
 const formSelectClassName =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800";
+
+const fieldErrorBorderClassName =
+  "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
 
 export function CampaignCreateModal({
   open,
@@ -161,6 +165,7 @@ export function CampaignCreateModal({
       }
     >
       <div className="grid gap-4">
+        <FormError error={errors.form} />
         <div>
           <FieldLabel htmlFor="campaign-create-type" label="Type" />
           <select
@@ -186,20 +191,22 @@ export function CampaignCreateModal({
           <>
             <div>
               <FieldLabel htmlFor="campaign-name" label="Name" />
+              <FormError error={errors.name} />
               <Input
                 id="campaign-name"
                 value={form.name}
+                invalid={Boolean(errors.name)}
                 onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
               />
-              <FormError error={errors.name} />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-product" label="Product" />
+              <FormError error={errors.verticalId} />
               <select
                 id="campaign-product"
                 value={form.verticalId}
                 onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value }))}
-                className={formSelectClassName}
+                className={cn(formSelectClassName, Boolean(errors.verticalId) && fieldErrorBorderClassName)}
               >
                 <option value="">Please select product</option>
                 {verticalOptions.map((option) => (
@@ -208,15 +215,15 @@ export function CampaignCreateModal({
                   </option>
                 ))}
               </select>
-              <FormError error={errors.verticalId} />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
+              <FormError error={errors.buyerId} />
               <select
                 id="campaign-buyer"
                 value={form.buyerId}
                 onChange={(e) => setForm((c) => ({ ...c, buyerId: e.target.value }))}
-                className={formSelectClassName}
+                className={cn(formSelectClassName, Boolean(errors.buyerId) && fieldErrorBorderClassName)}
               >
                 <option value="">Please select buyer</option>
                 {buyerOptions.map((option) => (
@@ -225,15 +232,15 @@ export function CampaignCreateModal({
                   </option>
                 ))}
               </select>
-              <FormError error={errors.buyerId} />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-type" label="Campaign type" />
+              <FormError error={errors.campaignType} />
               <select
                 id="campaign-type"
                 value={form.campaignType}
                 onChange={(e) => setForm((c) => ({ ...c, campaignType: e.target.value }))}
-                className={formSelectClassName}
+                className={cn(formSelectClassName, Boolean(errors.campaignType) && fieldErrorBorderClassName)}
               >
                 <option value="">Please select Campaign type</option>
                 {CAMPAIGN_TYPE_OPTIONS.map((type) => (
@@ -242,15 +249,15 @@ export function CampaignCreateModal({
                   </option>
                 ))}
               </select>
-              <FormError error={errors.campaignType} />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
+              <FormError error={errors.timezone} />
               <select
                 id="campaign-timezone"
                 value={form.timezone}
                 onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))}
-                className={formSelectClassName}
+                className={cn(formSelectClassName, Boolean(errors.timezone) && fieldErrorBorderClassName)}
               >
                 <option value="">Please select timezone</option>
                 {TIMEZONE_OPTIONS.map((timezone) => (
@@ -259,7 +266,6 @@ export function CampaignCreateModal({
                   </option>
                 ))}
               </select>
-              <FormError error={errors.timezone} />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />
@@ -276,21 +282,22 @@ export function CampaignCreateModal({
         ) : (
           <div>
             <FieldLabel htmlFor="campaign-schema-file" label="Schema File" />
+            <FormError error={errors.schemaFile} />
             <input
               id="campaign-schema-file"
               type="file"
               accept=".json,application/json"
               onChange={(event) => void handleSchemaFileChange(event)}
-              className="block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600"
+              className={cn(
+                "block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600",
+                Boolean(errors.schemaFile) && fieldErrorBorderClassName
+              )}
             />
             {importSchemaFileName ? (
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Selected: {importSchemaFileName}</p>
             ) : null}
-            <FormError error={errors.schemaFile} />
           </div>
         )}
-
-        <FormError error={errors.form} />
       </div>
     </Modal>
   );

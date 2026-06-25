@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
-import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
+import { ensureIntegrationBuilderStatusMigrated, IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
   DEFAULT_CONFIG_FIELDS,
   buildVerticalIndexMap,
@@ -49,6 +49,7 @@ export async function GET() {
   try {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
+    await ensureIntegrationBuilderStatusMigrated();
 
     const [records, { verticalNameById, verticalIndexById }] = await Promise.all([
       IntegrationBuilderModel.find().sort(sortNewestDisplayIdFirst).lean(),

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { CircleHelp, Copy, Download } from "lucide-react";
+import { CircleHelp, Copy, Download, RotateCcw } from "lucide-react";
 import {
   AddNewButton,
   CancelButton,
@@ -44,6 +44,9 @@ type IntegrationBuilderCreateType = "new" | "import";
 const addFormSelectClassName =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/25";
 
+const fieldErrorBorderClassName =
+  "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
+
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -84,6 +87,7 @@ export default function IntegrationBuilderPage() {
     { mode: "single"; record: IntegrationBuilderRecord } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [tableFilter, setTableFilter] = useState("");
   const [cloneTarget, setCloneTarget] = useState<IntegrationBuilderRecord | null>(null);
@@ -263,13 +267,30 @@ export default function IntegrationBuilderPage() {
           >
             {exportingId === row.id ? "Exporting..." : "Export"}
           </TableActionButton>
-          <TableActionButton
-            type="button"
-            variant="danger"
-            onClick={() => setDeleteConfirm({ mode: "single", record: row })}
-          >
-            Remove
-          </TableActionButton>
+          {row.status === "Deleted" ? (
+            <TableActionButton
+              type="button"
+              icon={false}
+              onClick={() => void handleRestoreRecord(row)}
+              disabled={restoringId === row.id}
+              className="min-w-[6.5rem] justify-center"
+            >
+              <RotateCcw
+                size={12}
+                aria-hidden
+                className={cn("shrink-0", restoringId === row.id && "animate-spin")}
+              />
+              {restoringId === row.id ? "Restoring..." : "Restore"}
+            </TableActionButton>
+          ) : (
+            <TableActionButton
+              type="button"
+              variant="danger"
+              onClick={() => setDeleteConfirm({ mode: "single", record: row })}
+            >
+              Remove
+            </TableActionButton>
+          )}
         </div>
       ),
     },
@@ -382,7 +403,11 @@ export default function IntegrationBuilderPage() {
     const removedIds = idsToDelete.slice(0, deletedCount);
 
     if (removedIds.length > 0) {
-      setRecords((current) => current.filter((record) => !removedIds.includes(record.id)));
+      setRecords((current) =>
+        current.map((record) =>
+          removedIds.includes(record.id) ? { ...record, status: "Deleted" } : record
+        )
+      );
       setSelectedIds((current) => current.filter((id) => !removedIds.includes(id)));
     }
 
@@ -394,6 +419,36 @@ export default function IntegrationBuilderPage() {
 
     setDeleteConfirm(null);
     setIsDeleting(false);
+  };
+
+  const handleRestoreRecord = async (record: IntegrationBuilderRecord) => {
+    setRestoringId(record.id);
+
+    try {
+      const [response] = await Promise.all([
+        fetch(`/api/integration-builder/${encodeURIComponent(record.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "Disabled" }),
+        }),
+        new Promise((resolve) => setTimeout(resolve, 700)),
+      ]);
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+
+      if (!response.ok) {
+        toast.error(result?.message ?? "Failed to restore integration builder record.");
+        return;
+      }
+
+      setRecords((current) =>
+        current.map((item) => (item.id === record.id ? { ...item, status: "Disabled" } : item))
+      );
+      toast.success("Integration builder record restored.");
+    } catch {
+      toast.error("Failed to restore integration builder record.");
+    } finally {
+      setRestoringId(null);
+    }
   };
 
   const handleCloseCloneModal = () => {
@@ -522,8 +577,8 @@ export default function IntegrationBuilderPage() {
                 >
                   <option value="All">All</option>
                   <option value="Active">Active</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Paused">Paused</option>
+                  <option value="Disabled">Disabled</option>
+                  <option value="Deleted">Deleted</option>
                 </select>
               </div>
               <div>
@@ -608,6 +663,7 @@ export default function IntegrationBuilderPage() {
         }
       >
         <div className="space-y-4">
+          <FormError error={addFormErrors.form} />
           <div>
             <FieldLabel htmlFor="integration-builder-type" label="Type" />
             <select
@@ -634,22 +690,24 @@ export default function IntegrationBuilderPage() {
             <>
               <div>
                 <FieldLabel htmlFor="integration-builder-name" label="Name" />
+                <FormError error={addFormErrors.name} />
                 <Input
                   id="integration-builder-name"
                   value={addForm.name}
+                  invalid={Boolean(addFormErrors.name)}
                   onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
                   placeholder="Enter record name"
                 />
-                <FormError error={addFormErrors.name} />
               </div>
 
               <div>
                 <FieldLabel htmlFor="integration-builder-product" label="Product" />
+                <FormError error={addFormErrors.verticalId} />
                 <select
                   id="integration-builder-product"
                   value={addForm.verticalId}
                   onChange={(event) => setAddForm((current) => ({ ...current, verticalId: event.target.value }))}
-                  className={addFormSelectClassName}
+                  className={cn(addFormSelectClassName, Boolean(addFormErrors.verticalId) && fieldErrorBorderClassName)}
                 >
                   <option value="">{isLoadingVerticals ? "Loading verticals..." : "Please select product"}</option>
                   {verticalOptions.map((vertical, index) => (
@@ -658,7 +716,6 @@ export default function IntegrationBuilderPage() {
                     </option>
                   ))}
                 </select>
-                <FormError error={addFormErrors.verticalId} />
               </div>
             </>
           ) : null}
@@ -666,23 +723,24 @@ export default function IntegrationBuilderPage() {
           {addForm.type === "import" ? (
             <div>
               <FieldLabel htmlFor="integration-builder-schema-file" label="Schema File" />
+              <FormError error={addFormErrors.schemaFile} />
               <div className="space-y-2">
                 <input
                   id="integration-builder-schema-file"
                   type="file"
                   accept=".json,application/json"
                   onChange={(event) => void handleSchemaFileChange(event)}
-                  className="block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600"
+                  className={cn(
+                    "block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:file:bg-slate-700 dark:file:text-slate-100 dark:hover:file:bg-slate-600",
+                    Boolean(addFormErrors.schemaFile) && fieldErrorBorderClassName
+                  )}
                 />
                 {importSchemaFileName ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400">Selected: {importSchemaFileName}</p>
                 ) : null}
               </div>
-              <FormError error={addFormErrors.schemaFile} />
             </div>
           ) : null}
-
-          <FormError error={addFormErrors.form} />
         </div>
       </Modal>
 
@@ -708,16 +766,17 @@ export default function IntegrationBuilderPage() {
         <div className="space-y-4">
           <div>
             <FieldLabel htmlFor="integration-builder-clone-name" label="Name" />
+            <FormError error={cloneError} />
             <Input
               id="integration-builder-clone-name"
               value={cloneName}
+              invalid={Boolean(cloneError)}
               onChange={(event) => {
                 setCloneName(event.target.value);
                 if (cloneError) setCloneError("");
               }}
               placeholder="Enter integration name"
             />
-            <FormError error={cloneError} />
           </div>
         </div>
       </Modal>
@@ -727,9 +786,9 @@ export default function IntegrationBuilderPage() {
         title={deleteConfirm?.mode === "bulk" ? "Remove Selected Records" : "Remove Integration"}
         description={
           deleteConfirm?.mode === "single"
-            ? `Remove integration "${deleteConfirm.record.name}"? This action cannot be undone.`
+            ? `Remove integration "${deleteConfirm.record.name}"? Its status will change to Deleted and can be restored later.`
             : deleteConfirm?.mode === "bulk"
-              ? `Remove ${deleteConfirm.ids.length} selected integration record(s)? This action cannot be undone.`
+              ? `Remove ${deleteConfirm.ids.length} selected integration record(s)? Their status will change to Deleted and can be restored later.`
               : undefined
         }
         onClose={() => {

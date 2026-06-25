@@ -45,7 +45,7 @@ const campaignSchema = new Schema(
   {
     displayId: { type: Number, required: true, unique: true, index: true },
     name: { type: String, required: true, trim: true },
-    status: { type: String, enum: ["Active", "Paused", "Disabled", "Deleted"], default: "Active", index: true },
+    status: { type: String, enum: ["Active", "Disabled", "Deleted"], default: "Active", index: true },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     buyerRef: { type: Schema.Types.ObjectId, ref: "Buyer", required: true, index: true },
     integrationRef: { type: Schema.Types.ObjectId, ref: "IntegrationBuilder", required: false },
@@ -75,4 +75,16 @@ export const CampaignModel = model("Campaign", campaignSchema, "campaigns");
 export async function getNextCampaignDisplayId() {
   const latest = await CampaignModel.findOne().sort({ displayId: -1 }).select({ displayId: 1 }).lean();
   return (latest?.displayId ?? 0) + 1;
+}
+
+let campaignStatusMigrated = false;
+
+/** Convert legacy "Paused" campaigns to "Disabled" since Paused was removed. */
+export async function ensureCampaignStatusMigrated() {
+  if (campaignStatusMigrated) {
+    return;
+  }
+
+  await CampaignModel.updateMany({ status: "Paused" }, { $set: { status: "Disabled" } });
+  campaignStatusMigrated = true;
 }

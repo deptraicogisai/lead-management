@@ -101,6 +101,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [status, setStatus] = useState<BuyerStatus>(normalizeBuyerStatus(buyer.status));
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
+  const [activeIntegrationIds, setActiveIntegrationIds] = useState<Set<string>>(new Set());
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
   const [integrationPickerValue, setIntegrationPickerValue] = useState("");
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
@@ -156,6 +157,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           name: string;
           product: string;
           productLabel: string;
+          status: string;
         }>;
 
         setIntegrationOptions(
@@ -166,6 +168,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
             product: record.product,
             label: `[${record.displayId}] ${record.name} (Custom) (${record.product})`,
           }))
+        );
+        setActiveIntegrationIds(
+          new Set(records.filter((record) => record.status === "Active").map((record) => record.id))
         );
       } finally {
         setIsLoadingIntegrations(false);
@@ -238,8 +243,11 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   );
 
   const availableIntegrationOptions = useMemo(
-    () => integrationOptions.filter((option) => !selectedIntegrationIds.includes(option.id)),
-    [integrationOptions, selectedIntegrationIds]
+    () =>
+      integrationOptions.filter(
+        (option) => !selectedIntegrationIds.includes(option.id) && activeIntegrationIds.has(option.id)
+      ),
+    [integrationOptions, selectedIntegrationIds, activeIntegrationIds]
   );
 
   const renderDetailRow = (labelText: string, control: ReactNode, showLinkIcon = false) => (
