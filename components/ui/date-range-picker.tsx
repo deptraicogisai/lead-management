@@ -2,6 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CancelButton, PrimaryButton } from "@/components/ui/form-controls";
 import {
   DATE_RANGE_PRESETS,
@@ -171,7 +172,10 @@ function MonthGrid({
 export function DateRangePicker({ id, value, onChange, className }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DraftRange>(() => buildDraft(value, "today"));
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const parsedValue = useMemo(() => parseDateRangeStrings(value), [value]);
   const displayLabel = parsedValue
@@ -185,15 +189,51 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setDraft(buildDraft(value, draft.preset));
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+
+      setOpen(false);
+      setDraft(buildDraft(value, draft.preset));
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [draft.preset, value]);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const isCompact = viewportWidth < 640;
+      const menuWidth = isCompact ? viewportWidth - 24 : Math.min(760, viewportWidth - 32);
+      const left = Math.min(Math.max(rect.left, 12), viewportWidth - menuWidth - 12);
+
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left,
+        width: menuWidth,
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open]);
 
   const openPicker = () => {
     setDraft(buildDraft(value, draft.preset));
@@ -271,6 +311,7 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         id={id}
+        ref={triggerRef}
         type="button"
         onClick={openPicker}
         className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
@@ -279,8 +320,18 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
         <span className="truncate">{displayLabel}</span>
       </button>
 
-      {open ? (
-        <div className="absolute left-0 z-30 mt-2 w-[min(100vw-1.5rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:w-[min(760px,calc(100vw-2rem))]">
+      {open && menuPosition && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                position: "fixed",
+                top: menuPosition.top,
+                left: menuPosition.left,
+                width: menuPosition.width,
+              }}
+              className="z-[100] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+            >
           <div className="flex flex-col md:flex-row">
             <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2 md:w-40 md:flex-col md:overflow-x-visible md:border-b-0 md:border-r dark:border-slate-700 dark:bg-slate-900/70">
               {DATE_RANGE_PRESETS.map((preset) => (
@@ -382,8 +433,10 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
 
             </div>
           </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

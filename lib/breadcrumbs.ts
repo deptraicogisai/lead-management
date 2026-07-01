@@ -150,7 +150,7 @@ function buildBuyersBreadcrumbs(pathname: string, overrideLabel?: string | null)
   return null;
 }
 
-function buildSellersBreadcrumbs(pathname: string) {
+function buildSellersBreadcrumbs(pathname: string, overrideLabel?: string | null) {
   if (pathname === "/sellers") {
     return {
       items: withDashboard([
@@ -158,6 +158,18 @@ function buildSellersBreadcrumbs(pathname: string) {
         { label: "Publisher List" },
       ]),
       pageTitle: "Publisher List",
+    };
+  }
+
+  if (/^\/sellers\/[^/]+$/.test(pathname)) {
+    const detailLabel = overrideLabel || "Publisher Detail";
+    return {
+      items: withDashboard([
+        { label: "Publisher Management" },
+        { label: "Publisher List", href: "/sellers" },
+        { label: detailLabel },
+      ]),
+      pageTitle: detailLabel,
     };
   }
 
@@ -311,7 +323,7 @@ export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOpti
     return buyers;
   }
 
-  const sellers = buildSellersBreadcrumbs(pathname);
+  const sellers = buildSellersBreadcrumbs(pathname, overrideLabel);
   if (sellers) {
     return sellers;
   }

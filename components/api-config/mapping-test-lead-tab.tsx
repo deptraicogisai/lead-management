@@ -1327,7 +1327,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
   };
 
   if (isLoadingContext) {
-    return <SectionLoading message="Loading test lead form..." minHeightClassName="min-h-[160px]" />;
+    return <SectionLoading message="Loading test lead form..." />;
   }
 
   return (

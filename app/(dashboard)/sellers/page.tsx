@@ -25,6 +25,8 @@ import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusMultiSelect } from "@/components/ui/status-multi-select";
+import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { formatBuyerCreated } from "@/lib/buyer";
 import type { Seller } from "@/lib/mock-data";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -37,11 +39,18 @@ type SellerListResponse = {
   totalPages: number;
 };
 
-const STATUS_FILTER_OPTIONS = ["All", "Active", "Inactive"] as const;
+const STATUS_FILTER_OPTIONS = ["All", "Active", "Inactive", "Deleted"] as const;
+const SELLER_STATUS_MULTI_OPTIONS = STATUS_FILTER_OPTIONS.filter((option) => option !== "All").map(
+  (option) => ({ value: option, label: option })
+);
 const emptyDateRange = buildEmptySearchDateRange();
 
 function apiConfigHref(row: Seller) {
   return `/api-config?sellerId=${encodeURIComponent(row.id)}&sellerName=${encodeURIComponent(row.name)}`;
+}
+
+function sellerDetailHref(row: Seller) {
+  return `/sellers/${encodeURIComponent(row.id)}`;
 }
 
 export default function SellersPage() {
@@ -58,13 +67,13 @@ export default function SellersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>("All");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [nameEmailFilter, setNameEmailFilter] = useState("");
   const [dateFrom, setDateFrom] = useState(emptyDateRange.from);
   const [dateTo, setDateTo] = useState(emptyDateRange.to);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    statusFilter: "All" as (typeof STATUS_FILTER_OPTIONS)[number],
+    statusFilter: [] as string[],
     nameEmail: "",
     dateFrom: emptyDateRange.from,
     dateTo: emptyDateRange.to,
@@ -84,6 +93,11 @@ export default function SellersPage() {
         if (search) {
           params.set("search", search);
         }
+        const statusValues =
+          appliedFilters.statusFilter.length > 0
+            ? appliedFilters.statusFilter
+            : SELLER_STATUS_MULTI_OPTIONS.map((option) => option.value);
+        params.set("status", statusValues.join(","));
         const response = await fetch(`/api/sellers?${params.toString()}`);
         if (!response.ok) return;
 
@@ -97,7 +111,7 @@ export default function SellersPage() {
     };
 
     void fetchSellers();
-  }, [page, pageSize, reloadKey, appliedFilters.nameEmail]);
+  }, [page, pageSize, reloadKey, appliedFilters.nameEmail, appliedFilters.statusFilter]);
 
   const filteredRows = useMemo(() => {
     const fromDate = parseDateTimeValue(appliedFilters.dateFrom);
@@ -105,7 +119,9 @@ export default function SellersPage() {
 
     return sellerRows.filter((row) => {
       const matchesStatus =
-        appliedFilters.statusFilter === "All" ? true : row.status === appliedFilters.statusFilter;
+        appliedFilters.statusFilter.length === 0
+          ? true
+          : appliedFilters.statusFilter.includes(row.status);
 
       const nameEmailSearch = appliedFilters.nameEmail.trim().toLowerCase();
       const matchesNameEmail = nameEmailSearch
@@ -143,13 +159,13 @@ export default function SellersPage() {
 
   const clearFilters = () => {
     const resetDateRange = buildEmptySearchDateRange();
-    setStatusFilter("All");
+    setStatusFilter([]);
     setNameEmailFilter("");
     setDateFrom(resetDateRange.from);
     setDateTo(resetDateRange.to);
     setTableFilter("");
     setAppliedFilters({
-      statusFilter: "All",
+      statusFilter: [],
       nameEmail: "",
       dateFrom: resetDateRange.from,
       dateTo: resetDateRange.to,
@@ -174,11 +190,6 @@ export default function SellersPage() {
     } else {
       setReloadKey((prev) => prev + 1);
     }
-  };
-
-  const handleEdit = (row: Seller) => {
-    setEditingSellerId(row.id);
-    setIsFormOpen(true);
   };
 
   const handleCreate = () => {
@@ -236,7 +247,7 @@ export default function SellersPage() {
       label: "ID",
       sortValue: (row) => row.displayId ?? 0,
       render: (row) => (
-        <Link href={apiConfigHref(row)} className="group inline-flex">
+        <Link href={sellerDetailHref(row)} className="group inline-flex">
           <IdBadge id={row.displayId ?? "-"} interactive />
         </Link>
       ),
@@ -244,7 +255,7 @@ export default function SellersPage() {
     {
       key: "name",
       label: "Name",
-      render: (row) => <DetailNameLink href={apiConfigHref(row)}>{row.name}</DetailNameLink>,
+      render: (row) => <DetailNameLink href={sellerDetailHref(row)}>{row.name}</DetailNameLink>,
     },
     {
       key: "email",
@@ -254,9 +265,7 @@ export default function SellersPage() {
     {
       key: "publisherTag",
       label: "Publisher Tag",
-      render: (row) => (
-        <span className="text-xs text-slate-700 dark:text-slate-200">{row.publisherTag?.trim() || "-"}</span>
-      ),
+      render: (row) => <PublisherTagBadges tag={row.publisherTag} />,
     },
     {
       key: "createdAt",
@@ -276,7 +285,7 @@ export default function SellersPage() {
       render: (row) => (
         <div className="flex flex-wrap gap-2">
           <TableActionLink href={apiConfigHref(row)}>Channel</TableActionLink>
-          <TableActionButton onClick={() => handleEdit(row)}>Edit</TableActionButton>
+          <TableActionLink href={sellerDetailHref(row)}>Edit</TableActionLink>
           <TableActionButton variant="danger" onClick={() => setDeleteTarget(row)}>
             Delete
           </TableActionButton>
@@ -295,21 +304,6 @@ export default function SellersPage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
-                >
-                  {STATUS_FILTER_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <FieldLabel htmlFor="publisher-name-email" label="Name / Email" />
                 <Input
                   id="publisher-name-email"
@@ -326,6 +320,15 @@ export default function SellersPage() {
               </div>
 
               <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
+                <StatusMultiSelect
+                  options={SELLER_STATUS_MULTI_OPTIONS}
+                  selected={statusFilter}
+                  onChange={setStatusFilter}
+                />
+              </div>
+
+              <div>
                 <FieldLabel htmlFor="publisher-date-range" label="Date" />
                 <DateRangePicker
                   id="publisher-date-range"
@@ -338,7 +341,7 @@ export default function SellersPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
               <SearchButton onClick={handleSearch} />
               <ClearButton onClick={clearFilters} />
             </div>

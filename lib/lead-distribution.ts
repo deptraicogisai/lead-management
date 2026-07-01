@@ -21,6 +21,11 @@ import {
   type BuyerPostTraceStep,
 } from "@/lib/buyer-post-trace";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
+import {
+  mapPingTreeTypeToProcessingType,
+  selectPingTreeConfig,
+  type SelectedPingTreeConfig,
+} from "@/lib/ping-tree-allocation";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import {
   resolvePublisherPingTreeTypes,
@@ -336,20 +341,31 @@ async function resolveEligiblePingTreeCampaignIds(params: {
   pingTreeType: PingTreeCampaignType;
   verticalRefId: string;
   mockBuyerPost: boolean;
+  selectedConfig?: SelectedPingTreeConfig | null;
 }) {
-  await ensureDefaultPingTrees();
-  const tree = await PingTreeModel.findOne({ campaignType: params.pingTreeType }).lean();
-  if (!tree) {
-    return [] as string[];
+  // When a weighted PingTreeConfig was selected for this bucket, use its own
+  // arrangement. Otherwise fall back to the legacy single PingTree per type.
+  let treeActiveCampaignIds: string[];
+  let priorities: Map<string, number> | Record<string, number>;
+
+  if (params.selectedConfig) {
+    treeActiveCampaignIds = params.selectedConfig.activeCampaignIds;
+    priorities = params.selectedConfig.campaignPriorities;
+  } else {
+    await ensureDefaultPingTrees();
+    const tree = await PingTreeModel.findOne({ campaignType: params.pingTreeType }).lean();
+    if (!tree) {
+      return [] as string[];
+    }
+    treeActiveCampaignIds = tree.activeCampaignIds ?? [];
+    priorities =
+      tree.campaignPriorities instanceof Map
+        ? tree.campaignPriorities
+        : new Map(Object.entries((tree.campaignPriorities as Record<string, number> | undefined) ?? {}));
   }
 
-  const priorities =
-    tree.campaignPriorities instanceof Map
-      ? tree.campaignPriorities
-      : new Map(Object.entries((tree.campaignPriorities as Record<string, number> | undefined) ?? {}));
-
   const orderedCampaignIds = await resolvePingTreeCampaignIds({
-    treeActiveCampaignIds: tree.activeCampaignIds ?? [],
+    treeActiveCampaignIds,
     priorities,
     pingTreeType: params.pingTreeType,
     verticalRefId: params.verticalRefId,
@@ -375,7 +391,14 @@ async function resolveEligiblePingTreeCampaignIds(params: {
   return orderedCampaignIds.filter((campaignId) => activeCampaignIdSet.has(campaignId));
 }
 
-async function loadPingTreeCampaignTestMocks(pingTreeType: PingTreeCampaignType) {
+async function loadPingTreeCampaignTestMocks(
+  pingTreeType: PingTreeCampaignType,
+  selectedConfig?: SelectedPingTreeConfig | null
+) {
+  if (selectedConfig) {
+    return selectedConfig.campaignTestMocks;
+  }
+
   await ensureDefaultPingTrees();
   const tree = await PingTreeModel.findOne({ campaignType: pingTreeType }).lean();
   return normalizeCampaignTestMocks(
@@ -955,17 +978,22 @@ async function processPingTree(params: {
   mockBuyerPostOptions?: MockBuyerPostOptions;
   stopOnAccept: boolean;
   progress?: LeadDistributionProgressHandlers;
+  selectedConfig?: SelectedPingTreeConfig | null;
 }) {
   const filteredCampaignIds = await resolveEligiblePingTreeCampaignIds({
     pingTreeType: params.pingTreeType,
     verticalRefId: params.verticalRefId,
     mockBuyerPost: params.mockBuyerPost,
+    selectedConfig: params.selectedConfig,
   });
   if (filteredCampaignIds.length === 0) {
     return [] as CampaignDeliveryLog[];
   }
 
-  const campaignTestMocks = await loadPingTreeCampaignTestMocks(params.pingTreeType);
+  const campaignTestMocks = await loadPingTreeCampaignTestMocks(
+    params.pingTreeType,
+    params.selectedConfig
+  );
   const deliveries: CampaignDeliveryLog[] = [];
   const parallelPosts = params.pingTreeType === "Silent";
 
@@ -1298,6 +1326,7 @@ export async function distributeLeadAfterIntake(params: {
   sellerLeadId: string;
   sellerRefId: string;
   verticalRefId: string;
+  mappingRefId?: string | null;
   payload: Record<string, unknown>;
   postedAt: Date;
   origin: string;
@@ -1327,11 +1356,30 @@ export async function distributeLeadAfterIntake(params: {
     };
   }
 
+  const pingTreeTypes = resolvePublisherPingTreeTypes(publisherApiType);
+
+  // Pick the weighted PingTreeConfig for each bucket exactly once per lead.
+  // Publisher distribution overrides global % when configured; otherwise global
+  // Ping Tree Settings apply. Test/mock leads pick without counting.
+  const shouldCountAllocation = !isTestLead && !Boolean(params.mockBuyerPost);
+  const selectedConfigByType = new Map<PingTreeCampaignType, SelectedPingTreeConfig | null>();
+  for (const pingTreeType of pingTreeTypes) {
+    const selected = await selectPingTreeConfig({
+      verticalRefId: params.verticalRefId,
+      processingType: mapPingTreeTypeToProcessingType(pingTreeType),
+      count: shouldCountAllocation,
+      sellerRefId: params.sellerRefId,
+      mappingRefId: params.mappingRefId ?? null,
+    });
+    selectedConfigByType.set(pingTreeType, selected);
+  }
+
   if (publisherApiType === "Silent") {
     const silentCampaignIds = await resolveEligiblePingTreeCampaignIds({
       pingTreeType: "Silent",
       verticalRefId: params.verticalRefId,
       mockBuyerPost: Boolean(params.mockBuyerPost),
+      selectedConfig: selectedConfigByType.get("Silent") ?? null,
     });
 
     if (silentCampaignIds.length === 0) {
@@ -1353,7 +1401,6 @@ export async function distributeLeadAfterIntake(params: {
     }
   }
 
-  const pingTreeTypes = resolvePublisherPingTreeTypes(publisherApiType);
   const deliveryResults = await Promise.all(
     pingTreeTypes.map((pingTreeType) =>
       processPingTree({
@@ -1368,6 +1415,7 @@ export async function distributeLeadAfterIntake(params: {
         mockBuyerPostOptions: params.mockBuyerPostOptions,
         stopOnAccept: pingTreeType === "Redirect",
         progress: params.progress,
+        selectedConfig: selectedConfigByType.get(pingTreeType) ?? null,
       })
     )
   );
@@ -1386,6 +1434,15 @@ export async function distributeLeadAfterIntake(params: {
     ? soldPrice
     : null;
 
+  const pingTreeAllocations = Array.from(selectedConfigByType.entries())
+    .filter((entry): entry is [PingTreeCampaignType, SelectedPingTreeConfig] => entry[1] !== null)
+    .map(([pingTreeType, config]) => ({
+      pingTreeType,
+      configId: config.id,
+      configName: config.name,
+      displayId: config.displayId,
+    }));
+
   await SellerLeadModel.updateOne(
     { _id: new Types.ObjectId(params.sellerLeadId) },
     {
@@ -1394,6 +1451,7 @@ export async function distributeLeadAfterIntake(params: {
         isTestLead,
         redirectUrl,
         soldPrice,
+        pingTreeAllocations,
       },
     }
   );

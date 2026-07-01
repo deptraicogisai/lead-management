@@ -20,6 +20,7 @@ import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { PageSection } from "@/components/ui/state";
+import { StatusMultiSelect } from "@/components/ui/status-multi-select";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,12 @@ type VerticalOption = {
 };
 
 type IntegrationBuilderCreateType = "new" | "import";
+
+const INTEGRATION_BUILDER_STATUS_FILTER_OPTIONS = [
+  { value: "Active", label: "Active" },
+  { value: "Disabled", label: "Disabled" },
+  { value: "Deleted", label: "Deleted" },
+];
 
 const addFormSelectClassName =
   "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-emerald-400 dark:focus:ring-emerald-400/25";
@@ -70,7 +77,7 @@ export default function IntegrationBuilderPage() {
   const [loadError, setLoadError] = useState("");
   const [idFilter, setIdFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [productFilter, setProductFilter] = useState("All");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -146,7 +153,7 @@ export default function IntegrationBuilderPage() {
         ? String(record.displayId).includes(idFilter.trim()) || record.id.toLowerCase().includes(idFilter.trim().toLowerCase())
         : true;
       const matchesName = nameFilter.trim() ? record.name.toLowerCase().includes(nameFilter.trim().toLowerCase()) : true;
-      const matchesStatus = statusFilter === "All" ? true : record.status === statusFilter;
+      const matchesStatus = statusFilter.length === 0 ? true : statusFilter.includes(record.status);
       const matchesProduct = productFilter === "All" ? true : record.verticalId === productFilter;
 
       const search = tableFilter.trim().toLowerCase();
@@ -288,7 +295,7 @@ export default function IntegrationBuilderPage() {
               variant="danger"
               onClick={() => setDeleteConfirm({ mode: "single", record: row })}
             >
-              Remove
+              Delete
             </TableActionButton>
           )}
         </div>
@@ -307,7 +314,7 @@ export default function IntegrationBuilderPage() {
   const clearFilters = () => {
     setIdFilter("");
     setNameFilter("");
-    setStatusFilter("All");
+    setStatusFilter([]);
     setProductFilter("All");
     setTableFilter("");
     setSelectedIds([]);
@@ -570,16 +577,11 @@ export default function IntegrationBuilderPage() {
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                >
-                  <option value="All">All</option>
-                  <option value="Active">Active</option>
-                  <option value="Disabled">Disabled</option>
-                  <option value="Deleted">Deleted</option>
-                </select>
+                <StatusMultiSelect
+                  options={INTEGRATION_BUILDER_STATUS_FILTER_OPTIONS}
+                  selected={statusFilter}
+                  onChange={setStatusFilter}
+                />
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Product</label>
@@ -616,7 +618,7 @@ export default function IntegrationBuilderPage() {
                 <>
                   <DeleteSelectedButton
                     count={selectedIds.length}
-                    label="Remove Selected"
+                    label="Delete Selected"
                     onClick={() => setDeleteConfirm({ mode: "bulk", ids: [...selectedIds] })}
                     disabled={selectedIds.length === 0 || isDeleting || isInitialLoad || isRefreshing}
                   />
@@ -783,12 +785,12 @@ export default function IntegrationBuilderPage() {
 
       <Modal
         open={deleteConfirm !== null}
-        title={deleteConfirm?.mode === "bulk" ? "Remove Selected Records" : "Remove Integration"}
+        title={deleteConfirm?.mode === "bulk" ? "Delete Selected Records" : "Delete Integration"}
         description={
           deleteConfirm?.mode === "single"
-            ? `Remove integration "${deleteConfirm.record.name}"? Its status will change to Deleted and can be restored later.`
+            ? `Delete integration "${deleteConfirm.record.name}"? Its status will change to Deleted and can be restored later.`
             : deleteConfirm?.mode === "bulk"
-              ? `Remove ${deleteConfirm.ids.length} selected integration record(s)? Their status will change to Deleted and can be restored later.`
+              ? `Delete ${deleteConfirm.ids.length} selected integration record(s)? Their status will change to Deleted and can be restored later.`
               : undefined
         }
         onClose={() => {
@@ -808,7 +810,7 @@ export default function IntegrationBuilderPage() {
               }}
             />
             <DangerButton type="button" disabled={isDeleting} onClick={() => void handleConfirmDelete()}>
-              {isDeleting ? "Removing..." : "Remove"}
+              {isDeleting ? "Deleting..." : "Delete"}
             </DangerButton>
           </>
         }

@@ -33,14 +33,14 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     outline: { background: "#ecfdf5", text: "#14532d", border: "#16a34a" },
   },
   deleted: {
-    pill: { background: "#e5e7eb", text: "#374151", border: "#9ca3af" },
-    solid: { background: "#6b7280", text: "#ffffff", border: "#4b5563" },
-    outline: { background: "#f9fafb", text: "#374151", border: "#9ca3af" },
+    pill: { background: "#fecaca", text: "#7f1d1d", border: "#dc2626" },
+    solid: { background: "#dc2626", text: "#ffffff", border: "#b91c1c" },
+    outline: { background: "#fef2f2", text: "#991b1b", border: "#dc2626" },
   },
   inactive: {
-    pill: { background: "#d1d5db", text: "#1f2937", border: "#6b7280" },
-    solid: { background: "#6b7280", text: "#ffffff", border: "#4b5563" },
-    outline: { background: "#f3f4f6", text: "#374151", border: "#6b7280" },
+    pill: { background: "#e2e8f0", text: "#1e293b", border: "#475569" },
+    solid: { background: "#475569", text: "#ffffff", border: "#334155" },
+    outline: { background: "#f8fafc", text: "#334155", border: "#475569" },
   },
   paused: {
     pill: { background: "#fde68a", text: "#78350f", border: "#d97706" },
@@ -48,9 +48,9 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     outline: { background: "#fffbeb", text: "#92400e", border: "#d97706" },
   },
   disabled: {
-    pill: { background: "#fecaca", text: "#7f1d1d", border: "#dc2626" },
-    solid: { background: "#dc2626", text: "#ffffff", border: "#b91c1c" },
-    outline: { background: "#fef2f2", text: "#991b1b", border: "#dc2626" },
+    pill: { background: "#fed7aa", text: "#7c2d12", border: "#ea580c" },
+    solid: { background: "#ea580c", text: "#ffffff", border: "#c2410c" },
+    outline: { background: "#fff7ed", text: "#9a3412", border: "#ea580c" },
   },
   draft: {
     pill: { background: "#bae6fd", text: "#0c4a6e", border: "#0284c7" },

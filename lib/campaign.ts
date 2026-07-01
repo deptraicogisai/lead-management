@@ -105,7 +105,24 @@ export function buildCampaignListStatusFilter(statusFilter?: string | null): Rec
     return {};
   }
 
-  return { status: value };
+  const statuses = [
+    ...new Set(
+      value
+        .split(",")
+        .map((status) => status.trim())
+        .filter((status) => status && status !== "All")
+    ),
+  ];
+
+  if (statuses.length === 0) {
+    return {};
+  }
+
+  if (statuses.length === 1) {
+    return { status: statuses[0] };
+  }
+
+  return { status: { $in: statuses } };
 }
 export const CAMPAIGN_TYPE_OPTIONS: CampaignType[] = ["Redirect", "Silent"];
 export const DUPLICATE_METHOD_OPTIONS: DuplicateMethod[] = ["Email", "SSN + Email"];

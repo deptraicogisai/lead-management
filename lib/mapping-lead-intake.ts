@@ -295,6 +295,7 @@ export async function runMappingTestLeadSubmit(params: {
         sellerLeadId: createdLeadId,
         sellerRefId: params.sellerRef.toString(),
         verticalRefId: params.verticalRef.toString(),
+        mappingRefId: params.mappingRef.toString(),
         payload: params.payload,
         postedAt,
         origin: params.origin,

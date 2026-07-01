@@ -384,13 +384,13 @@ export function DataTable<T extends { id: string }>({
                     </td>
                   ) : null}
                   {isSelectable ? (
-                    <td className="border-b border-slate-100 px-3 py-2 align-top sm:px-4 sm:py-3 dark:border-slate-700/80">
+                    <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-3 dark:border-slate-700/80">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(row.id)}
                         onChange={() => onToggleRow?.(row.id)}
                         aria-label={`Select row ${row.id}`}
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
                       />
                     </td>
                   ) : null}

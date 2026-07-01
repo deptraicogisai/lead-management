@@ -40,7 +40,9 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
                   aria-current={isLast ? "page" : undefined}
                 >
                   {isHome ? <Home size={14} className="shrink-0" /> : null}
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate" suppressHydrationWarning={isLast}>
+                    {item.label}
+                  </span>
                 </span>
               )}
             </li>
@@ -70,7 +72,12 @@ export function MobilePageTitle({ items, className }: BreadcrumbsProps) {
       ) : parent ? (
         <p className="mb-0.5 truncate text-xs font-medium text-slate-500 dark:text-slate-400">{parent.label}</p>
       ) : null}
-      <h1 className="truncate text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">{current.label}</h1>
+      <h1
+        className="truncate text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100"
+        suppressHydrationWarning
+      >
+        {current.label}
+      </h1>
     </div>
   );
 }

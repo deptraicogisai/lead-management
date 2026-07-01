@@ -1,5 +1,5 @@
-import { PingTreeSettingsPage } from "@/components/ping-trees/ping-tree-settings-page";
+import { PingTreeConfigPage } from "@/components/ping-trees/ping-tree-config-page";
 
 export default function PingTreeSettingsRoutePage() {
-  return <PingTreeSettingsPage />;
+  return <PingTreeConfigPage />;
 }

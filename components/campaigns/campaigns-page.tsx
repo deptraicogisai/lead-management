@@ -25,6 +25,7 @@ import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
+import { StatusMultiSelect } from "@/components/ui/status-multi-select";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   CAMPAIGN_STATUS_FILTER_OPTIONS,
@@ -60,12 +61,20 @@ type CampaignListResponse = {
 
 const PAGE_SIZE_OPTIONS = [15, 50, 100, 500] as const;
 
+const CAMPAIGN_STATUS_MULTI_OPTIONS = CAMPAIGN_STATUS_FILTER_OPTIONS.filter(
+  (status) => status !== "All"
+).map((status) => ({ value: status, label: status }));
+
+function parseStatusFilterValue(value: string) {
+  return value ? value.split(",").filter(Boolean) : [];
+}
+
 function createDefaultCampaignFilters() {
   const emptyDateRange = buildEmptySearchDateRange();
   return {
     id: "",
     name: "",
-    status: "All",
+    status: "",
     productId: "",
     buyerId: "",
     type: "All",
@@ -84,7 +93,7 @@ function buildCampaignQuery(filters: CampaignFilters, page: number, pageSize: nu
 
   if (filters.id) params.set("id", filters.id);
   if (filters.name) params.set("name", filters.name);
-  if (filters.status !== "All") params.set("status", filters.status);
+  if (filters.status) params.set("status", filters.status);
   if (filters.productId) params.set("productId", filters.productId);
   if (filters.buyerId) params.set("buyerId", filters.buyerId);
   if (filters.type !== "All") params.set("type", filters.type);
@@ -562,18 +571,12 @@ export function CampaignsPage() {
             </div>
             <div>
               <FieldLabel htmlFor="campaign-status-filter" label="Status" />
-              <select
+              <StatusMultiSelect
                 id="campaign-status-filter"
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((c) => ({ ...c, status: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                {CAMPAIGN_STATUS_FILTER_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
+                options={CAMPAIGN_STATUS_MULTI_OPTIONS}
+                selected={parseStatusFilterValue(draftFilters.status)}
+                onChange={(values) => setDraftFilters((c) => ({ ...c, status: values.join(",") }))}
+              />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-product-filter" label="Product" />

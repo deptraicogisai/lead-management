@@ -166,6 +166,12 @@ export function InlineLoading({
   );
 }
 
+/**
+ * Vertical space that keeps a loader visually centered in the viewport, below the
+ * dashboard header/breadcrumb chrome. Used as the default for full-page loaders.
+ */
+export const PAGE_LOADING_MIN_HEIGHT = "min-h-[calc(100dvh-13rem)]";
+
 type SectionLoadingProps = {
   message?: string;
   minHeightClassName?: string;
@@ -174,7 +180,7 @@ type SectionLoadingProps = {
 
 export function SectionLoading({
   message,
-  minHeightClassName = "min-h-[220px]",
+  minHeightClassName = PAGE_LOADING_MIN_HEIGHT,
   className,
 }: SectionLoadingProps) {
   return (

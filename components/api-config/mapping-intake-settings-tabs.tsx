@@ -201,7 +201,7 @@ export function MappingIntakeSettingsTabs({
   };
 
   if (isLoading || !settings || !duplicatesForm) {
-    return <SectionLoading message="Loading intake settings..." minHeightClassName="min-h-[180px]" />;
+    return <SectionLoading message="Loading intake settings..." />;
   }
 
   return (

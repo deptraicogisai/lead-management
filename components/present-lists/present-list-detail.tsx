@@ -10,7 +10,7 @@ import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/for
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { SectionLoading } from "@/components/ui/loading-indicator";
+import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { cn } from "@/lib/utils";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -185,11 +185,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
   ];
 
   if (isInitialLoad && !list) {
-    return (
-      <PageSection>
-        <SectionLoading message="Loading list..." />
-      </PageSection>
-    );
+    return <ContentAreaLoading message="Loading list..." />;
   }
 
   if (!list) {
@@ -232,7 +228,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
           <FieldLabel htmlFor="value-search" label="Search for a Value" />
           <Input id="value-search" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="mt-3 flex gap-3">
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
             <SearchButton
               onClick={() => {
                 setAppliedSearch(search);

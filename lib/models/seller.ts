@@ -10,6 +10,30 @@ const apiFieldSchema = new Schema(
   }
 );
 
+const contactChannelSchema = new Schema(
+  {
+    type: {
+      type: String,
+      enum: ["Telegram", "Linkedin", "Teams", "Signal", "Facebook", "Whatsapp", "Other"],
+      required: true,
+      default: "Other",
+    },
+    value: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
+
+const sellerContactSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: false, trim: true, default: "" },
+    phone: { type: String, required: false, trim: true, default: "" },
+    website: { type: String, required: false, trim: true, default: "" },
+    channels: { type: [contactChannelSchema], default: [] },
+  },
+  { timestamps: true }
+);
+
 const sellerSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -18,6 +42,7 @@ const sellerSchema = new Schema(
     publisherTag: { type: String, required: false, trim: true, default: "" },
     status: { type: String, enum: ["Active", "Inactive", "Deleted"], required: true },
     apiFields: { type: [apiFieldSchema], default: [] },
+    contacts: { type: [sellerContactSchema], default: [] },
   },
   { timestamps: true }
 );

@@ -11,10 +11,11 @@ import {
   Search,
   Settings2,
 } from "lucide-react";
-import { Input, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
+import { Input, PrimaryButton, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
-import { LoadingOverlay, SectionLoading } from "@/components/ui/loading-indicator";
+import { LoadingOverlay } from "@/components/ui/loading-indicator";
+import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import {
@@ -265,7 +266,7 @@ function ActiveCampaignCard({
           <p className="hidden text-sm font-semibold text-slate-800 sm:block dark:text-slate-100">
             ${card.minPrice.toFixed(2)}
           </p>
-          <div className="flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:justify-end">
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto sm:mt-1.5 sm:justify-end">
             <DragHandle onPointerDown={onGripPointerDown} />
             <button
               type="button"
@@ -293,6 +294,11 @@ function ActiveCampaignCard({
             >
               <Settings2 size={16} />
             </button>
+            <PriorityControls
+              priority={priority}
+              onPriorityChange={onPriorityChange}
+              onSetPriority={onSetPriority}
+            />
             <button
               type="button"
               onClick={onRemove}
@@ -300,11 +306,6 @@ function ActiveCampaignCard({
             >
               Remove
             </button>
-            <PriorityControls
-              priority={priority}
-              onPriorityChange={onPriorityChange}
-              onSetPriority={onSetPriority}
-            />
           </div>
           <p className="mt-1 text-[10px] text-slate-400 sm:text-right">#{index + 1}</p>
         </div>
@@ -355,15 +356,8 @@ function InactiveCampaignCard({
         <p className="shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 px-2.5 py-2 dark:border-slate-800 sm:px-2 sm:py-1.5">
+      <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-slate-100 px-2.5 py-2 dark:border-slate-800 sm:px-2 sm:py-1.5">
         <DragHandle onPointerDown={onGripPointerDown} compact />
-        <button
-          type="button"
-          onClick={onConfigureMock}
-          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
-        >
-          Test mock
-        </button>
         <button
           type="button"
           disabled={!canMoveToTop}
@@ -380,6 +374,13 @@ function InactiveCampaignCard({
         >
           To the bottom
         </button>
+        <button
+          type="button"
+          onClick={onConfigureMock}
+          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
+        >
+          Test mock
+        </button>
         <PriorityControls
           priority={priority}
           onPriorityChange={onPriorityChange}
@@ -391,8 +392,14 @@ function InactiveCampaignCard({
   );
 }
 
-export function PingTreeSettingsPage() {
-  const [activeTab, setActiveTab] = useState<PingTreeCampaignType>("Redirect");
+export function PingTreeSettingsPage({
+  initialCampaignType = "Redirect",
+  configId,
+}: {
+  initialCampaignType?: PingTreeCampaignType;
+  configId?: string;
+} = {}) {
+  const [activeTab, setActiveTab] = useState<PingTreeCampaignType>(initialCampaignType);
   const [trees, setTrees] = useState<PingTreeRecord[]>([]);
   const [tree, setTree] = useState<PingTreeRecord | null>(null);
   const [pingTreeList, setPingTreeList] = useState<PingTreeCampaignCard[]>([]);
@@ -407,6 +414,7 @@ export function PingTreeSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTabRefreshing, setIsTabRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [mockModalCard, setMockModalCard] = useState<PingTreeCampaignCard | null>(null);
   const [isSavingMock, setIsSavingMock] = useState(false);
 
@@ -482,8 +490,17 @@ export function PingTreeSettingsPage() {
       for (const card of data.pingTreeList) nextPriorities[card.id] = card.priority;
       for (const card of data.notInPingTree) nextPriorities[card.id] = card.priority;
       setPriorities(nextPriorities);
+      setIsDirty(false);
     },
     []
+  );
+
+  const editorTreeUrl = useCallback(
+    (treeId: string) =>
+      configId
+        ? `/api/ping-tree-configs/${encodeURIComponent(configId)}/tree`
+        : `/api/ping-trees/${encodeURIComponent(treeId)}`,
+    [configId]
   );
 
   const loadTree = useCallback(
@@ -496,7 +513,7 @@ export function PingTreeSettingsPage() {
       }
 
       try {
-        const response = await fetch(`/api/ping-trees/${encodeURIComponent(treeId)}`);
+        const response = await fetch(editorTreeUrl(treeId));
         if (!response.ok) return;
         const data = (await response.json()) as {
           tree: PingTreeRecord;
@@ -512,29 +529,41 @@ export function PingTreeSettingsPage() {
         }
       }
     },
-    [applyTreeData]
+    [applyTreeData, editorTreeUrl]
   );
 
   useEffect(() => {
+    if (configId) return;
     void (async () => {
       const response = await fetch("/api/ping-trees");
       if (!response.ok) return;
       const fetchedTrees = (await response.json()) as PingTreeRecord[];
       setTrees(fetchedTrees);
     })();
-  }, []);
+  }, [configId]);
 
   useEffect(() => {
+    if (configId) {
+      const withSpinner = isFirstTreeLoadRef.current;
+      isFirstTreeLoadRef.current = false;
+      void loadTree(configId, { withSpinner });
+      return;
+    }
+
     const matchedTree = trees.find((item) => item.campaignType === activeTab);
     if (!matchedTree?.id) return;
 
     const withSpinner = isFirstTreeLoadRef.current;
     isFirstTreeLoadRef.current = false;
     void loadTree(matchedTree.id, { withSpinner });
-  }, [activeTab, loadTree, trees]);
+  }, [activeTab, loadTree, trees, configId]);
 
   const handleTabChange = (tab: PingTreeCampaignType) => {
     if (tab === activeTab) return;
+
+    if (isDirty && !window.confirm("You have unsaved ping tree changes. Discard them and switch tab?")) {
+      return;
+    }
 
     setActiveSearch("");
     setInactiveFilter("");
@@ -544,6 +573,7 @@ export function PingTreeSettingsPage() {
     setPointerPosition(null);
     dropTargetKeyRef.current = "";
     dropTargetRef.current = null;
+    setIsDirty(false);
     setActiveTab(tab);
   };
 
@@ -563,7 +593,7 @@ export function PingTreeSettingsPage() {
 
       setIsSavingMock(true);
       try {
-        const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
+        const response = await fetch(editorTreeUrl(tree.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -585,7 +615,7 @@ export function PingTreeSettingsPage() {
         setIsSavingMock(false);
       }
     },
-    [tree, updateCardTestMock]
+    [tree, updateCardTestMock, editorTreeUrl]
   );
 
   const clearCampaignTestMock = useCallback(
@@ -594,7 +624,7 @@ export function PingTreeSettingsPage() {
 
       setIsSavingMock(true);
       try {
-        const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
+        const response = await fetch(editorTreeUrl(tree.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -616,7 +646,7 @@ export function PingTreeSettingsPage() {
         setIsSavingMock(false);
       }
     },
-    [tree, updateCardTestMock]
+    [tree, updateCardTestMock, editorTreeUrl]
   );
 
   const saveTree = useCallback(
@@ -626,7 +656,7 @@ export function PingTreeSettingsPage() {
       setIsSaving(true);
 
       try {
-        const response = await fetch(`/api/ping-trees/${encodeURIComponent(tree.id)}`, {
+        const response = await fetch(editorTreeUrl(tree.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -637,19 +667,28 @@ export function PingTreeSettingsPage() {
         });
 
         if (response.ok) {
-          toast.success("Ping tree updated.");
+          toast.success("Ping tree saved.");
+          setIsDirty(false);
           return true;
         }
 
-        toast.error("Failed to update ping tree.");
+        toast.error("Failed to save ping tree.");
         await loadTree(tree.id, { withSpinner: false });
         return false;
       } finally {
         setIsSaving(false);
       }
     },
-    [loadTree, tree]
+    [loadTree, tree, editorTreeUrl]
   );
+
+  const handleSave = useCallback(() => {
+    void saveTree(
+      pingTreeListRef.current.map((item) => item.id),
+      notInPingTreeRef.current.map((item) => item.id),
+      prioritiesRef.current
+    );
+  }, [saveTree]);
 
   const applyLists = useCallback((nextActiveIds: string[], nextInactiveIds: string[]) => {
     const lookup = new Map(
@@ -669,12 +708,12 @@ export function PingTreeSettingsPage() {
     setNotInPingTree(nextInactive);
   }, []);
 
-  const commitOrder = useCallback(
+  const applyOrderChange = useCallback(
     (nextActiveIds: string[], nextInactiveIds: string[]) => {
       applyLists(nextActiveIds, nextInactiveIds);
-      void saveTree(nextActiveIds, nextInactiveIds, prioritiesRef.current);
+      setIsDirty(true);
     },
-    [applyLists, saveTree]
+    [applyLists]
   );
 
   const insertAtIndex = (ids: string[], campaignId: string, insertIndex: number | "end") => {
@@ -695,9 +734,9 @@ export function PingTreeSettingsPage() {
         insertIndex
       );
       const inactiveIds = notInPingTreeRef.current.map((item) => item.id).filter((id) => id !== campaignId);
-      commitOrder(activeIds, inactiveIds);
+      applyOrderChange(activeIds, inactiveIds);
     },
-    [commitOrder]
+    [applyOrderChange]
   );
 
   const insertIntoInactive = useCallback(
@@ -708,9 +747,9 @@ export function PingTreeSettingsPage() {
         campaignId,
         insertIndex
       );
-      commitOrder(activeIds, inactiveIds);
+      applyOrderChange(activeIds, inactiveIds);
     },
-    [commitOrder]
+    [applyOrderChange]
   );
 
   const getActiveIndex = (campaignId: string) =>
@@ -729,7 +768,7 @@ export function PingTreeSettingsPage() {
 
     const [movedId] = activeIds.splice(index, 1);
     activeIds.splice(targetIndex, 0, movedId);
-    commitOrder(activeIds, notInPingTreeRef.current.map((item) => item.id));
+    applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id));
   };
 
   const moveActiveToEdge = (campaignId: string, edge: "top" | "bottom") => {
@@ -743,7 +782,7 @@ export function PingTreeSettingsPage() {
     } else {
       activeIds.push(movedId);
     }
-    commitOrder(activeIds, notInPingTreeRef.current.map((item) => item.id));
+    applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id));
   };
 
   const moveInactiveToEdge = (campaignId: string, edge: "top" | "bottom") => {
@@ -757,7 +796,7 @@ export function PingTreeSettingsPage() {
     } else {
       inactiveIds.push(movedId);
     }
-    commitOrder(
+    applyOrderChange(
       pingTreeListRef.current.map((item) => item.id),
       inactiveIds
     );
@@ -906,28 +945,43 @@ export function PingTreeSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 [-webkit-overflow-scrolling:touch] dark:border-slate-700 dark:bg-slate-800/60 sm:mx-0 sm:inline-flex sm:overflow-visible">
-        {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => handleTabChange(tab)}
-            className={cn(
-              "shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-150 sm:px-5",
-              activeTab === tab
-                ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600 dark:text-white"
-                : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-slate-100"
-            )}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {configId ? null : (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 [-webkit-overflow-scrolling:touch] dark:border-slate-700 dark:bg-slate-800/60 sm:mx-0 sm:inline-flex sm:overflow-visible">
+          {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => handleTabChange(tab)}
+              className={cn(
+                "shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-150 sm:px-5",
+                activeTab === tab
+                  ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600 dark:text-white"
+                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-slate-100"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {configId && tree ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Ping Tree
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            {tree.displayId ? `#${tree.displayId} · ` : ""}
+            {tree.name}
+          </h2>
+          <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-500 dark:border-slate-600 dark:text-slate-400">
+            {tree.campaignType}
+          </span>
+        </div>
+      ) : null}
 
       {isLoading && !tree ? (
-        <PageSection>
-          <SectionLoading message="Loading ping tree..." />
-        </PageSection>
+        <ContentAreaLoading message="Loading ping tree..." />
       ) : tree ? (
       <PageSection>
         <div className="relative">
@@ -940,12 +994,19 @@ export function PingTreeSettingsPage() {
                 Drag using the crosshair icon. A line shows where the campaign will land.
               </p>
             ) : null}
-            {isSaving ? <p className="text-sm text-slate-500">Saving...</p> : null}
+            {isDirty ? (
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Unsaved changes</p>
+            ) : null}
           </div>
 
-          <Link href="/campaigns" className={cn(cancelButtonClassName, "w-full justify-center sm:w-auto")}>
-            View Campaigns
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <PrimaryButton type="button" onClick={handleSave} disabled={!isDirty || isSaving}>
+              {isSaving ? "Saving..." : "Save"}
+            </PrimaryButton>
+            <Link href="/campaigns" className={cn(cancelButtonClassName, "w-full justify-center sm:w-auto")}>
+              View Campaigns
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
@@ -995,14 +1056,11 @@ export function PingTreeSettingsPage() {
                         canMoveUp={index > 0}
                         canMoveDown={index < pingTreeList.length - 1}
                         onGripPointerDown={(event) => startPointerDrag(card.id, "active", event)}
-                        onPriorityChange={(value) => setPriorities((current) => ({ ...current, [card.id]: value }))}
-                        onSetPriority={() =>
-                          void saveTree(
-                            pingTreeList.map((item) => item.id),
-                            notInPingTree.map((item) => item.id),
-                            { ...priorities, [card.id]: priorities[card.id] ?? 0 }
-                          )
-                        }
+                        onPriorityChange={(value) => {
+                          setPriorities((current) => ({ ...current, [card.id]: value }));
+                          setIsDirty(true);
+                        }}
+                        onSetPriority={() => setIsDirty(true)}
                         onRemove={() => insertIntoInactive(card.id, 0)}
                         onMoveUp={() => moveActiveByStep(card.id, "up")}
                         onMoveDown={() => moveActiveByStep(card.id, "down")}
@@ -1068,16 +1126,11 @@ export function PingTreeSettingsPage() {
                               canMoveToTop={index > 0}
                               canMoveToBottom={index < notInPingTree.length - 1}
                               onGripPointerDown={(event) => startPointerDrag(card.id, "inactive", event)}
-                              onPriorityChange={(value) =>
-                                setPriorities((current) => ({ ...current, [card.id]: value }))
-                              }
-                              onSetPriority={() =>
-                                void saveTree(
-                                  pingTreeList.map((item) => item.id),
-                                  notInPingTree.map((item) => item.id),
-                                  { ...priorities, [card.id]: priorities[card.id] ?? 0 }
-                                )
-                              }
+                              onPriorityChange={(value) => {
+                                setPriorities((current) => ({ ...current, [card.id]: value }));
+                                setIsDirty(true);
+                              }}
+                              onSetPriority={() => setIsDirty(true)}
                               onMoveToTop={() => moveInactiveToEdge(card.id, "top")}
                               onMoveToBottom={() => moveInactiveToEdge(card.id, "bottom")}
                               onConfigureMock={() => setMockModalCard(card)}

@@ -142,7 +142,8 @@ export function SellerFieldConfigurationPage() {
     { mode: "single"; field: ApiField } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isReordering, setIsReordering] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [isOrderDirty, setIsOrderDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<FieldConfigurationTab>("fields");
 
   const fetchFields = async () => {
@@ -162,6 +163,7 @@ export function SellerFieldConfigurationPage() {
       const data = (result as ApiField[]) ?? [];
       setActionError("");
       setFields(data.map((field) => normalizeApiField(field)));
+      setIsOrderDirty(false);
       setSelectedFieldIds((current) => current.filter((id) => data.some((field) => field.id === id)));
     } finally {
       endLoad();
@@ -385,15 +387,22 @@ export function SellerFieldConfigurationPage() {
     setSelectedFieldIds(checked ? rows.map((row) => row.id) : []);
   };
 
-  const handleReorderFields = async (orderedIds: string[]) => {
-    if (!sellerId || !mappingId || isReordering) return;
+  const handleReorderFields = (orderedIds: string[]) => {
+    if (!sellerId || !mappingId) return;
 
     const reordered = reorderItemsByIds(fields, orderedIds);
     if (!reordered) return;
 
-    const previous = fields;
     setFields(reordered);
-    setIsReordering(true);
+    setIsOrderDirty(true);
+    clearActionFeedback();
+  };
+
+  const saveFieldOrder = async () => {
+    if (!sellerId || !mappingId || isSavingOrder || !isOrderDirty) return;
+
+    const orderedIds = fields.map((field) => field.id);
+    setIsSavingOrder(true);
     clearActionFeedback();
 
     try {
@@ -408,17 +417,17 @@ export function SellerFieldConfigurationPage() {
       const result = (await response.json().catch(() => null)) as ApiField[] | { message?: string } | null;
 
       if (!response.ok) {
-        setFields(previous);
-        setActionError((result as { message?: string } | null)?.message ?? "Failed to reorder fields.");
+        setActionError((result as { message?: string } | null)?.message ?? "Failed to save field order.");
         return;
       }
 
-      setFields(((result as ApiField[]) ?? reordered).map((field) => normalizeApiField(field)));
+      setFields(((result as ApiField[]) ?? fields).map((field) => normalizeApiField(field)));
+      setIsOrderDirty(false);
+      toast.success("Field order saved.");
     } catch {
-      setFields(previous);
-      setActionError("Failed to reorder fields.");
+      setActionError("Failed to save field order.");
     } finally {
-      setIsReordering(false);
+      setIsSavingOrder(false);
     }
   };
 
@@ -751,14 +760,23 @@ export function SellerFieldConfigurationPage() {
       <PageSection
         actions={
           activeTab === "fields" ? (
-            <PrimaryButton
-              type="button"
-              disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
-              onClick={openCreateModal}
-            >
-              <Plus size={15} />
-              <span>Add Field</span>
-            </PrimaryButton>
+            <div className="flex flex-wrap items-center gap-2">
+              <PrimaryButton
+                type="button"
+                disabled={!sellerId || !mappingId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
+                onClick={() => void saveFieldOrder()}
+              >
+                {isSavingOrder ? "Saving..." : "Save Order"}
+              </PrimaryButton>
+              <PrimaryButton
+                type="button"
+                disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
+                onClick={openCreateModal}
+              >
+                <Plus size={15} />
+                <span>Add Field</span>
+              </PrimaryButton>
+            </div>
           ) : null
         }
       >
@@ -778,7 +796,19 @@ export function SellerFieldConfigurationPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (tab.id === activeTab) return;
+                  if (
+                    isOrderDirty &&
+                    !window.confirm("You have unsaved field order changes. Discard them and switch tab?")
+                  ) {
+                    return;
+                  }
+                  if (isOrderDirty) {
+                    void fetchFields();
+                  }
+                  setActiveTab(tab.id);
+                }}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
                   activeTab === tab.id
@@ -813,7 +843,7 @@ export function SellerFieldConfigurationPage() {
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
             <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to reorder
-            fields. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
+            fields, then click <span className="font-medium">Save Order</span> to persist the new order. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
           </p>
 
           {selectedFieldIds.length > 0 ? (

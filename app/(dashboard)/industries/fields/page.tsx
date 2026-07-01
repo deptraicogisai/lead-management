@@ -103,7 +103,8 @@ export default function IndustryFieldsPage() {
     { mode: "single"; field: ApiFieldConfig } | { mode: "bulk"; ids: string[] } | null
   >(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isReordering, setIsReordering] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [isOrderDirty, setIsOrderDirty] = useState(false);
 
   const fetchFields = async () => {
     if (!verticalId) return;
@@ -114,6 +115,7 @@ export default function IndustryFieldsPage() {
       if (!response.ok) return;
       const data = (await response.json()) as ApiFieldConfig[];
       setFields(data);
+      setIsOrderDirty(false);
       setSelectedFieldIds((current) => current.filter((id) => data.some((field) => field.id === id)));
     } finally {
       endLoad();
@@ -354,15 +356,22 @@ export default function IndustryFieldsPage() {
     setSelectedFieldIds(checked ? rows.map((row) => row.id) : []);
   };
 
-  const handleReorderFields = async (orderedIds: string[]) => {
-    if (!verticalId || isReordering) return;
+  const handleReorderFields = (orderedIds: string[]) => {
+    if (!verticalId) return;
 
     const reordered = reorderItemsByIds(fields, orderedIds);
     if (!reordered) return;
 
-    const previous = fields;
     setFields(reordered);
-    setIsReordering(true);
+    setIsOrderDirty(true);
+    clearActionFeedback();
+  };
+
+  const saveFieldOrder = async () => {
+    if (!verticalId || isSavingOrder || !isOrderDirty) return;
+
+    const orderedIds = fields.map((field) => field.id);
+    setIsSavingOrder(true);
     clearActionFeedback();
 
     try {
@@ -374,17 +383,17 @@ export default function IndustryFieldsPage() {
       const result = (await response.json().catch(() => null)) as ApiFieldConfig[] | { message?: string } | null;
 
       if (!response.ok) {
-        setFields(previous);
-        setActionError((result as { message?: string } | null)?.message ?? "Failed to reorder fields.");
+        setActionError((result as { message?: string } | null)?.message ?? "Failed to save field order.");
         return;
       }
 
-      setFields((result as ApiFieldConfig[]) ?? reordered);
+      setFields((result as ApiFieldConfig[]) ?? fields);
+      setIsOrderDirty(false);
+      toast.success("Field order saved.");
     } catch {
-      setFields(previous);
-      setActionError("Failed to reorder fields.");
+      setActionError("Failed to save field order.");
     } finally {
-      setIsReordering(false);
+      setIsSavingOrder(false);
     }
   };
 
@@ -720,6 +729,13 @@ export default function IndustryFieldsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <PrimaryButton
               type="button"
+              disabled={!verticalId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
+              onClick={() => void saveFieldOrder()}
+            >
+              {isSavingOrder ? "Saving..." : "Save Order"}
+            </PrimaryButton>
+            <PrimaryButton
+              type="button"
               disabled={!verticalId || Boolean(editingFieldId)}
               onClick={openCreateModal}
             >
@@ -755,7 +771,7 @@ export default function IndustryFieldsPage() {
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
             <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to
-            reorder fields. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
+            reorder fields, then click <span className="font-medium">Save Order</span> to persist the new order. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
             Upload JSON accepts a lead sample object: every key in the file becomes a field using the exact key name (for example{" "}
             <span className="font-mono text-xs">fname</span>, <span className="font-mono text-xs">apikey</span>).
           </p>

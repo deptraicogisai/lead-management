@@ -263,7 +263,7 @@ export function ProductDocViewer({
   const activeResponseContent = responseExampleTabs.find((tab) => tab.id === activeResponseTab)?.content ?? null;
 
   if (isLoading) {
-    return <SectionLoading message="Loading documentation..." minHeightClassName="min-h-[420px]" />;
+    return <SectionLoading message="Loading documentation..." />;
   }
 
   if (error) {

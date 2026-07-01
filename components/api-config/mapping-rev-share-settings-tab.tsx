@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { SectionLoading } from "@/components/ui/loading-indicator";
 import {
   SearchableMultiSelect,
   type SearchableMultiSelectOption,
@@ -143,7 +144,7 @@ export function MappingRevShareSettingsTab({ sellerId, mappingId }: MappingRevSh
   };
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Loading rev-share settings...</p>;
+    return <SectionLoading message="Loading rev-share settings..." />;
   }
 
   return (

@@ -376,7 +376,7 @@ select:disabled {
 
 @media (min-width: 1024px) {
   .mobile-app-shell {
-    padding: 0;
+    padding: 1rem 1.5rem;
   }
 }
 

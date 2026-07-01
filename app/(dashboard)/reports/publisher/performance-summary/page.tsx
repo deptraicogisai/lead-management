@@ -1,7 +1,5 @@
-import { ReportPlaceholderPage } from "@/components/reports/report-placeholder-page";
+import { PublisherPerformanceSummaryPage } from "@/components/reports/publisher-performance-summary-page";
 
-export default function PublisherPerformanceSummaryPage() {
-  return (
-    <ReportPlaceholderPage description="Publisher performance summary report will be available here." />
-  );
+export default function PublisherPerformanceSummaryRoutePage() {
+  return <PublisherPerformanceSummaryPage />;
 }

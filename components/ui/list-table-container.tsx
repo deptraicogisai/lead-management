@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LoadingIndicator, LoadingOverlay } from "@/components/ui/loading-indicator";
+import { ContentAreaLoading } from "@/components/ui/content-area-loading";
+import { LoadingOverlay } from "@/components/ui/loading-indicator";
 import { SkeletonTable } from "@/components/ui/state";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ type ListTableContainerProps = {
 export function ListTableContainer({
   isInitialLoad,
   isRefreshing,
-  loadingMessage = "Loading list data",
+  loadingMessage = "Loading list...",
   children,
   className,
   initialLoadClassName,
@@ -38,13 +39,7 @@ export function ListTableContainer({
           <SkeletonTable rows={skeletonRows} className="h-full" />
         </div>
 
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200/90 bg-white/95 px-6 py-5 shadow-xl shadow-slate-900/10 backdrop-blur-sm dark:border-slate-600 dark:bg-slate-900/95 dark:shadow-black/30">
-            <LoadingIndicator size="md" />
-          </div>
-        </div>
-
-        <span className="sr-only">{loadingMessage}</span>
+        <ContentAreaLoading loadingMessage={loadingMessage} />
       </div>
     );
   }

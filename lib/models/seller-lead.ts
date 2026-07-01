@@ -17,6 +17,20 @@ const sellerLeadSchema = new Schema(
     isTestLead: { type: Boolean, default: false },
     redirectUrl: { type: String, required: false, trim: true, default: "" },
     soldPrice: { type: Number, required: false, default: null },
+    pingTreeAllocations: {
+      type: [
+        new Schema(
+          {
+            pingTreeType: { type: String, required: true },
+            configId: { type: String, required: true },
+            configName: { type: String, required: false, default: "" },
+            displayId: { type: Number, required: false, default: null },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     postedAt: { type: Date, required: true, index: true },
     userAgent: { type: String, required: false, trim: true },
   },

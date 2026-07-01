@@ -22,7 +22,7 @@ function DashboardShellInner({ session, children }: { session: AuthSession; chil
           collapsed ? "lg:pl-[4.5rem]" : "lg:pl-64"
         )}
       >
-        <div className="mobile-app-shell lg:p-6">
+        <div className="mobile-app-shell">
           <DashboardChrome session={session}>{children}</DashboardChrome>
         </div>
       </main>

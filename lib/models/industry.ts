@@ -58,6 +58,19 @@ export async function ensureVerticalCollectionMigrated() {
       }
 
       const verticalCollection = db.collection("verticals");
+
+      // Drop stale indexes inherited from the legacy "industries" schema. These
+      // referenced fields we no longer store (industryId/verticalId/sellerId);
+      // leaving the unique verticalId index in place breaks inserts because every
+      // document would share a null value.
+      const staleIndexNames = ["industryId_1", "verticalId_1", "sellerId_1"];
+      const existingIndexes = await verticalCollection.indexes();
+      for (const index of existingIndexes) {
+        if (index.name && staleIndexNames.includes(index.name)) {
+          await verticalCollection.dropIndex(index.name).catch(() => {});
+        }
+      }
+
       await verticalCollection.updateMany(
         {},
         { $unset: { industryId: "", verticalId: "", sellerId: "" } }

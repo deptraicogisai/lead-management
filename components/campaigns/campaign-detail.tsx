@@ -29,7 +29,7 @@ import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { SectionLoading } from "@/components/ui/loading-indicator";
+import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageSection } from "@/components/ui/state";
 import {
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
@@ -461,11 +461,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   ];
 
   if (isLoading || !campaign) {
-    return (
-      <PageSection>
-        <SectionLoading message="Loading campaign..." />
-      </PageSection>
-    );
+    return <ContentAreaLoading message="Loading campaign..." />;
   }
 
   return (

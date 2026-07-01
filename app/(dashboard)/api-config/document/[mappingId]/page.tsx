@@ -281,7 +281,7 @@ export default function ApiDocumentPreviewPage() {
             Missing mapping id.
           </div>
         ) : isLoading ? (
-          <SectionLoading message="Loading API documentation..." minHeightClassName="min-h-[320px]" />
+          <SectionLoading message="Loading API documentation..." />
         ) : error ? (
           <div className="rounded-xl border border-dashed border-red-300 bg-red-50 p-10 text-center text-red-700">
             {error}

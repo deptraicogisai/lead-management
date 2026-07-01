@@ -15,7 +15,24 @@ export function buildMongoStatusFilter(statusFilter?: string | null) {
     return excludeDeletedStatusFilter();
   }
 
-  return { status: value };
+  const statuses = [
+    ...new Set(
+      value
+        .split(",")
+        .map((status) => status.trim())
+        .filter((status) => status && status !== "All")
+    ),
+  ];
+
+  if (statuses.length === 0) {
+    return excludeDeletedStatusFilter();
+  }
+
+  if (statuses.length === 1) {
+    return { status: statuses[0] };
+  }
+
+  return { status: { $in: statuses } };
 }
 
 /** Include Deleted in dropdown when the record is already deleted so the select maps to the current value. */

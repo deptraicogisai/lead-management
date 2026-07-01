@@ -16,6 +16,7 @@ import {
 } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
+import { ensureTrafficSourceForLead, extractSubId } from "@/lib/traffic-source";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import {
   buildPublisherAcceptedResponse,
@@ -429,6 +430,21 @@ export async function handleSellerLeadPost(req: Request) {
       ? await VerticalModel.findById(verticalRefId).lean()
       : null;
     verticalRefForLog = vertical?._id;
+
+    const subId = extractSubId(payload);
+    if (subId) {
+      try {
+        await ensureTrafficSourceForLead({
+          sellerRef: seller._id,
+          verticalRef: vertical?._id ?? null,
+          mappingRef: matchedMapping._id ?? null,
+          sourceName: subId,
+        });
+      } catch (trafficSourceError) {
+        console.error("Failed to ensure traffic source:", trafficSourceError);
+      }
+    }
+
     const apiFields = getEffectiveMappingFields(
       (vertical?.fields as VerticalApiField[] | undefined) ?? [],
       (matchedMapping.fields as MappingApiField[] | undefined) ?? []
@@ -500,6 +516,7 @@ export async function handleSellerLeadPost(req: Request) {
       sellerLeadId: leadId,
       sellerRefId: seller._id.toString(),
       verticalRefId,
+      mappingRefId: matchedMapping._id?.toString() ?? null,
       payload,
       postedAt,
       origin,

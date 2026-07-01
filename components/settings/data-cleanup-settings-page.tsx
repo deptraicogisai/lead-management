@@ -169,7 +169,7 @@ export function DataCleanupSettingsPage() {
 
         <div className="mt-6 space-y-6">
           {isLoading ? (
-            <SectionLoading message="Loading list counts..." minHeightClassName="min-h-[200px]" />
+            <SectionLoading message="Loading list counts..." />
           ) : (
             groupedItems.map((group) => {
               const categoryKeys = group.items.filter((item) => item.count > 0).map((item) => item.key);
