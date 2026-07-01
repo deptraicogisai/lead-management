@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Checkbox, FieldLabel, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
-import { FilterTagBadges } from "@/components/ui/filter-tag-input";
+import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-control";
+import { Checkbox, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
@@ -38,8 +38,6 @@ import {
   buildRandomTestLeadForm,
   buildTestLeadPayload,
   chunkTestLeadFields,
-  formatTestLeadOptionLabel,
-  formatTestLeadOptionSelectValue,
   type MappingTestLeadField,
 } from "@/lib/mapping-test-lead";
 import { toast } from "@/lib/toast";
@@ -53,83 +51,6 @@ type MappingTestLeadTabProps = {
   apiName?: string | null;
   fields: MappingTestLeadField[];
 };
-
-function getFieldInputType(field: MappingTestLeadField) {
-  const normalizedType = field.type.trim().toLowerCase();
-  const normalizedFormat = field.format?.trim().toLowerCase() ?? "";
-
-  if (normalizedType === "email" || normalizedFormat === "email") return "email";
-  if (normalizedType === "date") return "date";
-  if (normalizedType === "number" || normalizedType === "numeric" || normalizedType === "numberic") return "number";
-  return "text";
-}
-
-function TestLeadFieldControl({
-  field,
-  value,
-  onChange,
-  allowedTokens,
-}: {
-  field: MappingTestLeadField;
-  value: string;
-  onChange: (value: string) => void;
-  allowedTokens?: string[];
-}) {
-  const inputId = `test-lead-${field.fieldName}`;
-  const label = field.description?.trim() || field.fieldName;
-  const normalizedType = field.type.trim().toLowerCase();
-
-  if (field.options.length > 0) {
-    return (
-      <div>
-        <FieldLabel htmlFor={inputId} label={label} required={field.required} />
-        <Select id={inputId} value={value} onChange={(event) => onChange(event.target.value)}>
-          <option value="">Select {label}</option>
-          {field.options.map((option) => {
-            const optionValue = formatTestLeadOptionSelectValue(option, field);
-            return (
-              <option key={`${field.fieldName}-${optionValue}-${option.label}`} value={optionValue}>
-                {formatTestLeadOptionLabel(option, field)}
-              </option>
-            );
-          })}
-        </Select>
-      </div>
-    );
-  }
-
-  if (normalizedType === "boolean") {
-    return (
-      <div>
-        <FieldLabel htmlFor={inputId} label={label} required={field.required} />
-        <Select id={inputId} value={value} onChange={(event) => onChange(event.target.value)}>
-          <option value="">Select {label}</option>
-          <option value="true">Yes</option>
-          <option value="false">No</option>
-        </Select>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <FieldLabel htmlFor={inputId} label={label} required={field.required} />
-      {allowedTokens && allowedTokens.length > 0 ? (
-        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-          Must contain one of:
-        </p>
-      ) : null}
-      {allowedTokens && allowedTokens.length > 0 ? <FilterTagBadges values={allowedTokens} className="mb-2" /> : null}
-      <Input
-        id={inputId}
-        type={getFieldInputType(field)}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={field.fieldName}
-      />
-    </div>
-  );
-}
 
 type LogPanelTone = "request" | "success" | "error";
 

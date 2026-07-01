@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Briefcase,
   Link as LinkIcon,
@@ -33,8 +33,6 @@ import { SectionLoading } from "@/components/ui/loading-indicator";
 import { Modal } from "@/components/ui/modal";
 import {
   CONTACT_CHANNEL_TYPES,
-  findDuplicateContactChannelType,
-  getDuplicateContactChannelMessage,
   type ContactChannel,
   type ContactChannelType,
   type SellerContact,
@@ -104,8 +102,6 @@ type ContactFormState = {
 
 type FieldErrors = {
   name?: string;
-  email?: string;
-  phone?: string;
 };
 
 const emptyForm: ContactFormState = {
@@ -140,20 +136,6 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<SellerContact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const duplicateChannelType = useMemo(
-    () => findDuplicateContactChannelType(form.channels),
-    [form.channels]
-  );
-  const channelFormError = duplicateChannelType
-    ? getDuplicateContactChannelMessage(duplicateChannelType)
-    : "";
-
-  const isDuplicateChannelRow = (index: number) => {
-    const type = form.channels[index]?.type;
-    if (!type) return false;
-    return form.channels.findIndex((channel) => channel.type === type) !== index;
-  };
 
   const loadContacts = useCallback(async () => {
     setIsLoading(true);
@@ -200,12 +182,11 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
 
   const updateField = <K extends keyof ContactFormState>(key: K, value: ContactFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if (key === "name" || key === "email" || key === "phone") {
-      const fieldKey = key as keyof FieldErrors;
+    if (key === "name") {
       setFieldErrors((current) => {
-        if (!current[fieldKey]) return current;
+        if (!current.name) return current;
         const next = { ...current };
-        delete next[fieldKey];
+        delete next.name;
         return next;
       });
     }
@@ -241,8 +222,6 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
   const handleSave = async () => {
     const nextFieldErrors: FieldErrors = {};
     if (!form.name.trim()) nextFieldErrors.name = "Name is required.";
-    if (!form.email.trim()) nextFieldErrors.email = "Email is required.";
-    if (!form.phone.trim()) nextFieldErrors.phone = "Phone is required.";
 
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors(nextFieldErrors);
@@ -259,14 +238,6 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
       return;
     }
     setShowEmptyChannelError(false);
-
-    const duplicateType = findDuplicateContactChannelType(form.channels);
-    if (duplicateType) {
-      const message = getDuplicateContactChannelMessage(duplicateType);
-      setFormError(message);
-      toast.error(message);
-      return;
-    }
 
     const channels = form.channels.map((channel) => ({
       type: channel.type,
@@ -409,7 +380,7 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
             <CancelButton type="button" onClick={closeForm} />
             <PrimaryButton
               type="button"
-              disabled={isSaving || Boolean(duplicateChannelType)}
+              disabled={isSaving}
               onClick={() => void handleSave()}
               className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
             >
@@ -434,24 +405,20 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
               />
             </div>
             <div>
-              <FieldLabel htmlFor="contact-email" label="Email" required />
-              <FormError error={fieldErrors.email} />
+              <FieldLabel htmlFor="contact-email" label="Email" />
               <Input
                 id="contact-email"
                 type="email"
                 value={form.email}
-                invalid={Boolean(fieldErrors.email)}
                 onChange={(event) => updateField("email", event.target.value)}
                 placeholder="name@example.com"
               />
             </div>
             <div>
-              <FieldLabel htmlFor="contact-phone" label="Phone" required />
-              <FormError error={fieldErrors.phone} />
+              <FieldLabel htmlFor="contact-phone" label="Phone" />
               <Input
                 id="contact-phone"
                 value={form.phone}
-                invalid={Boolean(fieldErrors.phone)}
                 onChange={(event) => updateField("phone", event.target.value)}
                 placeholder="Phone number"
               />
@@ -475,8 +442,6 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
               </SecondaryButton>
             </div>
 
-            <FormError error={channelFormError} />
-
             {form.channels.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 No channels added. Click “Add channel” to include Telegram, LinkedIn, and more.
@@ -490,7 +455,6 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
                       <Select
                         aria-label={`Channel ${index + 1} type`}
                         value={channel.type}
-                        invalid={isDuplicateChannelRow(index)}
                         onChange={(event) => {
                           updateChannel(index, { type: event.target.value as ContactChannelType });
                           if (formError) setFormError("");

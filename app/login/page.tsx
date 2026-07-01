@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { ShieldCheck, Workflow, Zap } from "lucide-react";
 import { LoginBrandMark } from "@/components/branding/login-brand-mark";
 import { LoginForm } from "@/components/forms/login-form";
 import { AUTH_COOKIE_NAME, decodeAuthSession } from "@/lib/auth";
+import { resolvePostLoginPath } from "@/lib/auth-return-url";
 
 const highlightDelayClasses = [
   "login-animate-delay-3",
@@ -35,12 +37,17 @@ export const metadata: Metadata = {
   description: "Sign in to access the lead management dashboard.",
 };
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ returnUrl?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const cookieStore = await cookies();
   const session = decodeAuthSession(cookieStore.get(AUTH_COOKIE_NAME)?.value);
+  const params = await searchParams;
 
   if (session) {
-    redirect("/dashboard");
+    redirect(resolvePostLoginPath(params.returnUrl));
   }
 
   return (
@@ -94,7 +101,9 @@ export default async function LoginPage() {
             </div>
 
             <div className="login-animate-item login-animate-delay-3">
-              <LoginForm />
+              <Suspense fallback={null}>
+                <LoginForm />
+              </Suspense>
             </div>
           </div>
         </section>

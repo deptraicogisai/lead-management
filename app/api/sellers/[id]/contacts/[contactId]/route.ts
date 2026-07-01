@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
-import {
-  findDuplicateContactChannelType,
-  getDuplicateContactChannelMessage,
-  toSellerContactResponse,
-} from "@/lib/seller-contact";
+import { toSellerContactResponse } from "@/lib/seller-contact";
 import { normalizeChannelsPayload } from "../route";
 
 type Params = { params: Promise<{ id: string; contactId: string }> };
@@ -27,21 +23,8 @@ export async function PATCH(req: Request, context: Params) {
     if (!body.name?.trim()) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
     }
-    if (!body.email?.trim()) {
-      return NextResponse.json({ message: "Email is required." }, { status: 400 });
-    }
-    if (!body.phone?.trim()) {
-      return NextResponse.json({ message: "Phone is required." }, { status: 400 });
-    }
 
     const channels = normalizeChannelsPayload(body.channels);
-    const duplicateType = findDuplicateContactChannelType(channels);
-    if (duplicateType) {
-      return NextResponse.json(
-        { message: getDuplicateContactChannelMessage(duplicateType) },
-        { status: 400 }
-      );
-    }
 
     await connectToDatabase();
     await ensureSellerCollectionMigrated();

@@ -7,8 +7,78 @@ export type MappingTestLeadField = {
   type: string;
   required: boolean;
   format?: string;
+  dataTypeFilter?: string | null;
   options: VerticalFieldOption[];
 };
+
+export type TestLeadControlKind =
+  | "dropdown"
+  | "checkbox"
+  | "multi-select"
+  | "range"
+  | "text"
+  | "boolean"
+  | "default";
+
+const TEST_LEAD_MULTI_VALUE_SEPARATOR = ",";
+const TEST_LEAD_RANGE_VALUE_SEPARATOR = "|";
+
+export function resolveTestLeadControlKind(field: MappingTestLeadField): TestLeadControlKind {
+  const dataTypeFilter = field.dataTypeFilter?.trim() ?? "";
+
+  if (dataTypeFilter === "Dropdown") return "dropdown";
+  if (dataTypeFilter === "Checkbox") return "checkbox";
+  if (dataTypeFilter === "Multi Select") return "multi-select";
+  if (dataTypeFilter === "Range") return "range";
+  if (dataTypeFilter === "Text") return "text";
+
+  const normalizedType = field.type.trim().toLowerCase();
+  if (normalizedType === "boolean") return "boolean";
+  if (field.options.length > 0) return "dropdown";
+
+  return "default";
+}
+
+export function parseTestLeadMultiValue(raw: string) {
+  return raw
+    .split(TEST_LEAD_MULTI_VALUE_SEPARATOR)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+export function serializeTestLeadMultiValue(values: string[]) {
+  return values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(TEST_LEAD_MULTI_VALUE_SEPARATOR);
+}
+
+export function parseTestLeadRangeValue(raw: string) {
+  const [minValue = "", maxValue = ""] = raw.split(TEST_LEAD_RANGE_VALUE_SEPARATOR);
+  return {
+    minValue: minValue.trim(),
+    maxValue: maxValue.trim(),
+  };
+}
+
+export function serializeTestLeadRangeValue(minValue: string, maxValue: string) {
+  if (!minValue.trim() && !maxValue.trim()) {
+    return "";
+  }
+
+  return `${minValue.trim()}${TEST_LEAD_RANGE_VALUE_SEPARATOR}${maxValue.trim()}`;
+}
+
+export function getTestLeadInputType(field: MappingTestLeadField) {
+  const normalizedType = field.type.trim().toLowerCase();
+  const normalizedFormat = field.format?.trim().toLowerCase() ?? "";
+
+  if (normalizedType === "email" || normalizedFormat === "email") return "email";
+  if (normalizedType === "date") return "date";
+  if (isNumericFieldType(field.type)) return "number";
+
+  return "text";
+}
 
 const RANDOM_FIRST_NAMES = ["John", "Jane", "Michael", "Emily", "Robert", "Lisa", "David", "Sarah", "James", "Maria"];
 const RANDOM_LAST_NAMES = ["Smith", "Johnson", "Williams", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson"];
@@ -51,7 +121,38 @@ function buildFieldContext(field: MappingTestLeadField) {
 }
 
 function buildRandomFieldValue(field: MappingTestLeadField, multiSelectFilters: Record<string, string[]> = {}): string {
-  if (field.options.length > 0) {
+  const controlKind = resolveTestLeadControlKind(field);
+
+  if (controlKind === "dropdown" || controlKind === "checkbox") {
+    if (field.options.length > 0) {
+      const option = randomItem(field.options);
+      return formatTestLeadOptionSelectValue(option, field);
+    }
+  }
+
+  if (controlKind === "multi-select" && field.options.length > 0) {
+    const count = Math.min(field.options.length, randomInt(1, Math.min(2, field.options.length)));
+    const picked = new Set<string>();
+
+    while (picked.size < count) {
+      const option = randomItem(field.options);
+      picked.add(formatTestLeadOptionSelectValue(option, field));
+    }
+
+    return serializeTestLeadMultiValue(Array.from(picked));
+  }
+
+  if (controlKind === "range" && field.options.length >= 2) {
+    const sortedOptions = [...field.options];
+    const minOption = sortedOptions[0];
+    const maxOption = sortedOptions[sortedOptions.length - 1];
+    return serializeTestLeadRangeValue(
+      formatTestLeadOptionSelectValue(minOption, field),
+      formatTestLeadOptionSelectValue(maxOption, field)
+    );
+  }
+
+  if (field.options.length > 0 && controlKind === "default") {
     const option = randomItem(field.options);
     return formatTestLeadOptionSelectValue(option, field);
   }
@@ -280,9 +381,26 @@ export function coerceTestLeadFieldValue(field: MappingTestLeadField, raw: strin
     return undefined;
   }
 
+  const controlKind = resolveTestLeadControlKind(field);
   const normalizedType = field.type.trim().toLowerCase();
 
-  if (field.options.length > 0) {
+  if (controlKind === "multi-select") {
+    const values = parseTestLeadMultiValue(raw);
+    if (values.length === 0) return undefined;
+    return values.map((value) => {
+      const matched = findMatchingOption(field, value);
+      const resolved = matched?.value ?? value;
+      return coerceValueByFieldType(resolved, normalizedType);
+    });
+  }
+
+  if (controlKind === "range") {
+    const { minValue, maxValue } = parseTestLeadRangeValue(raw);
+    if (!minValue && !maxValue) return undefined;
+    return [minValue, maxValue].filter(Boolean).join("-");
+  }
+
+  if (field.options.length > 0 || controlKind === "dropdown" || controlKind === "checkbox") {
     const matched = findMatchingOption(field, raw);
     const resolved = matched?.value ?? raw;
     return coerceValueByFieldType(resolved, normalizedType);
@@ -335,9 +453,27 @@ export function validateTestLeadForm(fields: MappingTestLeadField[], form: Recor
   for (const field of fields) {
     const label = field.description?.trim() || field.fieldName;
     const raw = form[field.fieldName] ?? "";
+    const controlKind = resolveTestLeadControlKind(field);
 
-    if (field.required && !raw.trim()) {
-      errors[field.fieldName] = `${label} is required.`;
+    if (field.required) {
+      if (controlKind === "multi-select") {
+        if (parseTestLeadMultiValue(raw).length === 0) {
+          errors[field.fieldName] = `${label} is required.`;
+        }
+        continue;
+      }
+
+      if (controlKind === "range") {
+        const { minValue, maxValue } = parseTestLeadRangeValue(raw);
+        if (!minValue || !maxValue) {
+          errors[field.fieldName] = `${label} requires both min and max values.`;
+        }
+        continue;
+      }
+
+      if (!raw.trim()) {
+        errors[field.fieldName] = `${label} is required.`;
+      }
     }
   }
 

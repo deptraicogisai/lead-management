@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import {
-  findDuplicateContactChannelType,
-  getDuplicateContactChannelMessage,
   isContactChannelType,
   toSellerContactResponse,
   type ContactChannel,
@@ -63,21 +61,8 @@ export async function POST(req: Request, context: Params) {
     if (!body.name?.trim()) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
     }
-    if (!body.email?.trim()) {
-      return NextResponse.json({ message: "Email is required." }, { status: 400 });
-    }
-    if (!body.phone?.trim()) {
-      return NextResponse.json({ message: "Phone is required." }, { status: 400 });
-    }
 
     const channels = normalizeChannelsPayload(body.channels);
-    const duplicateType = findDuplicateContactChannelType(channels);
-    if (duplicateType) {
-      return NextResponse.json(
-        { message: getDuplicateContactChannelMessage(duplicateType) },
-        { status: 400 }
-      );
-    }
 
     await connectToDatabase();
     await ensureSellerCollectionMigrated();

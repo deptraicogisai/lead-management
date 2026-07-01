@@ -43,25 +43,6 @@ type SellerContactDoc = {
   channels?: ContactChannelDoc[] | null;
 };
 
-export function findDuplicateContactChannelType(
-  channels: Array<{ type: ContactChannelType }>
-): ContactChannelType | null {
-  const seen = new Set<ContactChannelType>();
-
-  for (const channel of channels) {
-    if (seen.has(channel.type)) {
-      return channel.type;
-    }
-    seen.add(channel.type);
-  }
-
-  return null;
-}
-
-export function getDuplicateContactChannelMessage(type: ContactChannelType) {
-  return `Duplicate channel type: "${type}". Each channel can only be added once.`;
-}
-
 export function normalizeContactChannels(channels: unknown): ContactChannel[] {
   if (!Array.isArray(channels)) return [];
 

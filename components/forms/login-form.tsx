@@ -1,10 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { resolvePostLoginPath } from "@/lib/auth-return-url";
 
 type LoginErrors = {
   identifier?: string;
@@ -14,6 +15,8 @@ type LoginErrors = {
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get("returnUrl");
   const [identifier, setIdentifier] = useState(() => {
     if (typeof window === "undefined") {
       return "";
@@ -81,7 +84,7 @@ export function LoginForm() {
         window.localStorage.removeItem("lead-management:last-login-identifier");
       }
 
-      router.replace("/dashboard");
+      router.replace(resolvePostLoginPath(returnUrl));
       router.refresh();
     } finally {
       setIsSubmitting(false);

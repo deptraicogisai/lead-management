@@ -9,6 +9,7 @@ import {
   Copy,
   ExternalLink,
   Filter,
+  FlaskConical,
   Pencil,
   Plug,
   Plus,
@@ -19,6 +20,7 @@ import {
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { CampaignIntegrationConfigForm } from "@/components/campaigns/campaign-integration-config-form";
+import { CampaignTestLeadTab } from "@/components/campaigns/campaign-test-lead-tab";
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
@@ -58,10 +60,10 @@ import type { PresentListRecord } from "@/lib/present-list";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
-type CampaignTab = "general" | "duplicates" | "filters" | "schedule" | "integration";
+type CampaignTab = "general" | "duplicates" | "filters" | "schedule" | "integration" | "test-lead";
 type FilterSubTab = "general-filters" | "pl-dnpl";
 
-const campaignTabIds: CampaignTab[] = ["general", "duplicates", "filters", "schedule", "integration"];
+const campaignTabIds: CampaignTab[] = ["general", "duplicates", "filters", "schedule", "integration", "test-lead"];
 const filterSubTabIds: FilterSubTab[] = ["general-filters", "pl-dnpl"];
 
 function resolveCampaignTab(tab: string | null): CampaignTab {
@@ -458,6 +460,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     { id: "filters", label: "Filters", icon: Filter },
     { id: "schedule", label: "Schedule", icon: Calendar },
     { id: "integration", label: "Integration", icon: Plug },
+    { id: "test-lead", label: "Test Lead", icon: FlaskConical },
   ];
 
   if (isLoading || !campaign) {
@@ -862,6 +865,12 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               </PrimaryButton>
             </div>
           </div>
+        ) : activeTab === "test-lead" ? (
+          <CampaignTestLeadTab
+            campaignId={campaignId}
+            productLabel={campaign.productLabel}
+            integrationLabel={campaign.integrationLabel}
+          />
         ) : null}
       </PageSection>
 

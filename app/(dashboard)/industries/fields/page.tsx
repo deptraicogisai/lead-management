@@ -31,7 +31,7 @@ const dataTypeOptions = [
   { value: "date", label: "Date" },
 ];
 
-const dataTypeFilterOptions = ["", "Text", "Range", "Checkbox", "Multi Select"];
+import { VERTICAL_DATA_TYPE_FILTER_OPTIONS, dataTypeFilterUsesOptions } from "@/lib/vertical-field-filter";
 
 type NewFieldDraft = {
   fieldName: string;
@@ -638,7 +638,7 @@ export default function IndustryFieldsPage() {
             onChange={(event) => updateEditDraft({ dataTypeFilter: event.target.value || null })}
             className={inlineSelectClass}
           >
-            {dataTypeFilterOptions.map((option) => (
+            {VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => (
               <option key={option || "none"} value={option}>
                 {option || "-"}
               </option>
@@ -650,6 +650,13 @@ export default function IndustryFieldsPage() {
       key: "options",
       label: "Options",
       render: (row) => {
+        const dataTypeFilter =
+          editingFieldId === row.id && editDraft ? editDraft.dataTypeFilter : row.dataTypeFilter;
+
+        if (!dataTypeFilterUsesOptions(dataTypeFilter)) {
+          return <span className="text-slate-400 dark:text-slate-500">-</span>;
+        }
+
         const optionCount =
           editingFieldId === row.id && editDraft ? editDraft.options.length : row.options.length;
 
@@ -992,7 +999,7 @@ export default function IndustryFieldsPage() {
               onChange={(event) => updateCreateDraft({ dataTypeFilter: event.target.value })}
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
             >
-              {dataTypeFilterOptions.map((option) => (
+              {VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => (
                 <option key={option || "none"} value={option}>
                   {option || "-"}
                 </option>
