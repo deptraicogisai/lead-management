@@ -162,7 +162,7 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
     setIsFormOpen(true);
   };
 
-  const openDetail = (contact: SellerContact) => {
+  const openEdit = (contact: SellerContact) => {
     setEditingContactId(contact.id);
     setForm(toFormState(contact));
     setFormError("");
@@ -313,7 +313,16 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
       key: "displayId",
       label: "ID",
       sortValue: (row) => row.displayId,
-      render: (row) => <IdBadge id={row.displayId} />,
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => openEdit(row)}
+          className="group inline-flex"
+          aria-label={`Edit contact ${row.displayId}`}
+        >
+          <IdBadge id={row.displayId} interactive />
+        </button>
+      ),
     },
     {
       key: "name",
@@ -335,12 +344,19 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
       ),
     },
     {
+      key: "website",
+      label: "Website",
+      render: (row) => (
+        <span className="text-xs text-slate-700 dark:text-slate-200">{row.website || "—"}</span>
+      ),
+    },
+    {
       key: "actions",
       label: "Actions",
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <TableActionButton onClick={() => openDetail(row)}>Detail</TableActionButton>
+          <TableActionButton onClick={() => openEdit(row)}>Edit</TableActionButton>
           <TableActionButton variant="danger" onClick={() => setDeleteTarget(row)}>
             Delete
           </TableActionButton>
@@ -372,7 +388,7 @@ export function SellerContactsTab({ sellerId }: SellerContactsTabProps) {
 
       <Modal
         open={isFormOpen}
-        title="Add Contact"
+        title={editingContactId ? "Edit Contact" : "Add Contact"}
         onClose={closeForm}
         panelClassName="max-w-2xl"
         actions={

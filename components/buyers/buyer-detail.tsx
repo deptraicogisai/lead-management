@@ -33,6 +33,7 @@ import {
 import type { IntegrationOption } from "@/lib/buyer-integrations";
 import type { PresentListRecord } from "@/lib/present-list";
 import { cn } from "@/lib/utils";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 
 const buyerTabs = [
   { id: "global", label: "Global", icon: Globe },
@@ -681,31 +682,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="flex min-w-max items-center gap-2">
-            {buyerTabs.map((tab) => {
-              const isActive = tab.id === activeTab.id;
-              const Icon = tab.icon;
-
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleTabChange(tab.id)}
-                  className={cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
-                    isActive
-                      ? "border-emerald-700 bg-emerald-800 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                  )}
-                >
-                  <Icon size={16} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <PageTabBar tabs={buyerTabs} activeTabId={activeTab.id} onTabChange={handleTabChange} />
 
         {activeTab.id === "global"
           ? renderGlobalTab()

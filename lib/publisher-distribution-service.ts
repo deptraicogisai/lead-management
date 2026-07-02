@@ -3,6 +3,7 @@ import { VerticalMappingModel } from "@/lib/models/vertical-mapping";
 import { VerticalModel } from "@/lib/models/industry";
 import { PingTreeConfigModel } from "@/lib/models/ping-tree-config";
 import { PublisherDistributionModel } from "@/lib/models/publisher-distribution";
+import { SellerModel } from "@/lib/models/seller";
 import { buildPingTreeProductMap } from "@/lib/ping-tree-config-products";
 import {
   isPublisherDistributionType,
@@ -10,8 +11,10 @@ import {
   sumAllocationPercent,
   ALL_CHANNELS_VALUE,
   type DistributionAllocationInput,
+  type PingTreePublisherUsageByConfigId,
   type PublisherDistributionAllocation,
   type PublisherDistributionRecord,
+  type PublisherDistributionTreeUsage,
   type PublisherDistributionType,
 } from "@/lib/publisher-distribution";
 
@@ -270,4 +273,98 @@ export async function resolvePublisherDistributionForLead(params: {
     mappingRef: doc.mappingRef?.toString() ?? null,
     weights,
   };
+}
+
+type PublisherUsageDistributionDoc = {
+  _id: { toString(): string };
+  sellerRef?: { toString(): string } | null;
+  verticalRef?: { toString(): string } | null;
+  mappingRef?: { toString(): string } | null;
+  processingType: string;
+  allocations?: { configId: string; percent: number }[] | null;
+};
+
+/** Find publisher distributions that assign each ping tree config id. */
+export async function findPublisherUsagesByConfigIds(
+  configIds: string[]
+): Promise<PingTreePublisherUsageByConfigId> {
+  const validConfigIds = Array.from(
+    new Set(configIds.map((id) => id.trim()).filter((id) => Types.ObjectId.isValid(id)))
+  );
+  const usageByConfigId: PingTreePublisherUsageByConfigId = Object.fromEntries(
+    validConfigIds.map((id) => [id, []])
+  );
+  if (validConfigIds.length === 0) return usageByConfigId;
+
+  const docs = (await PublisherDistributionModel.find({
+    allocations: {
+      $elemMatch: {
+        configId: { $in: validConfigIds },
+        percent: { $gt: 0 },
+      },
+    },
+  }).lean()) as PublisherUsageDistributionDoc[];
+
+  if (docs.length === 0) return usageByConfigId;
+
+  const productMap = await buildPingTreeProductMap();
+
+  const sellerIds = new Set<string>();
+  const mappingIds = new Set<string>();
+  for (const doc of docs) {
+    if (doc.sellerRef) sellerIds.add(doc.sellerRef.toString());
+    if (doc.mappingRef) mappingIds.add(doc.mappingRef.toString());
+  }
+
+  const [sellers, mappings] = await Promise.all([
+    sellerIds.size
+      ? SellerModel.find({ _id: { $in: Array.from(sellerIds) } }, { _id: 1, name: 1 }).lean()
+      : Promise.resolve([]),
+    mappingIds.size
+      ? VerticalMappingModel.find({ _id: { $in: Array.from(mappingIds) } }, { _id: 1, apiName: 1 }).lean()
+      : Promise.resolve([]),
+  ]);
+
+  const sellerMap = new Map(sellers.map((seller) => [seller._id.toString(), seller.name?.trim() || "Unknown publisher"]));
+  const mappingMap = new Map(
+    mappings.map((mapping) => [mapping._id.toString(), mapping.apiName?.trim() || "Unknown channel"])
+  );
+
+  for (const doc of docs) {
+    const sellerId = doc.sellerRef?.toString() ?? "";
+    const verticalId = doc.verticalRef?.toString() ?? "";
+    const product = productMap.get(verticalId);
+    const productLabel = product?.productLabel ?? "Unknown product";
+    const mappingId = doc.mappingRef?.toString() ?? null;
+    const channelName = mappingId ? mappingMap.get(mappingId) ?? "Unknown channel" : "All Channels";
+    const processingType = (
+      isPublisherDistributionType(doc.processingType) ? doc.processingType : "Main processing"
+    ) as PublisherDistributionType;
+
+    for (const allocation of doc.allocations ?? []) {
+      const configId = allocation.configId?.trim() ?? "";
+      if (!configId || !validConfigIds.includes(configId) || allocation.percent <= 0) continue;
+
+      const usage: PublisherDistributionTreeUsage = {
+        distributionId: doc._id.toString(),
+        sellerId,
+        sellerName: sellerMap.get(sellerId) ?? "Unknown publisher",
+        productLabel,
+        channelName,
+        processingType,
+        percent: allocation.percent,
+      };
+      usageByConfigId[configId]?.push(usage);
+    }
+  }
+
+  for (const configId of validConfigIds) {
+    usageByConfigId[configId]?.sort((left, right) => {
+      const sellerCompare = left.sellerName.localeCompare(right.sellerName);
+      if (sellerCompare !== 0) return sellerCompare;
+      return left.channelName.localeCompare(right.channelName);
+    });
+  }
+
+  return usageByConfigId;
 }

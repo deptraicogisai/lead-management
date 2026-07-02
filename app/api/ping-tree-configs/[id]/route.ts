@@ -8,6 +8,7 @@ import {
   toPingTreeConfigRecord,
 } from "@/lib/ping-tree-config";
 import { buildPingTreeProductMap } from "@/lib/ping-tree-config-products";
+import { findPublisherUsagesByConfigIds } from "@/lib/publisher-distribution-service";
 import { softDeleteUpdate } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
@@ -96,6 +97,17 @@ export async function DELETE(_: Request, context: Params) {
     }
 
     await connectToDatabase();
+
+    const usages = await findPublisherUsagesByConfigIds([id]);
+    if ((usages[id] ?? []).length > 0) {
+      return NextResponse.json(
+        {
+          message:
+            "This ping tree cannot be deleted because it is assigned in Distribution by Publisher. Remove it from publisher distributions first.",
+        },
+        { status: 409 }
+      );
+    }
 
     const config = await PingTreeConfigModel.findByIdAndUpdate(id, { $set: softDeleteUpdate() });
     if (!config) {

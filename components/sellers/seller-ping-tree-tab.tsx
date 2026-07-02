@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Info } from "lucide-react";
 import { AddNewButton, TableActionButton } from "@/components/ui/action-buttons";
 import {
   CancelButton,
@@ -18,7 +20,9 @@ import {
   PUBLISHER_DISTRIBUTION_TYPES,
   type PublisherDistributionRecord,
   type PublisherDistributionType,
+  removeAllocationAndRebalance,
 } from "@/lib/publisher-distribution";
+import { buildPingTreePercentMap } from "@/lib/ping-tree-config";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -59,8 +63,11 @@ const emptyModal: ModalState = {
 type GridRow = {
   distribution: PublisherDistributionRecord;
   allocationIndex: number;
-  isFirst: boolean;
-  rowSpan: number;
+};
+
+type DeleteTarget = {
+  distribution: PublisherDistributionRecord;
+  allocation: PublisherDistributionRecord["allocations"][number];
 };
 
 export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
@@ -76,7 +83,7 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
   const [modalError, setModalError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [deleteTarget, setDeleteTarget] = useState<PublisherDistributionRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const loadRecords = useCallback(async () => {
@@ -134,11 +141,17 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
           status: string;
         }>;
         if (cancelled) return;
-        setTrees(
-          data
-            .filter((tree) => tree.status === "Active")
-            .map((tree) => ({ id: tree.id, name: tree.name, displayId: tree.displayId }))
-        );
+        const activeTrees = data
+          .filter((tree) => tree.status === "Active")
+          .map((tree) => ({ id: tree.id, name: tree.name, displayId: tree.displayId }));
+        setTrees(activeTrees);
+        setModal((current) => ({
+          ...current,
+          percents: buildPingTreePercentMap(
+            activeTrees.map((tree) => tree.id),
+            current.percents
+          ),
+        }));
       } finally {
         if (!cancelled) setTreesLoading(false);
       }
@@ -171,8 +184,6 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
         bucket.rows.push({
           distribution,
           allocationIndex: index,
-          isFirst: index === 0,
-          rowSpan: allocations.length,
         });
       });
     }
@@ -284,15 +295,46 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/sellers/${sellerId}/distributions/${deleteTarget.id}`, {
-        method: "DELETE",
+      const { distribution, allocation } = deleteTarget;
+      const isLastAllocation = distribution.allocations.length <= 1;
+
+      if (isLastAllocation) {
+        const response = await fetch(`/api/sellers/${sellerId}/distributions/${distribution.id}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { message?: string };
+          toast.error(data.message ?? "Failed to delete distribution setting.", "Distribution by Publisher");
+          return;
+        }
+        toast.success("Distribution deleted.", "Distribution by Publisher");
+        setDeleteTarget(null);
+        void loadRecords();
+        return;
+      }
+
+      const response = await fetch(`/api/sellers/${sellerId}/distributions/${distribution.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          verticalId: distribution.verticalId,
+          mappingId: distribution.mappingId,
+          processingType: distribution.processingType,
+          allocations: removeAllocationAndRebalance(
+            distribution.allocations.map((item) => ({
+              configId: item.configId,
+              percent: item.percent,
+            })),
+            allocation.configId
+          ),
+        }),
       });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { message?: string };
-        toast.error(data.message ?? "Failed to delete distribution setting.", "Distribution by Publisher");
+        toast.error(data.message ?? "Failed to remove ping tree from distribution.", "Distribution by Publisher");
         return;
       }
-      toast.success("Distribution deleted.", "Distribution by Publisher");
+      toast.success("Ping tree removed from distribution.", "Distribution by Publisher");
       setDeleteTarget(null);
       void loadRecords();
     } finally {
@@ -309,6 +351,20 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
         <AddNewButton type="button" onClick={openCreate}>
           Create new Distribution Settings
         </AddNewButton>
+      </div>
+
+      <div className="mb-4 flex gap-3 rounded-xl border border-sky-200/80 bg-sky-50 px-4 py-3 text-sky-950 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">
+          <Info size={16} />
+        </span>
+        <p className="text-sm leading-relaxed text-sky-900/90 dark:text-sky-100/85">
+          Publisher distribution overrides global percentages from{" "}
+          <Link href="/ping-tree-settings" className="font-semibold underline underline-offset-2">
+            Ping Tree Settings
+          </Link>{" "}
+          for this publisher when product, channel, and type match. Publishers without a custom distribution still
+          use the global split.
+        </p>
       </div>
 
       {isLoading ? (
@@ -339,7 +395,9 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
                     label={group.label}
                     rows={group.rows}
                     onEdit={openEdit}
-                    onDelete={setDeleteTarget}
+                    onDelete={(distribution, allocation) =>
+                      setDeleteTarget({ distribution, allocation })
+                    }
                   />
                 ))
               )}
@@ -484,10 +542,16 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
       {/* Delete confirm modal */}
       <Modal
         open={deleteTarget !== null}
-        title="Delete Distribution Settings"
+        title={
+          deleteTarget && deleteTarget.distribution.allocations.length <= 1
+            ? "Delete Distribution Settings"
+            : "Remove Ping Tree from Distribution"
+        }
         description={
           deleteTarget
-            ? `Are you sure you want to delete the ${deleteTarget.processingType} distribution for "${deleteTarget.channelName}"?`
+            ? deleteTarget.distribution.allocations.length <= 1
+              ? `Are you sure you want to delete the ${deleteTarget.distribution.processingType} distribution for "${deleteTarget.distribution.channelName}"?`
+              : `Remove "${deleteTarget.allocation.configName}" (${deleteTarget.allocation.percent}%) from the ${deleteTarget.distribution.processingType} distribution for "${deleteTarget.distribution.channelName}"? Remaining trees will be rebalanced to 100%.`
             : undefined
         }
         onClose={() => setDeleteTarget(null)}
@@ -499,7 +563,7 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
               disabled={isDeleting}
               className="border-red-600 bg-red-600 hover:bg-red-700 dark:border-red-500 dark:bg-red-500"
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "Deleting..." : deleteTarget && deleteTarget.distribution.allocations.length <= 1 ? "Delete" : "Remove"}
             </PrimaryButton>
           </>
         }
@@ -514,7 +578,10 @@ type GroupRowsProps = {
   label: string;
   rows: GridRow[];
   onEdit: (distribution: PublisherDistributionRecord) => void;
-  onDelete: (distribution: PublisherDistributionRecord) => void;
+  onDelete: (
+    distribution: PublisherDistributionRecord,
+    allocation: PublisherDistributionRecord["allocations"][number]
+  ) => void;
 };
 
 function GroupRows({ label, rows, onEdit, onDelete }: GroupRowsProps) {
@@ -545,16 +612,19 @@ function GroupRows({ label, rows, onEdit, onDelete }: GroupRowsProps) {
               </span>
             </td>
             <td className="px-4 py-3 align-middle">{allocation ? `${allocation.percent}%` : "—"}</td>
-            {row.isFirst ? (
-              <td className="px-4 py-3 align-middle" rowSpan={row.rowSpan}>
+            <td className="px-4 py-3 align-middle">
+              {allocation ? (
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  <TableActionButton variant="danger" onClick={() => onDelete(row.distribution)}>
+                  <TableActionButton
+                    variant="danger"
+                    onClick={() => onDelete(row.distribution, allocation)}
+                  >
                     Delete
                   </TableActionButton>
                   <TableActionButton onClick={() => onEdit(row.distribution)}>Edit</TableActionButton>
                 </div>
-              </td>
-            ) : null}
+              ) : null}
+            </td>
           </tr>
         );
       })}

@@ -37,6 +37,19 @@ export type PublisherDistributionRecord = {
   updatedAt: string;
 };
 
+/** A publisher distribution row that references a ping tree config. */
+export type PublisherDistributionTreeUsage = {
+  distributionId: string;
+  sellerId: string;
+  sellerName: string;
+  productLabel: string;
+  channelName: string;
+  processingType: PublisherDistributionType;
+  percent: number;
+};
+
+export type PingTreePublisherUsageByConfigId = Record<string, PublisherDistributionTreeUsage[]>;
+
 export type DistributionAllocationInput = {
   configId: string;
   percent: number;
@@ -71,4 +84,34 @@ export function normalizeAllocationInput(input: unknown): DistributionAllocation
 
 export function sumAllocationPercent(allocations: DistributionAllocationInput[]): number {
   return allocations.reduce((total, allocation) => total + allocation.percent, 0);
+}
+
+/** Remove one tree from a distribution and rebalance remaining percentages to 100%. */
+export function removeAllocationAndRebalance(
+  allocations: DistributionAllocationInput[],
+  configIdToRemove: string
+): DistributionAllocationInput[] {
+  const remaining = allocations.filter((allocation) => allocation.configId !== configIdToRemove);
+  if (remaining.length === 0) return [];
+  if (remaining.length === 1) {
+    return [{ configId: remaining[0].configId, percent: 100 }];
+  }
+
+  const total = sumAllocationPercent(remaining);
+  if (total <= 0) {
+    return remaining.map((allocation, index) => ({
+      configId: allocation.configId,
+      percent: index === 0 ? 100 : 0,
+    }));
+  }
+
+  const scaled = remaining.map((allocation) => ({
+    configId: allocation.configId,
+    percent: Math.round((allocation.percent / total) * 100),
+  }));
+  const scaledTotal = sumAllocationPercent(scaled);
+  if (scaledTotal !== 100) {
+    scaled[0] = { ...scaled[0], percent: scaled[0].percent + (100 - scaledTotal) };
+  }
+  return scaled;
 }

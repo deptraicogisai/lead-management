@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlaskConical } from "lucide-react";
+import { ClipboardList, FlaskConical, ScrollText } from "lucide-react";
 import { PrimaryButton } from "@/components/ui/form-controls";
 import { ContentAreaLoading } from "@/components/ui/content-area-loading";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -23,6 +24,11 @@ import { cn } from "@/lib/utils";
 
 type TestLeadView = "form" | "log";
 type LogDetailTab = "response" | "request" | "lead";
+
+const testLeadViewTabs = [
+  { id: "form" as const, label: "Form", icon: ClipboardList },
+  { id: "log" as const, label: "Log", icon: ScrollText },
+];
 
 type CampaignTestLeadTabProps = {
   campaignId: string;
@@ -162,6 +168,9 @@ function ResponseDetailPanel({ log }: { log: CampaignTestLeadLogRecord }) {
   const response = log.buyerResponse;
   const responseBody = response?.body ?? "";
   const responseHeaders = response?.headers ?? {};
+  const normalizedStatusCode = log.statusCode.trim().toLowerCase();
+  const shouldHideRawStatusCode = normalizedStatusCode === "true" || normalizedStatusCode === "false";
+  const statusCodeLabel = shouldHideRawStatusCode ? "-" : log.statusCode || "-";
 
   return (
     <div className="space-y-5">
@@ -169,7 +178,7 @@ function ResponseDetailPanel({ log }: { log: CampaignTestLeadLogRecord }) {
 
       <div className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
         <p className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">Status:</span> {log.statusCode || "-"}
+          <span className="font-medium">Status:</span> {statusCodeLabel}
           <BuyerStatusBadge buyerStatus={log.buyerStatus} />
         </p>
         <p>
@@ -536,28 +545,7 @@ export function CampaignTestLeadTab({ campaignId, productLabel, integrationLabel
         onClose={() => setDetailModalLogId(null)}
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { id: "form" as const, label: "Form" },
-              { id: "log" as const, label: "Log" },
-            ] as const
-          ).map((view) => (
-            <button
-              key={view.id}
-              type="button"
-              onClick={() => setActiveView(view.id)}
-              className={cn(
-                "rounded-xl border px-4 py-2 text-sm font-medium transition",
-                activeView === view.id
-                  ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                  : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-              )}
-            >
-              {view.label}
-            </button>
-          ))}
-        </div>
+        <PageTabBar tabs={testLeadViewTabs} activeTabId={activeView} onTabChange={setActiveView} />
 
         {activeView === "log" ? (
           <button

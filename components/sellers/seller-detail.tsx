@@ -10,12 +10,14 @@ import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TagSuggestInput } from "@/components/ui/tag-suggest-input";
 import { SellerContactsTab } from "@/components/sellers/seller-contacts-tab";
+import { SellerPaymentTab } from "@/components/sellers/seller-payment-tab";
 import { SellerPingTreeTab } from "@/components/sellers/seller-ping-tree-tab";
 import { SellerTrafficSourcesTab } from "@/components/sellers/seller-traffic-sources-tab";
 import { downloadCsv } from "@/lib/csv-export";
 import { normalizePublisherTag } from "@/lib/publisher-tag";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 
 const EDIT_FIELD_WIDTH = "max-w-[320px]";
 
@@ -373,36 +375,14 @@ export function SellerDetail({ seller }: SellerDetailProps) {
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="flex min-w-max items-center gap-2">
-            {sellerTabs.map((tab) => {
-              const isActive = tab.id === activeTab.id;
-              const Icon = tab.icon;
-
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleTabChange(tab.id)}
-                  className={cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
-                    isActive
-                      ? "border-emerald-700 bg-emerald-800 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                  )}
-                >
-                  <Icon size={16} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <PageTabBar tabs={sellerTabs} activeTabId={activeTab.id} onTabChange={handleTabChange} />
 
         {activeTab.id === "main"
           ? renderMainTab()
           : activeTab.id === "contacts"
             ? <SellerContactsTab sellerId={seller.id} />
+            : activeTab.id === "payment"
+              ? <SellerPaymentTab sellerId={seller.id} />
             : activeTab.id === "traffic-sources"
               ? <SellerTrafficSourcesTab sellerId={seller.id} />
               : activeTab.id === "ping-tree"

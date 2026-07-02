@@ -18,6 +18,7 @@ import { LoadingOverlay } from "@/components/ui/loading-indicator";
 import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import {
   PING_TREE_CAMPAIGN_TYPE_TABS,
   type PingTreeCampaignCard,
@@ -946,23 +947,11 @@ export function PingTreeSettingsPage({
   return (
     <div className="space-y-6">
       {configId ? null : (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 [-webkit-overflow-scrolling:touch] dark:border-slate-700 dark:bg-slate-800/60 sm:mx-0 sm:inline-flex sm:overflow-visible">
-          {PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => handleTabChange(tab)}
-              className={cn(
-                "shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-150 sm:px-5",
-                activeTab === tab
-                  ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600 dark:text-white"
-                  : "text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700/60 dark:hover:text-slate-100"
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        <PageTabBar
+          tabs={PING_TREE_CAMPAIGN_TYPE_TABS.map((tab) => ({ id: tab, label: tab }))}
+          activeTabId={activeTab}
+          onTabChange={handleTabChange}
+        />
       )}
 
       {configId && tree ? (

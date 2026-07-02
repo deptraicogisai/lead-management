@@ -11,6 +11,7 @@ import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/for
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -113,6 +114,15 @@ function buildFieldPayload(field: ApiField) {
 }
 
 type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule" | "rev-share" | "test-lead";
+
+const fieldConfigTabs = [
+  { id: "fields" as const, label: "Fields", icon: List },
+  { id: "duplicates" as const, label: "Duplicates", icon: Copy },
+  { id: "filters" as const, label: "Filters", icon: Filter },
+  { id: "schedule" as const, label: "Schedule", icon: Calendar },
+  { id: "rev-share" as const, label: "Rev-Share Model", icon: Percent },
+  { id: "test-lead" as const, label: "Test Lead", icon: FlaskConical },
+];
 
 export function SellerFieldConfigurationPage() {
   const params = useParams<{ sellerId: string; mappingId: string }>();
@@ -750,6 +760,17 @@ export function SellerFieldConfigurationPage() {
     },
   ];
 
+  const handleFieldConfigTabChange = (tabId: FieldConfigurationTab) => {
+    if (tabId === activeTab) return;
+    if (isOrderDirty && !window.confirm("You have unsaved field order changes. Discard them and switch tab?")) {
+      return;
+    }
+    if (isOrderDirty) {
+      void fetchFields();
+    }
+    setActiveTab(tabId);
+  };
+
   const isCreateEmailType = createDraft.type.trim().toLowerCase() === "email";
 
   return (
@@ -787,48 +808,12 @@ export function SellerFieldConfigurationPage() {
           ) : null
         }
       >
-        <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-          {(
-            [
-              { id: "fields" as const, label: "Fields", icon: List },
-              { id: "duplicates" as const, label: "Duplicates", icon: Copy },
-              { id: "filters" as const, label: "Filters", icon: Filter },
-              { id: "schedule" as const, label: "Schedule", icon: Calendar },
-              { id: "rev-share" as const, label: "Rev-Share Model", icon: Percent },
-              { id: "test-lead" as const, label: "Test Lead", icon: FlaskConical },
-            ] as const
-          ).map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  if (tab.id === activeTab) return;
-                  if (
-                    isOrderDirty &&
-                    !window.confirm("You have unsaved field order changes. Discard them and switch tab?")
-                  ) {
-                    return;
-                  }
-                  if (isOrderDirty) {
-                    void fetchFields();
-                  }
-                  setActiveTab(tab.id);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  activeTab === tab.id
-                    ? "bg-emerald-800 text-white"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                )}
-              >
-                <Icon size={15} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <PageTabBar
+          className="mb-4"
+          tabs={fieldConfigTabs}
+          activeTabId={activeTab}
+          onTabChange={handleFieldConfigTabChange}
+        />
 
         {activeTab === "test-lead" && sellerId && mappingId ? (
           <MappingTestLeadTab

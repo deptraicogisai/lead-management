@@ -33,6 +33,7 @@ import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageSection } from "@/components/ui/state";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import {
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
@@ -470,27 +471,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   return (
     <div className="space-y-6">
       <PageSection>
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  activeTab === tab.id
-                    ? "bg-emerald-800 text-white"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                )}
-              >
-                <Icon size={15} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <PageTabBar tabs={tabs} activeTabId={activeTab} onTabChange={handleTabChange} />
 
         {activeTab === "general" ? (
           <div className="mt-6 space-y-4">
@@ -609,32 +590,14 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
         {activeTab === "filters" ? (
           <div className="mt-6 space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { id: "general-filters" as const, label: "General Filters", icon: Filter },
-                  { id: "pl-dnpl" as const, label: "PL/DNPL", icon: Ban },
-                ] as const
-              ).map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => handleFilterSubTabChange(tab.id)}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium",
-                      filterSubTab === tab.id
-                        ? "bg-emerald-800 text-white"
-                        : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    )}
-                  >
-                    <Icon size={15} />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
+            <PageTabBar
+              tabs={[
+                { id: "general-filters", label: "General Filters", icon: Filter },
+                { id: "pl-dnpl", label: "PL/DNPL", icon: Ban },
+              ]}
+              activeTabId={filterSubTab}
+              onTabChange={handleFilterSubTabChange}
+            />
 
             <DualSaveBar
               dual={

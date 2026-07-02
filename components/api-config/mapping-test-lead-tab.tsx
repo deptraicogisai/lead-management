@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList, ScrollText } from "lucide-react";
 import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-control";
 import { Checkbox, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
 import {
@@ -44,6 +45,11 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type TestLeadView = "form" | "log";
+
+const testLeadViewTabs = [
+  { id: "form" as const, label: "Form", icon: ClipboardList },
+  { id: "log" as const, label: "Log", icon: ScrollText },
+];
 
 type MappingTestLeadTabProps = {
   sellerId: string;
@@ -1255,28 +1261,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
     <div className="space-y-5">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-            {(
-              [
-                { id: "form" as const, label: "Form" },
-                { id: "log" as const, label: "Log" },
-              ] as const
-            ).map((view) => (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => setActiveView(view.id)}
-                className={cn(
-                  "px-4 py-2 text-sm font-medium transition",
-                  activeView === view.id
-                    ? "bg-emerald-800 text-white dark:bg-emerald-600"
-                    : "bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                )}
-              >
-                {view.label}
-              </button>
-            ))}
-          </div>
+          <PageTabBar tabs={testLeadViewTabs} activeTabId={activeView} onTabChange={setActiveView} />
 
           {activeView === "log" ? (
             <button

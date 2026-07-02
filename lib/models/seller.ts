@@ -34,6 +34,26 @@ const sellerContactSchema = new Schema(
   { timestamps: true }
 );
 
+const sellerPaymentSchema = new Schema(
+  {
+    method: { type: String, required: false, trim: true, default: "" },
+    paypalEmail: { type: String, required: false, trim: true, default: "" },
+    payoneerEmail: { type: String, required: false, trim: true, default: "" },
+    accountHolderName: { type: String, required: false, trim: true, default: "" },
+    beneficiaryName: { type: String, required: false, trim: true, default: "" },
+    bankName: { type: String, required: false, trim: true, default: "" },
+    swiftBic: { type: String, required: false, trim: true, default: "" },
+    accountNumberIban: { type: String, required: false, trim: true, default: "" },
+    bankAddress: { type: String, required: false, trim: true, default: "" },
+    achAccountType: { type: String, required: false, trim: true, default: "" },
+    achRoutingNumber: { type: String, required: false, trim: true, default: "" },
+    achAccountNumber: { type: String, required: false, trim: true, default: "" },
+    cryptoNetwork: { type: String, required: false, trim: true, default: "" },
+    cryptoWalletAddress: { type: String, required: false, trim: true, default: "" },
+  },
+  { timestamps: true }
+);
+
 const sellerSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -43,6 +63,7 @@ const sellerSchema = new Schema(
     status: { type: String, enum: ["Active", "Inactive", "Deleted"], required: true },
     apiFields: { type: [apiFieldSchema], default: [] },
     contacts: { type: [sellerContactSchema], default: [] },
+    payments: { type: [sellerPaymentSchema], default: [] },
   },
   { timestamps: true }
 );
@@ -77,6 +98,41 @@ export async function ensureSellerCollectionMigrated() {
         await db.collection("sellers").updateOne(
           { _id: seller._id },
           { $set: { apiFields } }
+        );
+      }
+
+      const legacyPaymentSellers = await db
+        .collection("sellers")
+        .find(
+          {
+            payment: { $exists: true },
+            $or: [{ payments: { $exists: false } }, { payments: { $size: 0 } }],
+          },
+          { projection: { _id: 1, payment: 1 } }
+        )
+        .toArray();
+
+      for (const seller of legacyPaymentSellers) {
+        const legacyPayment = seller.payment as Record<string, unknown> | null | undefined;
+        const method = typeof legacyPayment?.method === "string" ? legacyPayment.method.trim() : "";
+        if (!method) {
+          await db.collection("sellers").updateOne({ _id: seller._id }, { $unset: { payment: "" } });
+          continue;
+        }
+
+        await db.collection("sellers").updateOne(
+          { _id: seller._id },
+          {
+            $set: {
+              payments: [
+                {
+                  _id: new mongoose.Types.ObjectId(),
+                  ...legacyPayment,
+                },
+              ],
+            },
+            $unset: { payment: "" },
+          }
         );
       }
     })().catch((error) => {

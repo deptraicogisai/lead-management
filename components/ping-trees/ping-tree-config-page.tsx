@@ -20,12 +20,17 @@ import {
 } from "@/components/ui/form-controls";
 import { FormError } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
+import {
+  PublisherDistributionUsageAlert,
+} from "@/components/ping-trees/publisher-distribution-usage-alert";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { downloadCsv } from "@/lib/csv-export";
 import {
+  buildPingTreePercentMap,
   PING_TREE_POSTING_TYPES,
   PING_TREE_PROCESSING_TYPES,
   type PingTreeConfigRecord,
@@ -34,6 +39,7 @@ import {
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { cn } from "@/lib/utils";
+import type { PublisherDistributionTreeUsage } from "@/lib/publisher-distribution";
 
 type ProductOption = {
   verticalId: string;
@@ -103,6 +109,8 @@ export function PingTreeConfigPage() {
   const [configValues, setConfigValues] = useState<Record<string, number>>({});
   const [configError, setConfigError] = useState("");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [deletePublisherUsages, setDeletePublisherUsages] = useState<PublisherDistributionTreeUsage[]>([]);
+  const [isDeleteUsageLoading, setIsDeleteUsageLoading] = useState(false);
 
   const loadRecords = useCallback(
     async (processingType: PingTreeProcessingType, includeDeleted: boolean) => {
@@ -334,14 +342,15 @@ export function PingTreeConfigPage() {
 
   // ----- Delete / Restore -----
   const submitDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deleteBlockedByPublisher) return;
     setIsSubmitting(true);
     try {
       const response = await fetch(`/api/ping-tree-configs/${encodeURIComponent(deleteTarget.id)}`, {
         method: "DELETE",
       });
       if (!response.ok) {
-        toast.error("Failed to delete ping tree.", "Ping Tree");
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(payload?.message ?? "Failed to delete ping tree.", "Ping Tree");
         return;
       }
       toast.success("Ping tree deleted.", "Ping Tree");
@@ -381,9 +390,38 @@ export function PingTreeConfigPage() {
     [configProductId, records]
   );
 
+  useEffect(() => {
+    if (!deleteTarget) {
+      setDeletePublisherUsages([]);
+      setIsDeleteUsageLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setIsDeleteUsageLoading(true);
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ configIds: deleteTarget.id });
+        const response = await fetch(`/api/ping-tree-configs/publisher-usage?${params.toString()}`);
+        if (!response.ok) return;
+        const data = (await response.json()) as Record<string, PublisherDistributionTreeUsage[]>;
+        if (!cancelled) setDeletePublisherUsages(data[deleteTarget.id] ?? []);
+      } catch {
+        if (!cancelled) setDeletePublisherUsages([]);
+      } finally {
+        if (!cancelled) setIsDeleteUsageLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deleteTarget]);
+
+  const deleteBlockedByPublisher = deletePublisherUsages.length > 0;
+
   const openConfig = (verticalId: string) => {
     const rows = records.filter((record) => record.verticalId === verticalId && record.status !== "Deleted");
-    setConfigValues(Object.fromEntries(rows.map((row) => [row.id, row.percent])));
+    const existing = Object.fromEntries(rows.map((row) => [row.id, row.percent]));
+    setConfigValues(buildPingTreePercentMap(rows.map((row) => row.id), existing));
     setConfigError("");
     setConfigProductId(verticalId);
   };
@@ -465,24 +503,12 @@ export function PingTreeConfigPage() {
 
   return (
     <PageSection>
-      {/* Tabs */}
-      <div className="-mx-1 mb-5 flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800/60">
-        {PING_TREE_PROCESSING_TYPES.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => handleTabChange(tab)}
-            className={cn(
-              "shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-200",
-              activeTab === tab
-                ? "bg-emerald-600 text-white shadow-sm dark:bg-emerald-600"
-                : "text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-700/60"
-            )}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      <PageTabBar
+        className="mb-5"
+        tabs={PING_TREE_PROCESSING_TYPES.map((tab) => ({ id: tab, label: tab }))}
+        activeTabId={activeTab}
+        onTabChange={handleTabChange}
+      />
 
       {/* Filters */}
       <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/70">
@@ -698,7 +724,7 @@ export function PingTreeConfigPage() {
             <CancelButton onClick={() => setDeleteTarget(null)} disabled={isSubmitting} />
             <PrimaryButton
               onClick={submitDelete}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isDeleteUsageLoading || deleteBlockedByPublisher}
               className="border-red-600 bg-red-600 hover:bg-red-700 dark:border-red-500 dark:bg-red-500"
             >
               {isSubmitting ? "Deleting..." : "Delete"}
@@ -707,8 +733,19 @@ export function PingTreeConfigPage() {
         }
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          This will move the ping tree to deleted. You can show it again using the &quot;Show Deleted&quot; filter.
+          {isDeleteUsageLoading
+            ? "Checking publisher distribution assignments..."
+            : deleteBlockedByPublisher
+              ? "This ping tree cannot be deleted while it is assigned in Distribution by Publisher."
+              : 'This will move the ping tree to deleted. You can show it again using the "Show Deleted" filter.'}
         </p>
+        {deleteBlockedByPublisher ? (
+          <PublisherDistributionUsageAlert
+            className="mt-4"
+            usages={deletePublisherUsages}
+            variant="deleteBlocked"
+          />
+        ) : null}
       </Modal>
 
       {/* Config percentage modal */}

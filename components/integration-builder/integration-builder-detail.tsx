@@ -23,6 +23,7 @@ import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { toast } from "@/lib/toast";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import {
   INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS,
@@ -1777,31 +1778,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="flex min-w-max items-center gap-3">
-              {builderTabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = tab.id === activeTab.id;
-
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTabId(tab.id)}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition duration-200",
-                      isActive
-                        ? "border-emerald-700 bg-emerald-800 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-                    )}
-                  >
-                    <Icon size={16} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <PageTabBar tabs={builderTabs} activeTabId={activeTab.id} onTabChange={setActiveTabId} />
 
           {activeTab.id === "general"
             ? renderGeneralTab()

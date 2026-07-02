@@ -7,6 +7,7 @@ import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-sched
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { SectionLoading } from "@/components/ui/loading-indicator";
+import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { FieldLabel, PrimaryButton, primaryButtonClassName } from "@/components/ui/form-controls";
@@ -207,33 +208,15 @@ export function MappingIntakeSettingsTabs({
   return (
     <div className="space-y-4">
       {hideTabBar ? null : (
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-          {(
-            [
-              { id: "duplicates" as const, label: "Duplicates", icon: Copy },
-              { id: "filters" as const, label: "Filters", icon: Filter },
-              { id: "schedule" as const, label: "Schedule", icon: Calendar },
-            ] as const
-          ).map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  activeTab === tab.id
-                    ? "bg-emerald-800 text-white"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                )}
-              >
-                <Icon size={15} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        <PageTabBar
+          tabs={[
+            { id: "duplicates", label: "Duplicates", icon: Copy },
+            { id: "filters", label: "Filters", icon: Filter },
+            { id: "schedule", label: "Schedule", icon: Calendar },
+          ]}
+          activeTabId={activeTab}
+          onTabChange={setActiveTab}
+        />
       )}
 
       {activeTab === "duplicates" ? (

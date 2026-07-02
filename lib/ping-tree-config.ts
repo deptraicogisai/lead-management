@@ -87,3 +87,25 @@ export function formatPingTreeProductLabel(verticalName: string, verticalIndex: 
   if (!verticalIndex) return verticalName;
   return `[${verticalIndex}] ${verticalName}`;
 }
+
+/** Default ping tree allocation: one tree at 100%, others at 0%. Preserves existing splits that total 100%. */
+export function buildPingTreePercentMap(
+  treeIds: string[],
+  existing: Record<string, number> = {}
+): Record<string, number> {
+  if (treeIds.length === 0) return {};
+
+  if (treeIds.length === 1) {
+    return { [treeIds[0]]: 100 };
+  }
+
+  const existingTotal = treeIds.reduce((sum, id) => sum + (existing[id] ?? 0), 0);
+  const hasValidAllocation =
+    existingTotal === 100 && treeIds.some((id) => (existing[id] ?? 0) > 0);
+
+  if (hasValidAllocation) {
+    return Object.fromEntries(treeIds.map((id) => [id, existing[id] ?? 0]));
+  }
+
+  return Object.fromEntries(treeIds.map((id, index) => [id, index === 0 ? 100 : 0]));
+}
