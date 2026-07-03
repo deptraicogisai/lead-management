@@ -95,9 +95,9 @@ export type DistributionLog = {
 };
 
 export const stats = {
-  totalLeads: 1284,
-  totalSellers: 42,
-  totalBuyers: 27,
+  totalLeads: 3000,
+  totalSellers: 50,
+  totalBuyers: 20,
   successRate: "89.4%",
 };
 
