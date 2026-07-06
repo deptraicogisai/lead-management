@@ -16,7 +16,8 @@ import {
 } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
-import { ensureTrafficSourceForLead, extractSubId } from "@/lib/traffic-source";
+import { ensureTrafficSourceForLead } from "@/lib/traffic-source-server";
+import { extractSubId } from "@/lib/traffic-source";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import {
   buildPublisherAcceptedResponse,
@@ -543,7 +544,7 @@ export async function handleSellerLeadPost(req: Request) {
       const postErrorDelivery = distribution.campaignDeliveries.find(
         (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
       );
-      responsePayload = buildPublisherErrorResponse([distribution.message], {
+      responsePayload = buildPublisherRejectedResponse([distribution.message], {
         lead_id: leadId,
         ...(postErrorDelivery?.errorReason ? { buyer_post_error: postErrorDelivery.errorReason } : {}),
         ...(postErrorDelivery?.postLeadUrl ? { post_lead_url: postErrorDelivery.postLeadUrl } : {}),
@@ -583,9 +584,7 @@ export async function handleSellerLeadPost(req: Request) {
     const httpStatus =
       distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test"
         ? 200
-        : distribution.publisherStatus === "Post Error"
-          ? 502
-          : 400;
+        : 400;
 
     return NextResponse.json(responsePayload, { status: httpStatus });
   } catch (error) {

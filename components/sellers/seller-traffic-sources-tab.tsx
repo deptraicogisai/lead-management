@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, RefreshCw } from "lucide-react";
-import { ClearButton, SearchButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { FieldLabel, Input, Select } from "@/components/ui/form-controls";
+import { FieldLabel, Input } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -298,12 +305,13 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-        <div className="grid gap-4 md:grid-cols-4">
-          <div>
+      <SearchFilterPanel>
+        <SearchFilterGrid>
+          <SearchFilterField>
             <FieldLabel htmlFor="traffic-source-id" label="ID" />
             <Input
               id="traffic-source-id"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={idFilter}
               onChange={(event) => setIdFilter(event.target.value)}
               placeholder="Search by ID"
@@ -314,12 +322,13 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
                 }
               }}
             />
-          </div>
+          </SearchFilterField>
 
-          <div>
+          <SearchFilterField>
             <FieldLabel htmlFor="traffic-source-name" label="Name" />
             <Input
               id="traffic-source-name"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={nameFilter}
               onChange={(event) => setNameFilter(event.target.value)}
               placeholder="Search by source name"
@@ -330,39 +339,31 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
                 }
               }}
             />
-          </div>
+          </SearchFilterField>
 
-          <div>
-            <FieldLabel htmlFor="traffic-source-product" label="Product" />
-            <Select
-              id="traffic-source-product"
-              value={productFilter}
-              onChange={(event) => setProductFilter(event.target.value)}
-            >
-              <option value="All">All</option>
-              {productOptions.map((product) => (
-                <option key={product} value={product}>
-                  {product}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <SearchFilterSelect
+            id="traffic-source-product"
+            label="Product"
+            value={productFilter}
+            onChange={setProductFilter}
+            options={[
+              { value: "All", label: "All" },
+              ...productOptions.map((product) => ({ value: product, label: product })),
+            ]}
+          />
 
-          <div>
+          <SearchFilterField>
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
             <StatusMultiSelect
               options={STATUS_MULTI_OPTIONS}
               selected={statusFilter}
               onChange={setStatusFilter}
             />
-          </div>
-        </div>
+          </SearchFilterField>
+        </SearchFilterGrid>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          <SearchButton onClick={handleSearch} />
-          <ClearButton onClick={clearFilters} />
-        </div>
-      </div>
+        <SearchFilterActions onSearch={handleSearch} onClear={clearFilters} />
+      </SearchFilterPanel>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <ListTableToolbar

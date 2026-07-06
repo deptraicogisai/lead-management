@@ -1,3 +1,4 @@
+import { formatDateTimeDisplay } from "@/lib/date-range";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-value";
@@ -162,20 +163,12 @@ export const DUPLICATE_PERIOD_OPTIONS = [
   "365 days",
 ];
 
-const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 export function formatCampaignDateTime(value?: Date | string | null) {
   if (!value) return "-";
-  const date = new Date(value);
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  const month = monthNames[date.getMonth()];
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${month} ${day} ${hours}:${minutes}:${seconds}`;
+  return formatDateTimeDisplay(date);
 }
 
 export function buildHourOptions() {

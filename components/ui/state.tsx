@@ -19,7 +19,7 @@ export function PageSection({
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:p-6 dark:border-slate-700 dark:bg-slate-900">
       {showHeader ? (
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          {title ? <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3> : <span />}
+          {title ? <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3> : <span />}
           {actions ? (
             <div className="mobile-page-actions flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
               {actions}

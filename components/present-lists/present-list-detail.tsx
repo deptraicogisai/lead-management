@@ -4,9 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
-import { ClearButton, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
+import { IconActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+} from "@/components/ui/search-filter-layout";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -225,25 +232,30 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-          <FieldLabel htmlFor="value-search" label="Search for a Value" />
-          <Input id="value-search" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
-            <SearchButton
-              onClick={() => {
-                setAppliedSearch(search);
-                setPage(1);
-              }}
-            />
-            <ClearButton
-              onClick={() => {
-                setSearch("");
-                setAppliedSearch("");
-                setPage(1);
-              }}
-            />
-          </div>
-        </div>
+        <SearchFilterPanel className="mt-4">
+          <SearchFilterGrid>
+            <SearchFilterField>
+              <FieldLabel htmlFor="value-search" label="Search for a Value" />
+              <Input
+                id="value-search"
+                className={SEARCH_FILTER_CONTROL_CLASS}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </SearchFilterField>
+          </SearchFilterGrid>
+          <SearchFilterActions
+            onSearch={() => {
+              setAppliedSearch(search);
+              setPage(1);
+            }}
+            onClear={() => {
+              setSearch("");
+              setAppliedSearch("");
+              setPage(1);
+            }}
+          />
+        </SearchFilterPanel>
 
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           <button

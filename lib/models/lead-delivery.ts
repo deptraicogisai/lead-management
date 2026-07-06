@@ -35,6 +35,7 @@ const leadDeliverySchema = new Schema(
     responseHeaders: { type: Schema.Types.Mixed, default: {} },
     deliveryTrace: { type: Schema.Types.Mixed, required: false, default: [] },
     httpStatus: { type: Number, required: false, default: 0 },
+    responseTimeMs: { type: Number, required: false, default: null },
     duplicateFingerprint: { type: String, required: false, trim: true, index: true },
     postedAt: { type: Date, required: true, index: true },
   },

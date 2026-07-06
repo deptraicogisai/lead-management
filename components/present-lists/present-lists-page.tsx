@@ -4,9 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
-import { AddNewButton, ClearButton, DetailNameLink, IconActionButton, SearchButton } from "@/components/ui/action-buttons";
+import { AddNewButton, DetailNameLink, IconActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -142,43 +150,51 @@ export function PresentListsPage() {
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <FieldLabel htmlFor="pl-product-filter" label="Product" />
-              <select id="pl-product-filter" value={draftFilters.productId} onChange={(e) => setDraftFilters((c) => ({ ...c, productId: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                <option value="">All</option>
-                {verticalOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="pl-type-filter" label="Type" />
-              <select id="pl-type-filter" value={draftFilters.listType} onChange={(e) => setDraftFilters((c) => ({ ...c, listType: e.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                <option value="All">Please select</option>
-                {PRESENT_LIST_TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="pl-name-filter" label="Name" />
-              <Input id="pl-name-filter" value={draftFilters.name} onChange={(e) => setDraftFilters((c) => ({ ...c, name: e.target.value }))} />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap justify-end gap-3">
-            <SearchButton onClick={() => { setAppliedFilters(draftFilters); setPage(1); }} />
-            <ClearButton
-              onClick={() => {
-                const cleared = { productId: "", listType: "All", name: "" };
-                setDraftFilters(cleared);
-                setAppliedFilters(cleared);
-                setPage(1);
-              }}
+        <SearchFilterPanel>
+          <SearchFilterGrid>
+            <SearchFilterSelect
+              id="pl-product-filter"
+              label="Product"
+              value={draftFilters.productId}
+              onChange={(value) => setDraftFilters((c) => ({ ...c, productId: value }))}
+              options={[
+                { value: "", label: "All" },
+                ...verticalOptions.map((option) => ({ value: option.id, label: option.label })),
+              ]}
             />
-          </div>
-        </div>
+            <SearchFilterSelect
+              id="pl-type-filter"
+              label="Type"
+              value={draftFilters.listType}
+              onChange={(value) => setDraftFilters((c) => ({ ...c, listType: value }))}
+              options={[
+                { value: "All", label: "Please select" },
+                ...PRESENT_LIST_TYPE_OPTIONS.map((type) => ({ value: type, label: type })),
+              ]}
+            />
+            <SearchFilterField>
+              <FieldLabel htmlFor="pl-name-filter" label="Name" />
+              <Input
+                id="pl-name-filter"
+                className={SEARCH_FILTER_CONTROL_CLASS}
+                value={draftFilters.name}
+                onChange={(e) => setDraftFilters((c) => ({ ...c, name: e.target.value }))}
+              />
+            </SearchFilterField>
+          </SearchFilterGrid>
+          <SearchFilterActions
+            onSearch={() => {
+              setAppliedFilters(draftFilters);
+              setPage(1);
+            }}
+            onClear={() => {
+              const cleared = { productId: "", listType: "All", name: "" };
+              setDraftFilters(cleared);
+              setAppliedFilters(cleared);
+              setPage(1);
+            }}
+          />
+        </SearchFilterPanel>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <ListTableToolbar

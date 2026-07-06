@@ -1,3 +1,5 @@
+import { formatDateTimeDisplay } from "@/lib/date-range";
+
 export type BuyerStatus = "Active" | "Inactive" | "Disabled" | "Paused" | "Deleted";
 
 export type BuyerListRecord = {
@@ -75,17 +77,10 @@ const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 export function formatBuyerCreated(value?: Date | string | null) {
   if (!value) return "-";
-  const date = new Date(value);
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+  return formatDateTimeDisplay(date);
 }
 
 export function formatLastTraffic(value?: Date | string | null) {

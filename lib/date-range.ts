@@ -95,18 +95,24 @@ export function parseDateTimeValue(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatDateRangeDisplay(from: Date, to: Date) {
-  const formatPart = (date: Date) => {
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const seconds = String(date.getSeconds()).padStart(2, "0");
-    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-  };
+export function formatDateTimeDisplay(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === "string" ? value : "";
+  }
 
-  return `${formatPart(from)} - ${formatPart(to)}`;
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+export function formatDateRangeDisplay(from: Date, to: Date) {
+  return `${formatDateTimeDisplay(from)} - ${formatDateTimeDisplay(to)}`;
 }
 
 export function buildTodayDateTimeRange(): DateRangeStrings {

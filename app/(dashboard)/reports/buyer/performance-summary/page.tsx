@@ -1,7 +1,5 @@
-import { ReportPlaceholderPage } from "@/components/reports/report-placeholder-page";
+import { BuyerPerformanceSummaryPage } from "@/components/reports/buyer-performance-summary-page";
 
-export default function BuyerPerformanceSummaryPage() {
-  return (
-    <ReportPlaceholderPage description="Buyer performance summary report will be available here." />
-  );
+export default function BuyerPerformanceSummaryRoutePage() {
+  return <BuyerPerformanceSummaryPage />;
 }

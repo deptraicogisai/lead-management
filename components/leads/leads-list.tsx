@@ -9,6 +9,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { formatDateTimeDisplay } from "@/lib/date-range";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 
@@ -46,23 +47,6 @@ function formatRawData(rawData: string) {
   } catch {
     return rawData;
   }
-}
-
-function formatPostedAt(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
 export function LeadsList() {
@@ -117,7 +101,7 @@ export function LeadsList() {
       label: "Posted At",
       sortValue: (row) => new Date(row.postedAt).getTime(),
       render: (row) => (
-        <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{row.postedAt ? formatPostedAt(row.postedAt) : ""}</span>
+        <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{row.postedAt ? formatDateTimeDisplay(row.postedAt) : ""}</span>
       ),
     },
     {

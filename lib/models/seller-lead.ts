@@ -15,7 +15,9 @@ const sellerLeadSchema = new Schema(
       index: true,
     },
     isTestLead: { type: Boolean, default: false },
+    // Buyer offer URL returned from a Redirect campaign accept.
     redirectUrl: { type: String, required: false, trim: true, default: "" },
+    redirectConfirmedAt: { type: Date, required: false, index: true },
     soldPrice: { type: Number, required: false, default: null },
     pingTreeAllocations: {
       type: [

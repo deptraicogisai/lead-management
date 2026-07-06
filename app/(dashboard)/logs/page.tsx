@@ -9,6 +9,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
+import { formatDateTimeDisplay } from "@/lib/date-range";
 import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -41,20 +42,6 @@ type LogListResponse = {
 };
 
 const PREVIEW_LIMIT = 80;
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-}
 
 function previewText(value: string) {
   return value.length > PREVIEW_LIMIT ? `${value.slice(0, PREVIEW_LIMIT)}...` : value;
@@ -293,7 +280,7 @@ export default function LogsPage() {
       key: "createdAt",
       label: "Logged At",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatDateTime(row.createdAt)}</span>,
+      render: (row) => <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatDateTimeDisplay(row.createdAt)}</span>,
     },
   ];
 
@@ -390,7 +377,7 @@ export default function LogsPage() {
             ? `${formatRequestType(selectedLog.requestType)} | ${selectedLog.sellerName || "—"} | ${selectedLog.verticalName || "—"}`
             : undefined
         }
-        postedAt={selectedLog ? formatDateTime(selectedLog.createdAt) : undefined}
+        postedAt={selectedLog ? formatDateTimeDisplay(selectedLog.createdAt) : undefined}
         deliveryStatus={selectedLog?.deliveryStatus}
         httpStatus={selectedLog?.httpStatus}
         postLeadUrl={selectedLog?.postLeadUrl}

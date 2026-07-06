@@ -26,6 +26,7 @@ import {
   selectPingTreeConfig,
   type SelectedPingTreeConfig,
 } from "@/lib/ping-tree-allocation";
+import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import {
   resolvePublisherPingTreeTypes,
@@ -89,6 +90,7 @@ export type CampaignDeliveryLog = {
   campaignTimezone?: string;
   campaignMinPrice?: number;
   postedAt?: string;
+  responseTimeMs?: number | null;
 };
 
 export type LeadDistributionResult = {
@@ -930,6 +932,7 @@ async function processCampaignAttempt(params: {
     responseHeaders: delivery.responseHeaders ?? {},
     httpStatus: delivery.httpStatus,
     deliveryTrace: traceSteps,
+    responseTimeMs: delivery.responseTimeMs,
     duplicateFingerprint,
     postedAt: new Date(buyerPostedAt),
   });
@@ -963,6 +966,7 @@ async function processCampaignAttempt(params: {
     campaignTimezone,
     campaignMinPrice,
     postedAt: buyerPostedAt,
+    responseTimeMs: delivery.responseTimeMs,
   } satisfies CampaignDeliveryLog;
 }
 
@@ -1426,7 +1430,10 @@ export async function distributeLeadAfterIntake(params: {
   const hadPostError = resolvePublisherPostError(coreDeliveries);
   const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError);
 
-  const redirectUrl = accepted?.redirectUrl ?? "";
+  const redirectUrl = resolveBuyerRedirectUrl(
+    accepted?.redirectUrl ?? "",
+    accepted?.buyerStatus === "Accept"
+  );
   const buyerPrice = resolvePublisherBuyerPrice(coreDeliveries, accepted);
   const revShareSettings = params.revShareSettings ?? defaultMappingRevShareSettings();
   const soldPrice = resolvePublisherPriceFromRevShare(buyerPrice, revShareSettings);

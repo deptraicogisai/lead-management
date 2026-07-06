@@ -1,4 +1,5 @@
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
+import { buildPublisherTrackingRedirectUrl } from "@/lib/publisher-redirect";
 
 export type MappingApiType = "Redirect" | "Silent";
 
@@ -32,9 +33,10 @@ export function buildPublisherSoldResponse(params: {
   };
 
   if (shouldIncludePublisherRedirectUrl(params.apiType)) {
-    response.redirect_url =
-      params.redirectUrl?.trim() ||
-      `${params.origin}/reports/publisher/lead-details?leadId=${encodeURIComponent(params.leadId)}`;
+    const buyerRedirectUrl = params.redirectUrl?.trim() ?? "";
+    if (buyerRedirectUrl) {
+      response.redirect_url = buildPublisherTrackingRedirectUrl(params.origin, params.leadId);
+    }
   }
 
   if (params.publisherResponsePrice != null) {

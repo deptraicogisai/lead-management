@@ -76,7 +76,9 @@ export function emptyPublisherPerformanceMetrics(): PublisherPerformanceMetrics 
  * - ADM (admin margin) = TTL revenue - publisher payout
  * - Rev-Share = publisher payout / TTL revenue
  * - EPL (earnings per lead) = publisher payout / valid leads
- * - ALP (average lead price) = publisher payout / sold leads
+ * - ALP (average lead price) = TTL / valid leads
+ * - Redirect count = leads with confirmed publisher redirect (redirectConfirmedAt)
+ * - Redirect rate = Redirect / valid leads
  */
 export function finalizePublisherPerformanceMetrics(
   base: Pick<
@@ -87,7 +89,7 @@ export function finalizePublisherPerformanceMetrics(
   const adm = round2(base.ttl - base.pub);
   const revShare = base.ttl > 0 ? base.pub / base.ttl : 0;
   const epl = base.lead > 0 ? base.pub / base.lead : 0;
-  const alp = base.sold > 0 ? base.pub / base.sold : 0;
+  const alp = base.lead > 0 ? base.ttl / base.lead : 0;
   const redirectRate = base.lead > 0 ? base.redirect / base.lead : 0;
 
   return {

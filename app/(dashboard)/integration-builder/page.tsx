@@ -6,16 +6,22 @@ import { CircleHelp, Copy, Download, RotateCcw } from "lucide-react";
 import {
   AddNewButton,
   CancelButton,
-  ClearButton,
   DangerButton,
   DeleteSelectedButton,
-  SearchButton,
   TableActionButton,
   TableActionLink,
 } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -24,6 +30,7 @@ import { StatusMultiSelect } from "@/components/ui/status-multi-select";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
+import { formatDateTimeDisplay } from "@/lib/date-range";
 import { toast } from "@/lib/toast";
 import {
   buildIntegrationBuilderExportFileName,
@@ -53,20 +60,6 @@ const addFormSelectClassName =
 
 const fieldErrorBorderClassName =
   "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-}
 
 export default function IntegrationBuilderPage() {
   const [records, setRecords] = useState<IntegrationBuilderRecord[]>([]);
@@ -238,13 +231,13 @@ export default function IntegrationBuilderPage() {
       key: "createdAt",
       label: "Created",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTime(row.createdAt)}</span>,
+      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTimeDisplay(row.createdAt)}</span>,
     },
     {
       key: "updatedAt",
       label: "Updated",
       sortValue: (row) => new Date(row.updatedAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTime(row.updatedAt)}</span>,
+      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTimeDisplay(row.updatedAt)}</span>,
     },
     {
       key: "actions",
@@ -565,46 +558,52 @@ export default function IntegrationBuilderPage() {
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">ID</label>
-                <Input value={idFilter} onChange={(event) => setIdFilter(event.target.value)} />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Name</label>
-                <Input value={nameFilter} onChange={(event) => setNameFilter(event.target.value)} />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
+          <SearchFilterPanel>
+            <SearchFilterGrid>
+              <SearchFilterField>
+                <FieldLabel htmlFor="integration-id-filter" label="ID" />
+                <Input
+                  id="integration-id-filter"
+                  className={SEARCH_FILTER_CONTROL_CLASS}
+                  value={idFilter}
+                  onChange={(event) => setIdFilter(event.target.value)}
+                />
+              </SearchFilterField>
+              <SearchFilterField>
+                <FieldLabel htmlFor="integration-name-filter" label="Name" />
+                <Input
+                  id="integration-name-filter"
+                  className={SEARCH_FILTER_CONTROL_CLASS}
+                  value={nameFilter}
+                  onChange={(event) => setNameFilter(event.target.value)}
+                />
+              </SearchFilterField>
+              <SearchFilterField>
+                <FieldLabel htmlFor="integration-status-filter" label="Status" />
                 <StatusMultiSelect
+                  id="integration-status-filter"
                   options={INTEGRATION_BUILDER_STATUS_FILTER_OPTIONS}
                   selected={statusFilter}
                   onChange={setStatusFilter}
                 />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Product</label>
-                <select
-                  value={productFilter}
-                  onChange={(event) => setProductFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                >
-                  <option value="All">All</option>
-                  {verticalOptions.map((vertical, index) => (
-                    <option key={vertical.id} value={vertical.id}>
-                      [{index + 1}] {vertical.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              </SearchFilterField>
+              <SearchFilterSelect
+                id="integration-product-filter"
+                label="Product"
+                value={productFilter}
+                onChange={setProductFilter}
+                options={[
+                  { value: "All", label: "All" },
+                  ...verticalOptions.map((vertical, index) => ({
+                    value: vertical.id,
+                    label: `[${index + 1}] ${vertical.name}`,
+                  })),
+                ]}
+              />
+            </SearchFilterGrid>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-              <SearchButton type="button" />
-              <ClearButton type="button" onClick={clearFilters} />
-            </div>
-          </div>
+            <SearchFilterActions onClear={clearFilters} />
+          </SearchFilterPanel>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <ListTableToolbar

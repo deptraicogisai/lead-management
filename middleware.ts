@@ -12,6 +12,10 @@ export function middleware(request: NextRequest) {
   const currentPath = `${pathname}${search}`;
   const session = decodeAuthSession(request.cookies.get(AUTH_COOKIE_NAME)?.value);
 
+  if (pathname === "/redirect") {
+    return NextResponse.next();
+  }
+
   if (pathname === "/login") {
     if (session) {
       const returnUrl = getSafeReturnUrl(request.nextUrl.searchParams.get("returnUrl"));

@@ -1,8 +1,23 @@
-import { buildDefaultLeadDetailsDateRange } from "@/lib/date-range";
+import {
+  buildDefaultLeadDetailsDateRange,
+  formatDateRangeDisplay,
+  formatDateTimeDisplay,
+  parseDateTimeValue,
+} from "@/lib/date-range";
+import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 
 export type PublisherLeadFieldColumn = {
   fieldName: string;
   label: string;
+};
+
+export type PublisherLeadAcceptedDelivery = {
+  buyerDisplayId: number | null;
+  buyerCompany: string;
+  campaignDisplayId: number | null;
+  campaignName: string;
+  price: number | null;
+  pingTreeType: "Redirect" | "Silent" | "";
 };
 
 export type PublisherLeadDetailsRow = {
@@ -11,10 +26,12 @@ export type PublisherLeadDetailsRow = {
   qualityDots: boolean[];
   postedAt: string;
   createdAt: string;
-  statusLabel: "Accepted" | "Reject";
+  statusLabel: "Sold" | "Reject" | "Post Error" | "Test" | "New";
   tier: number;
   publisherLabel: string;
   redirectLabel: string;
+  redirectConfirmed: boolean;
+  isRedirectCampaign: boolean;
   publisherPayout: string;
   adm: string;
   ttl: string;
@@ -22,10 +39,54 @@ export type PublisherLeadDetailsRow = {
   agn: string;
   productLabel: string;
   channelLabel: string;
+  pingTreeLabel: string;
+  pingTreeAllocations: PublisherLeadPingTreeAllocation[];
   userAgent: string;
   validationErrors: string[];
   rawPayload: Record<string, unknown>;
 };
+
+export type PublisherLeadPingTreeAllocation = {
+  pingTreeType: string;
+  configId: string;
+  configName: string;
+  displayId: number | null;
+};
+
+export const formatPublisherLeadTableTime = formatDateTimeDisplay;
+
+export function formatPublisherLeadMoney(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) {
+    return "$0.00";
+  }
+
+  return `$${value.toFixed(2)}`;
+}
+
+export function formatPublisherLeadRedirectDelivery(delivery?: PublisherLeadAcceptedDelivery | null) {
+  if (!delivery) {
+    return "—";
+  }
+
+  const buyerCompany = delivery.buyerCompany.trim();
+  const campaignName = delivery.campaignName.trim();
+  if (!buyerCompany && !campaignName) {
+    return "—";
+  }
+
+  const buyerPart = delivery.buyerDisplayId
+    ? `[${delivery.buyerDisplayId}] ${buyerCompany || "Buyer"}`
+    : buyerCompany || "Buyer";
+  const priceSuffix =
+    delivery.price != null && Number.isFinite(delivery.price) ? `_$${delivery.price.toFixed(2)}` : "";
+  const campaignPart = delivery.campaignDisplayId
+    ? `[${delivery.campaignDisplayId}] ${campaignName || "Campaign"}${priceSuffix}`
+    : `${campaignName || "Campaign"}${priceSuffix}`;
+
+  return `${buyerPart} : ${campaignPart}`;
+}
+
+export type PublisherLeadScope = "post" | "lead" | "sold" | "reject";
 
 export type PublisherLeadDetailsFilters = {
   leadId: string;
@@ -39,6 +100,7 @@ export type PublisherLeadDetailsFilters = {
   publisherSource: string;
   publisherTags: string;
   redirectStatus: string;
+  leadScope: PublisherLeadScope | "";
   tableSearch: string;
 };
 
@@ -56,43 +118,96 @@ export const defaultPublisherLeadDetailsFilters: PublisherLeadDetailsFilters = {
   publisherSource: "",
   publisherTags: "",
   redirectStatus: "All",
+  leadScope: "",
   tableSearch: "",
 };
 
-export function formatPublisherLeadTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+export function isPublisherLeadScope(value: string | null | undefined): value is PublisherLeadScope {
+  return value === "post" || value === "lead" || value === "sold" || value === "reject";
 }
 
+export function parsePublisherLeadDetailsFiltersFromSearchParams(
+  searchParams: Pick<URLSearchParams, "get">
+): Partial<PublisherLeadDetailsFilters> {
+  const patch: Partial<PublisherLeadDetailsFilters> = {};
+
+  const publisherId = searchParams.get("publisherId")?.trim();
+  if (publisherId) patch.publisherId = publisherId;
+
+  const productId = searchParams.get("productId")?.trim();
+  if (productId) patch.productId = productId;
+
+  const dateFrom = searchParams.get("dateFrom")?.trim();
+  if (dateFrom) patch.dateFrom = dateFrom;
+
+  const dateTo = searchParams.get("dateTo")?.trim();
+  if (dateTo) patch.dateTo = dateTo;
+
+  const leadScope = searchParams.get("leadScope")?.trim().toLowerCase() ?? "";
+  if (isPublisherLeadScope(leadScope)) {
+    patch.leadScope = leadScope;
+    patch.status =
+      leadScope === "sold" ? "Sold" : leadScope === "reject" ? "Reject" : "All";
+  }
+
+  const redirectStatus = searchParams.get("redirectStatus")?.trim();
+  if (redirectStatus === "Redirected" || redirectStatus === "Not Redirected") {
+    patch.redirectStatus = redirectStatus;
+  }
+
+  return patch;
+}
+
+export function buildPublisherLeadDetailsHref(params: {
+  publisherId: string;
+  dateFrom?: string;
+  dateTo?: string;
+  productId?: string;
+  leadScope?: PublisherLeadScope;
+  redirectStatus?: "Redirected" | "Not Redirected";
+}) {
+  const search = new URLSearchParams();
+  search.set("publisherId", params.publisherId);
+
+  if (params.leadScope) {
+    search.set("leadScope", params.leadScope);
+  }
+  if (params.redirectStatus) {
+    search.set("redirectStatus", params.redirectStatus);
+  }
+
+  if (params.dateFrom) {
+    search.set("dateFrom", new Date(params.dateFrom).toISOString());
+  }
+  if (params.dateTo) {
+    search.set("dateTo", new Date(params.dateTo).toISOString());
+  }
+  if (params.productId) {
+    search.set("productId", params.productId);
+  }
+
+  return `/reports/publisher/lead-details?${search.toString()}`;
+}
+
+export const formatPublisherLeadTime = formatDateTimeDisplay;
+
 export function formatPublisherLeadDateRangeLabel(from: string, to: string) {
-  const formatPart = (value: string) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
+  const fromDate = parseDateTimeValue(from);
+  const toDate = parseDateTimeValue(to);
 
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const seconds = String(date.getSeconds()).padStart(2, "0");
+  if (fromDate && toDate) {
+    return formatDateRangeDisplay(fromDate, toDate);
+  }
 
-    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-  };
+  if (fromDate) {
+    return formatDateTimeDisplay(fromDate);
+  }
 
-  const start = formatPart(from);
-  const end = formatPart(to);
-  if (start && end) return `${start} - ${end}`;
-  return start || end || "";
+  if (toDate) {
+    return formatDateTimeDisplay(toDate);
+  }
+
+  return "";
 }
 
 export function buildPublisherLeadDisplayCode(id: string) {
@@ -108,10 +223,14 @@ export function buildQualityDots(publisherStatus?: "Sold" | "Reject" | "Post Err
   return [false, true, false, false];
 }
 
-function resolvePublisherStatusLabel(
+function resolvePublisherLeadDetailStatus(
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null
-): "Accepted" | "Reject" {
-  return publisherStatus === "Sold" ? "Accepted" : "Reject";
+): PublisherLeadDetailsRow["statusLabel"] {
+  if (publisherStatus === "Sold") return "Sold";
+  if (publisherStatus === "Test") return "Test";
+  if (publisherStatus === "Post Error") return "Post Error";
+  if (publisherStatus === "Reject") return "Reject";
+  return "New";
 }
 
 function formatIndexedLabel(name: string, index?: number) {
@@ -248,11 +367,86 @@ export function buildPublisherLeadFieldColumnsFromLeads(
   return columns;
 }
 
+function formatPingTreeAllocationLabel(allocation: PublisherLeadPingTreeAllocation) {
+  const name = allocation.configName?.trim() || "Unknown";
+  if (allocation.displayId != null) {
+    return `[${allocation.displayId}] ${name}`;
+  }
+  return name;
+}
+
+export function normalizePublisherLeadPingTreeAllocations(
+  value: unknown
+): PublisherLeadPingTreeAllocation[] {
+  if (!Array.isArray(value)) return [];
+
+  const allocations: PublisherLeadPingTreeAllocation[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const raw = item as {
+      pingTreeType?: unknown;
+      configId?: unknown;
+      configName?: unknown;
+      displayId?: unknown;
+    };
+    const configId = typeof raw.configId === "string" ? raw.configId.trim() : "";
+    if (!configId) continue;
+
+    allocations.push({
+      pingTreeType: typeof raw.pingTreeType === "string" ? raw.pingTreeType : "",
+      configId,
+      configName: typeof raw.configName === "string" ? raw.configName.trim() : "",
+      displayId: typeof raw.displayId === "number" ? raw.displayId : null,
+    });
+  }
+
+  return allocations;
+}
+
+export function formatPublisherLeadPingTreeLabel(allocations: PublisherLeadPingTreeAllocation[]) {
+  if (allocations.length === 0) return "—";
+  if (allocations.length === 1) {
+    return formatPingTreeAllocationLabel(allocations[0]);
+  }
+
+  const typeLabel = (pingTreeType: string) => {
+    if (pingTreeType === "Silent") return "Silent";
+    if (pingTreeType === "Redirect") return "Main";
+    return pingTreeType || "Tree";
+  };
+
+  return allocations
+    .map((allocation) => `${typeLabel(allocation.pingTreeType)}: ${formatPingTreeAllocationLabel(allocation)}`)
+    .join(" · ");
+}
+
+export function resolvePublisherRedirectLabel(redirectConfirmedAt?: Date | string | null) {
+  if (!redirectConfirmedAt) return "Not Redirected";
+  const confirmedAt = new Date(redirectConfirmedAt);
+  return Number.isNaN(confirmedAt.getTime()) ? "Not Redirected" : "Redirected";
+}
+
+export function resolvePublisherLeadMoneyMetrics(input: {
+  soldPrice?: number | null;
+  buyerRevenue?: number | null;
+}) {
+  const pub = typeof input.soldPrice === "number" && Number.isFinite(input.soldPrice) ? input.soldPrice : 0;
+  const ttl =
+    typeof input.buyerRevenue === "number" && Number.isFinite(input.buyerRevenue) ? input.buyerRevenue : 0;
+  const adm = ttl - pub;
+
+  return {
+    publisherPayout: formatPublisherLeadMoney(pub),
+    ttl: formatPublisherLeadMoney(ttl),
+    adm: formatPublisherLeadMoney(adm),
+  };
+}
+
 export function mapLeadDocToPublisherRow(input: {
   id: string;
   validationStatus: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
-  redirectUrl?: string;
+  redirectConfirmedAt?: Date | string | null;
   soldPrice?: number | null;
   postedAt: string;
   createdAt: string;
@@ -264,15 +458,26 @@ export function mapLeadDocToPublisherRow(input: {
   verticalName: string;
   verticalIndex: number;
   mappingLabel?: string;
+  pingTreeAllocations?: PublisherLeadPingTreeAllocation[];
+  acceptedDelivery?: PublisherLeadAcceptedDelivery | null;
+  buyerRevenue?: number | null;
 }): PublisherLeadDetailsRow {
   const payload = input.payload ?? {};
+  const pingTreeAllocations = input.pingTreeAllocations ?? [];
   const channelName =
     readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
   const channelId = readPayloadString(payload, ["channel_id", "channelId"]) || "2";
-  const publisherPayout =
-    input.soldPrice != null && Number.isFinite(input.soldPrice)
-      ? `$${input.soldPrice.toFixed(2)}`
-      : readPayloadMoney(payload, ["price", "payout", "publisher_payout", "amount"]);
+  const moneyMetrics = resolvePublisherLeadMoneyMetrics({
+    soldPrice: input.soldPrice,
+    buyerRevenue: input.buyerRevenue,
+  });
+  const isRedirectCampaign = input.acceptedDelivery?.pingTreeType === "Redirect";
+  const redirectLabel = isRedirectCampaign
+    ? formatPublisherLeadRedirectDelivery(input.acceptedDelivery)
+    : "—";
+  const redirectConfirmed = isLeadRedirectConfirmed({
+    redirectConfirmedAt: input.redirectConfirmedAt,
+  });
 
   return {
     id: input.id,
@@ -280,19 +485,23 @@ export function mapLeadDocToPublisherRow(input: {
     qualityDots: buildQualityDots(input.publisherStatus),
     postedAt: input.postedAt,
     createdAt: input.createdAt,
-    statusLabel: resolvePublisherStatusLabel(input.publisherStatus),
+    statusLabel: resolvePublisherLeadDetailStatus(input.publisherStatus),
     tier: 0,
     publisherLabel: input.publisherIndex
       ? `[${input.publisherIndex}] ${input.publisherName}`
       : input.publisherName,
-    redirectLabel: input.redirectUrl?.trim() || input.mappingLabel || "—",
-    publisherPayout,
-    adm: readPayloadMoney(payload, ["adm", "admin_fee"]),
-    ttl: readPayloadMoney(payload, ["ttl", "total"]),
+    redirectLabel,
+    redirectConfirmed,
+    isRedirectCampaign,
+    publisherPayout: moneyMetrics.publisherPayout,
+    adm: moneyMetrics.adm,
+    ttl: moneyMetrics.ttl,
     ref: readPayloadMoney(payload, ["ref", "referral"]),
     agn: readPayloadMoney(payload, ["agn", "agent"]),
     productLabel: formatIndexedLabel(input.verticalName, input.verticalIndex),
     channelLabel: `[${channelId}] ${channelName}`,
+    pingTreeLabel: formatPublisherLeadPingTreeLabel(pingTreeAllocations),
+    pingTreeAllocations,
     userAgent: input.userAgent?.trim() || "Unknown",
     validationErrors: input.validationErrors ?? [],
     rawPayload: payload,

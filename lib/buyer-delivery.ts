@@ -36,6 +36,7 @@ import {
   MOCK_BUYER_POST_BODY_KEY,
   type MockBuyerPostOptions,
 } from "@/lib/mock-buyer-post";
+import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 
 export type BuyerDeliveryResult = {
   buyerStatus: BuyerLeadStatus;
@@ -55,6 +56,7 @@ export type BuyerDeliveryResult = {
   httpStatus: number;
   parsed: ParsedBuyerResponse;
   traceSteps: BuyerPostTraceStep[];
+  responseTimeMs: number | null;
 };
 
 function toTraceStatus(buyerStatus: BuyerLeadStatus): BuyerPostTraceStepStatus {
@@ -98,11 +100,21 @@ function assembleBuyerDeliveryResult(params: {
   httpStatus: number;
   parsed: ParsedBuyerResponse;
   traceSteps: BuyerPostTraceStep[];
+  responseTimeMs?: number | null;
 }): BuyerDeliveryResult {
+  const redirectUrl = resolveBuyerRedirectUrl(
+    params.redirectUrl,
+    params.buyerStatus === "Accept"
+  );
+  const parsed =
+    redirectUrl !== params.redirectUrl.trim()
+      ? { ...params.parsed, redirectUrl }
+      : params.parsed;
+
   return {
     buyerStatus: params.buyerStatus,
     price: params.price,
-    redirectUrl: params.redirectUrl,
+    redirectUrl,
     rejectSign: params.rejectSign,
     rejectReason: params.rejectReason,
     errorReason: params.errorReason,
@@ -115,8 +127,9 @@ function assembleBuyerDeliveryResult(params: {
     responseBody: params.responseBody,
     responseHeaders: params.responseHeaders,
     httpStatus: params.httpStatus,
-    parsed: params.parsed,
+    parsed,
     traceSteps: params.traceSteps,
+    responseTimeMs: params.responseTimeMs ?? null,
   };
 }
 
@@ -296,6 +309,8 @@ export async function deliverLeadToBuyer(params: {
   let httpStatus = 0;
   let responseBody = "";
   let responseHeaders: Record<string, string> = {};
+  const requestStartedAt = Date.now();
+  let responseTimeMs: number | null = null;
 
   try {
     const response = await fetch(postLeadUrl, {
@@ -308,6 +323,7 @@ export async function deliverLeadToBuyer(params: {
     httpStatus = response.status;
     responseBody = await response.text();
     responseHeaders = snapshotFetchResponseHeaders(response);
+    responseTimeMs = Date.now() - requestStartedAt;
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "http-post",
@@ -364,6 +380,7 @@ export async function deliverLeadToBuyer(params: {
         httpStatus,
         parsed,
         traceSteps,
+        responseTimeMs,
       });
     }
 
@@ -393,6 +410,7 @@ export async function deliverLeadToBuyer(params: {
         httpStatus,
         parsed,
         traceSteps,
+        responseTimeMs,
       });
     }
 
@@ -413,8 +431,10 @@ export async function deliverLeadToBuyer(params: {
       httpStatus,
       parsed,
       traceSteps,
+      responseTimeMs,
     });
   } catch (error) {
+    responseTimeMs = Date.now() - requestStartedAt;
     const isTimeout = error instanceof Error && error.name === "AbortError";
     const buyerStatus = isTimeout ? "Timeout" : "Error";
     const errorReason = isTimeout ? "Buyer post request timed out." : "Failed to post lead to buyer.";
@@ -452,6 +472,7 @@ export async function deliverLeadToBuyer(params: {
         mappingError: false,
       },
       traceSteps,
+      responseTimeMs,
     });
   } finally {
     clearTimeout(timeoutHandle);

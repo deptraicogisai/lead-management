@@ -1,11 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Download } from "lucide-react";
-import { ClearButton, SearchButton, TableActionButton } from "@/components/ui/action-buttons";
+import { useSearchParams } from "next/navigation";
+import { ChevronDown, Download, Eye } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SEARCH_FILTER_DATE_RANGE_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -18,12 +27,16 @@ import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   defaultPublisherLeadDetailsFilters,
   formatPayloadFieldValue,
+  formatPublisherLeadTableTime,
   formatPublisherLeadTime,
+  parsePublisherLeadDetailsFiltersFromSearchParams,
   type PublisherLeadDetailsFilters,
   type PublisherLeadDetailsRow,
   type PublisherLeadFieldColumn,
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { getStatusBadgePresentation } from "@/lib/status-badge";
+import { IdBadge } from "@/components/ui/id-badge";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 
@@ -45,49 +58,51 @@ type PublisherLeadDetailsResponse = {
   };
 };
 
-const STATUS_OPTIONS = ["All", "Accepted", "Reject"];
+const STATUS_OPTIONS = ["All", "Sold", "Reject", "Post Error", "Test"];
 const METHOD_OPTIONS = ["All"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 
-function buildDefaultFilters(): PublisherLeadDetailsFilters {
-  return { ...defaultPublisherLeadDetailsFilters };
-}
-
-function FilterSelect({
-  id,
+function RedirectCell({
   label,
-  value,
-  onChange,
-  options,
+  redirectConfirmed,
+  isRedirectCampaign,
 }: {
-  id: string;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  redirectConfirmed: boolean;
+  isRedirectCampaign: boolean;
 }) {
+  if (label === "—" || !isRedirectCampaign) {
+    return <span className="whitespace-nowrap text-slate-400 dark:text-slate-500">—</span>;
+  }
+
+  const presentation = getStatusBadgePresentation(redirectConfirmed ? "Sold" : "Reject", "outline");
+
   return (
-    <div>
-      <FieldLabel htmlFor={id} label={label} />
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-      >
-        {options.map((option) => (
-          <option key={option.value || "empty"} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <span
+      title={label}
+      className="inline-flex max-w-[28rem] truncate rounded-full border px-2 py-0.5 text-xs font-semibold"
+      style={presentation.style}
+    >
+      {label}
+    </span>
   );
 }
 
+function buildDefaultFilters(searchParams?: Pick<URLSearchParams, "get">): PublisherLeadDetailsFilters {
+  return {
+    ...defaultPublisherLeadDetailsFilters,
+    ...(searchParams ? parsePublisherLeadDetailsFiltersFromSearchParams(searchParams) : {}),
+  };
+}
+
 export function PublisherLeadDetailsPage() {
-  const [draftFilters, setDraftFilters] = useState<PublisherLeadDetailsFilters>(() => buildDefaultFilters());
-  const [appliedFilters, setAppliedFilters] = useState<PublisherLeadDetailsFilters>(() => buildDefaultFilters());
+  const searchParams = useSearchParams();
+  const [draftFilters, setDraftFilters] = useState<PublisherLeadDetailsFilters>(() =>
+    buildDefaultFilters(searchParams)
+  );
+  const [appliedFilters, setAppliedFilters] = useState<PublisherLeadDetailsFilters>(() =>
+    buildDefaultFilters(searchParams)
+  );
   const [rows, setRows] = useState<PublisherLeadDetailsRow[]>([]);
   const [fieldColumns, setFieldColumns] = useState<PublisherLeadFieldColumn[]>([]);
   const [products, setProducts] = useState<FilterOption[]>([]);
@@ -120,6 +135,8 @@ export function PublisherLeadDetailsPage() {
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.status !== "All") params.set("status", filters.status);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
+      if (filters.leadScope) params.set("leadScope", filters.leadScope);
+      if (filters.redirectStatus !== "All") params.set("redirectStatus", filters.redirectStatus);
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
 
       return params.toString();
@@ -189,7 +206,9 @@ export function PublisherLeadDetailsPage() {
   }, [exportOpen]);
 
   const handleSearch = () => {
-    setAppliedFilters({ ...draftFilters });
+    const nextFilters = { ...draftFilters, leadScope: "" as const };
+    setDraftFilters(nextFilters);
+    setAppliedFilters(nextFilters);
     setPage(1);
   };
 
@@ -208,11 +227,14 @@ export function PublisherLeadDetailsPage() {
   ) => {
     const headers = [
       "ID",
-      "Date Time",
+      "Date",
       "Status",
-      "Redirect",
-      "Product",
       "Publisher",
+      "Redirect",
+      "Pub",
+      "ADM",
+      "TTL",
+      "Product",
       ...exportFieldColumns.map((field) => field.label),
     ];
 
@@ -220,9 +242,12 @@ export function PublisherLeadDetailsPage() {
       row.displayCode,
       formatPublisherLeadTime(row.postedAt),
       row.statusLabel,
-      row.redirectLabel,
-      row.productLabel,
       row.publisherLabel,
+      row.redirectLabel,
+      row.publisherPayout,
+      row.adm,
+      row.ttl,
+      row.productLabel,
       ...exportFieldColumns.map((field) => formatPayloadFieldValue(row.rawPayload[field.fieldName])),
     ]);
 
@@ -291,21 +316,23 @@ export function PublisherLeadDetailsPage() {
         label: "ID",
         sortValue: (row) => row.displayCode,
         render: (row) => (
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <TableActionButton type="button" onClick={() => setViewLead(row)}>
-              View
-            </TableActionButton>
-            <span className="font-medium text-slate-800 dark:text-slate-100">{row.displayCode}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setViewLead(row)}
+            className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+          >
+            <Eye size={13} className="shrink-0 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400" />
+            <span>{row.displayCode}</span>
+          </button>
         ),
       },
       {
         key: "postedAt",
-        label: "Date Time",
+        label: "Date",
         sortValue: (row) => new Date(row.postedAt).getTime(),
         render: (row) => (
-          <span className="whitespace-nowrap text-slate-700 dark:text-slate-200">
-            {formatPublisherLeadTime(row.postedAt)}
+          <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
+            {formatPublisherLeadTableTime(row.postedAt)}
           </span>
         ),
       },
@@ -315,19 +342,54 @@ export function PublisherLeadDetailsPage() {
         render: (row) => <StatusBadge status={row.statusLabel} />,
       },
       {
+        key: "publisherLabel",
+        label: "Publisher",
+        sortValue: (row) => row.publisherLabel,
+        render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
+      },
+      {
         key: "redirectLabel",
         label: "Redirect",
-        render: (row) => <StatusBadge status={row.redirectLabel} size="xs" />,
+        sortValue: (row) => row.redirectLabel,
+        render: (row) => (
+          <RedirectCell
+            label={row.redirectLabel}
+            redirectConfirmed={row.redirectConfirmed}
+            isRedirectCampaign={row.isRedirectCampaign}
+          />
+        ),
+      },
+      {
+        key: "publisherPayout",
+        label: "Pub",
+        sortValue: (row) => row.publisherPayout,
+        render: (row) => (
+          <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
+            {row.publisherPayout}
+          </span>
+        ),
+      },
+      {
+        key: "adm",
+        label: "ADM",
+        sortValue: (row) => row.adm,
+        render: (row) => (
+          <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">{row.adm}</span>
+        ),
+      },
+      {
+        key: "ttl",
+        label: "TTL",
+        sortValue: (row) => row.ttl,
+        render: (row) => (
+          <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">{row.ttl}</span>
+        ),
       },
       {
         key: "productLabel",
         label: "Product",
+        sortValue: (row) => row.productLabel,
         render: (row) => <span className="whitespace-nowrap">{row.productLabel}</span>,
-      },
-      {
-        key: "publisherLabel",
-        label: "Publisher",
-        render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
       },
     ];
 
@@ -349,28 +411,30 @@ export function PublisherLeadDetailsPage() {
   return (
     <PageSection title="Publisher Lead Details">
       <div className="space-y-5">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <div>
+        <SearchFilterPanel>
+              <SearchFilterGrid>
+                <SearchFilterField>
                   <FieldLabel htmlFor="lead-id" label="Lead ID" />
                   <Input
                     id="lead-id"
+                    className={SEARCH_FILTER_CONTROL_CLASS}
                     value={draftFilters.leadId}
                     onChange={(event) => updateDraft({ leadId: event.target.value })}
                     placeholder="Lead ID"
                   />
-                </div>
+                </SearchFilterField>
 
-                <div>
+                <SearchFilterField>
                   <FieldLabel htmlFor="lead-date-range" label="Date" />
                   <DateRangePicker
                     id="lead-date-range"
+                    className={SEARCH_FILTER_DATE_RANGE_CLASS}
                     value={{ from: draftFilters.dateFrom, to: draftFilters.dateTo }}
                     onChange={(range) => updateDraft({ dateFrom: range.from, dateTo: range.to })}
                   />
-                </div>
+                </SearchFilterField>
 
-                <FilterSelect
+                <SearchFilterSelect
                   id="product"
                   label="Product"
                   value={draftFilters.productId}
@@ -378,7 +442,7 @@ export function PublisherLeadDetailsPage() {
                   options={products.map((product) => ({ value: product.id, label: product.label }))}
                 />
 
-                <FilterSelect
+                <SearchFilterSelect
                   id="method"
                   label="Method"
                   value={draftFilters.method}
@@ -386,7 +450,7 @@ export function PublisherLeadDetailsPage() {
                   options={METHOD_OPTIONS.map((option) => ({ value: option, label: option }))}
                 />
 
-                <FilterSelect
+                <SearchFilterSelect
                   id="status"
                   label="Status"
                   value={draftFilters.status}
@@ -394,7 +458,7 @@ export function PublisherLeadDetailsPage() {
                   options={STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
                 />
 
-                <FilterSelect
+                <SearchFilterSelect
                   id="publisher"
                   label="Publisher"
                   value={draftFilters.publisherId}
@@ -405,24 +469,22 @@ export function PublisherLeadDetailsPage() {
                   ]}
                 />
 
-                <FilterSelect
+                <SearchFilterSelect
                   id="redirect-status"
                   label="Redirect Status"
                   value={draftFilters.redirectStatus}
                   onChange={(value) => updateDraft({ redirectStatus: value })}
                   options={REDIRECT_STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
                 />
-              </div>
+              </SearchFilterGrid>
 
-              <p className="mt-4 max-w-xl text-xs text-slate-500 dark:text-slate-400">
-                Add lead parameters via System Management to extend filters and export columns.
+              <p className="mt-4 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
+                To add lead parameters to the report, go to System Management → Products, select the product, and
+                configure its fields under Report Customization.
               </p>
 
-              <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-                <SearchButton type="button" onClick={handleSearch} />
-                <ClearButton type="button" onClick={handleClearAll} />
-              </div>
-            </div>
+              <SearchFilterActions onSearch={handleSearch} onClear={handleClearAll} />
+            </SearchFilterPanel>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <ListTableToolbar
@@ -536,8 +598,47 @@ export function PublisherLeadDetailsPage() {
                 <dd className="mt-1">{viewLead.publisherLabel}</dd>
               </div>
               <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Redirect</dt>
+                <dd className="mt-1">
+                  <RedirectCell
+                    label={viewLead.redirectLabel}
+                    redirectConfirmed={viewLead.redirectConfirmed}
+                    isRedirectCampaign={viewLead.isRedirectCampaign}
+                  />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Pub</dt>
+                <dd className="mt-1 tabular-nums">{viewLead.publisherPayout}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">ADM</dt>
+                <dd className="mt-1 tabular-nums">{viewLead.adm}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">TTL</dt>
+                <dd className="mt-1 tabular-nums">{viewLead.ttl}</dd>
+              </div>
+              <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Product</dt>
                 <dd className="mt-1">{viewLead.productLabel}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Ping Tree</dt>
+                <dd className="mt-1">
+                  {viewLead.pingTreeAllocations.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {viewLead.pingTreeAllocations.map((allocation) => (
+                        <span key={allocation.configId} className="inline-flex items-center gap-2">
+                          {allocation.displayId != null ? <IdBadge id={allocation.displayId} /> : null}
+                          <span>{allocation.configName || "—"}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Channel</dt>

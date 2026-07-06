@@ -4,11 +4,17 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
+import { LeadDeliveryModel } from "@/lib/models/lead-delivery";
+import { CampaignModel } from "@/lib/models/campaign";
+import { BuyerModel } from "@/lib/models/buyer";
+import { resolveBuyerName } from "@/lib/buyer";
 import { buildVerticalIndexMap, formatProductLabel } from "@/lib/integration-builder";
 import {
   buildPublisherLeadFieldColumnsFromLeads,
   mapLeadDocToPublisherRow,
   normalizeLeadPayload,
+  normalizePublisherLeadPingTreeAllocations,
+  type PublisherLeadAcceptedDelivery,
   type PublisherLeadDetailsRow,
 } from "@/lib/publisher-lead-details";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
@@ -23,9 +29,10 @@ type LeadDoc = {
   validationStatus: "success" | "fail";
   validationErrors?: string[];
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
-  redirectUrl?: string;
+  redirectConfirmedAt?: Date | string | null;
   soldPrice?: number | null;
   userAgent?: string;
+  pingTreeAllocations?: unknown;
   postedAt?: Date | string;
   createdAt?: Date | string;
 };
@@ -78,9 +85,45 @@ function buildMongoFilter(params: {
   publisherChannel: string;
   publisherSource: string;
   publisherTags: string;
+  redirectStatus: string;
+  leadScope: string;
   tableSearch: string;
 }) {
-  const andConditions: Record<string, unknown>[] = [{ validationStatus: "success" }];
+  const andConditions: Record<string, unknown>[] = [];
+  const normalizedScope = params.leadScope.trim().toLowerCase();
+
+  if (normalizedScope === "post") {
+    // All posts, including validation failures.
+  } else if (normalizedScope === "lead") {
+    andConditions.push({ validationStatus: "success" });
+  } else if (normalizedScope === "sold") {
+    andConditions.push({ publisherStatus: "Sold" });
+  } else if (normalizedScope === "reject") {
+    andConditions.push({ publisherStatus: { $in: ["Reject", "Post Error"] } });
+  } else {
+    andConditions.push({ validationStatus: "success" });
+
+    const normalizedStatus = params.status.toLowerCase();
+    if (normalizedStatus === "sold") {
+      andConditions.push({ publisherStatus: "Sold" });
+    } else if (normalizedStatus === "reject") {
+      andConditions.push({ publisherStatus: "Reject" });
+    } else if (normalizedStatus === "post error") {
+      andConditions.push({ publisherStatus: "Post Error" });
+    } else if (normalizedStatus === "test") {
+      andConditions.push({ publisherStatus: "Test" });
+    } else if (normalizedStatus === "new") {
+      andConditions.push({
+        $or: [
+          { publisherStatus: { $exists: false } },
+          { publisherStatus: null },
+          { publisherStatus: { $nin: ["Sold", "Reject", "Post Error", "Test"] } },
+        ],
+      });
+    } else if (normalizedStatus === "accepted") {
+      andConditions.push({ publisherStatus: "Sold" });
+    }
+  }
 
   if (params.leadId) {
     andConditions.push(buildLeadIdCondition(params.leadId));
@@ -101,13 +144,6 @@ function buildMongoFilter(params: {
 
   if (params.publisherId && Types.ObjectId.isValid(params.publisherId)) {
     andConditions.push({ sellerRef: new Types.ObjectId(params.publisherId) });
-  }
-
-  const normalizedStatus = params.status.toLowerCase();
-  if (normalizedStatus === "accepted" || normalizedStatus === "sold") {
-    andConditions.push({ publisherStatus: "Sold" });
-  } else if (normalizedStatus === "reject") {
-    andConditions.push({ publisherStatus: { $in: ["Reject", "Post Error"] } });
   }
 
   if (params.publisherChannel) {
@@ -143,6 +179,17 @@ function buildMongoFilter(params: {
         { "payload.publisher_tags": regex },
         { "payload.publisherTags": regex },
       ],
+    });
+  }
+
+  const normalizedRedirectStatus = params.redirectStatus.trim().toLowerCase();
+  if (normalizedRedirectStatus === "redirected") {
+    andConditions.push({ redirectConfirmedAt: { $ne: null } });
+  } else if (normalizedRedirectStatus === "not redirected") {
+    andConditions.push({
+      publisherStatus: "Sold",
+      redirectUrl: { $exists: true, $nin: ["", null] },
+      $or: [{ redirectConfirmedAt: { $exists: false } }, { redirectConfirmedAt: null }],
     });
   }
 
@@ -201,6 +248,72 @@ function toIsoString(value: Date | string | undefined, fallback?: Date | string)
   return "";
 }
 
+type AcceptedDeliveryDoc = {
+  sellerLeadRef?: { toString(): string } | string;
+  buyerRef?: { toString(): string } | string;
+  campaignRef?: { toString(): string } | string;
+  pingTreeType?: "Redirect" | "Silent";
+  buyerStatus?: string;
+  price?: number | null;
+  campaignOrder?: number;
+};
+
+function resolveRedirectCampaignDelivery(
+  leadId: string,
+  deliveries: AcceptedDeliveryDoc[]
+): AcceptedDeliveryDoc | null {
+  return (
+    deliveries.find((delivery) => {
+      const sellerLeadRef =
+        typeof delivery.sellerLeadRef === "string"
+          ? delivery.sellerLeadRef
+          : delivery.sellerLeadRef?.toString() ?? "";
+      return sellerLeadRef === leadId && delivery.pingTreeType === "Redirect";
+    }) ?? null
+  );
+}
+
+function sumAcceptedDeliveryRevenue(leadId: string, deliveries: AcceptedDeliveryDoc[]) {
+  return deliveries.reduce((total, delivery) => {
+    const sellerLeadRef =
+      typeof delivery.sellerLeadRef === "string"
+        ? delivery.sellerLeadRef
+        : delivery.sellerLeadRef?.toString() ?? "";
+    if (sellerLeadRef !== leadId) {
+      return total;
+    }
+
+    const price = typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
+    return total + price;
+  }, 0);
+}
+
+function buildAcceptedDeliverySummary(
+  delivery: AcceptedDeliveryDoc | null,
+  campaignById: Map<string, { name?: string; displayId?: number }>,
+  buyerById: Map<string, { company?: string; name?: string; displayId?: number }>
+): PublisherLeadAcceptedDelivery | null {
+  if (!delivery) {
+    return null;
+  }
+
+  const campaignId =
+    typeof delivery.campaignRef === "string" ? delivery.campaignRef : delivery.campaignRef?.toString() ?? "";
+  const buyerId =
+    typeof delivery.buyerRef === "string" ? delivery.buyerRef : delivery.buyerRef?.toString() ?? "";
+  const campaign = campaignById.get(campaignId);
+  const buyer = buyerById.get(buyerId);
+
+  return {
+    buyerDisplayId: typeof buyer?.displayId === "number" ? buyer.displayId : null,
+    buyerCompany: buyer ? resolveBuyerName(buyer) : "",
+    campaignDisplayId: typeof campaign?.displayId === "number" ? campaign.displayId : null,
+    campaignName: campaign?.name?.trim() || "",
+    price: typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : null,
+    pingTreeType: delivery.pingTreeType === "Silent" ? "Silent" : delivery.pingTreeType === "Redirect" ? "Redirect" : "",
+  };
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -215,6 +328,8 @@ export async function GET(req: Request) {
     const publisherChannel = normalizeSearchParam(searchParams.get("publisherChannel"));
     const publisherSource = normalizeSearchParam(searchParams.get("publisherSource"));
     const publisherTags = normalizeSearchParam(searchParams.get("publisherTags"));
+    const redirectStatus = normalizeSearchParam(searchParams.get("redirectStatus"));
+    const leadScope = normalizeSearchParam(searchParams.get("leadScope"));
     const tableSearch = normalizeSearchParam(searchParams.get("tableSearch"));
 
     await connectToDatabase();
@@ -232,6 +347,8 @@ export async function GET(req: Request) {
       publisherChannel,
       publisherSource,
       publisherTags,
+      redirectStatus,
+      leadScope,
       tableSearch,
     });
 
@@ -251,6 +368,63 @@ export async function GET(req: Request) {
     const verticalNameById = new Map(verticals.map((vertical) => [vertical._id.toString(), vertical.name]));
     const sellerIndexById = new Map(sellers.map((seller, index) => [seller._id.toString(), index + 1001]));
     const sellerNameById = new Map(sellers.map((seller) => [seller._id.toString(), seller.name]));
+
+    const leadIds = leads
+      .map((lead) => lead._id?.toString() ?? "")
+      .filter((leadId) => leadId && Types.ObjectId.isValid(leadId))
+      .map((leadId) => new Types.ObjectId(leadId));
+
+    const acceptedDeliveries =
+      leadIds.length > 0
+        ? ((await LeadDeliveryModel.find({
+            sellerLeadRef: { $in: leadIds },
+            buyerStatus: "Accept",
+          })
+            .select({
+              sellerLeadRef: 1,
+              buyerRef: 1,
+              campaignRef: 1,
+              pingTreeType: 1,
+              buyerStatus: 1,
+              price: 1,
+              campaignOrder: 1,
+            })
+            .sort({ campaignOrder: 1 })
+            .lean()) as AcceptedDeliveryDoc[])
+        : [];
+
+    const campaignIds = [
+      ...new Set(
+        acceptedDeliveries
+          .map((delivery) =>
+            typeof delivery.campaignRef === "string"
+              ? delivery.campaignRef
+              : delivery.campaignRef?.toString() ?? ""
+          )
+          .filter(Boolean)
+      ),
+    ];
+    const buyerIds = [
+      ...new Set(
+        acceptedDeliveries
+          .map((delivery) =>
+            typeof delivery.buyerRef === "string" ? delivery.buyerRef : delivery.buyerRef?.toString() ?? ""
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+    const [campaigns, buyers] = await Promise.all([
+      campaignIds.length > 0
+        ? CampaignModel.find({ _id: { $in: campaignIds } }).select({ name: 1, displayId: 1 }).lean()
+        : [],
+      buyerIds.length > 0
+        ? BuyerModel.find({ _id: { $in: buyerIds } }).select({ company: 1, name: 1, displayId: 1 }).lean()
+        : [],
+    ]);
+
+    const campaignById = new Map(campaigns.map((campaign) => [campaign._id?.toString() ?? "", campaign]));
+    const buyerById = new Map(buyers.map((buyer) => [buyer._id?.toString() ?? "", buyer]));
 
     const normalizedLeads = leads.map((lead) => {
       const doc = lead as LeadDoc;
@@ -272,14 +446,17 @@ export async function GET(req: Request) {
         typeof doc.sellerRef === "string" ? doc.sellerRef : doc.sellerRef?.toString() ?? "";
       const verticalRef =
         typeof doc.verticalRef === "string" ? doc.verticalRef : doc.verticalRef?.toString() ?? "";
+      const leadId = doc._id?.toString() ?? "";
       const postedAt = toIsoString(doc.postedAt, doc.createdAt);
       const createdAt = toIsoString(doc.createdAt, doc.postedAt);
+      const acceptedDeliveryDoc = resolveRedirectCampaignDelivery(leadId, acceptedDeliveries);
+      const buyerRevenue = sumAcceptedDeliveryRevenue(leadId, acceptedDeliveries);
 
       return mapLeadDocToPublisherRow({
-        id: doc._id?.toString() ?? "",
+        id: leadId,
         validationStatus: doc.validationStatus,
         publisherStatus: doc.publisherStatus,
-        redirectUrl: doc.redirectUrl,
+        redirectConfirmedAt: doc.redirectConfirmedAt,
         soldPrice: doc.soldPrice,
         postedAt,
         createdAt,
@@ -291,6 +468,9 @@ export async function GET(req: Request) {
         verticalName: verticalNameById.get(verticalRef) ?? "Unknown",
         verticalIndex: verticalIndexById.get(verticalRef) ?? 0,
         mappingLabel: doc.mappingRef ? `[${doc.mappingRef.toString().slice(-4)}]` : "—",
+        pingTreeAllocations: normalizePublisherLeadPingTreeAllocations(doc.pingTreeAllocations),
+        acceptedDelivery: buildAcceptedDeliverySummary(acceptedDeliveryDoc, campaignById, buyerById),
+        buyerRevenue,
       });
     });
 

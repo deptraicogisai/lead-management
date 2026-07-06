@@ -7,17 +7,24 @@ import { CampaignCreateModal } from "@/components/campaigns/campaign-create-moda
 import {
   AddNewButton,
   CancelButton,
-  ClearButton,
   DangerButton,
   DeleteSelectedButton,
   DetailNameLink,
-  SearchButton,
   TableActionButton,
   TableActionLink,
 } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SEARCH_FILTER_DATE_RANGE_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { buildEmptySearchDateRange } from "@/lib/date-range";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
@@ -559,17 +566,27 @@ export function CampaignsPage() {
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div>
+        <SearchFilterPanel>
+          <SearchFilterGrid>
+            <SearchFilterField>
               <FieldLabel htmlFor="campaign-id-filter" label="ID" />
-              <Input id="campaign-id-filter" value={draftFilters.id} onChange={(e) => setDraftFilters((c) => ({ ...c, id: e.target.value }))} />
-            </div>
-            <div>
+              <Input
+                id="campaign-id-filter"
+                className={SEARCH_FILTER_CONTROL_CLASS}
+                value={draftFilters.id}
+                onChange={(e) => setDraftFilters((c) => ({ ...c, id: e.target.value }))}
+              />
+            </SearchFilterField>
+            <SearchFilterField>
               <FieldLabel htmlFor="campaign-name-filter" label="Name" />
-              <Input id="campaign-name-filter" value={draftFilters.name} onChange={(e) => setDraftFilters((c) => ({ ...c, name: e.target.value }))} />
-            </div>
-            <div>
+              <Input
+                id="campaign-name-filter"
+                className={SEARCH_FILTER_CONTROL_CLASS}
+                value={draftFilters.name}
+                onChange={(e) => setDraftFilters((c) => ({ ...c, name: e.target.value }))}
+              />
+            </SearchFilterField>
+            <SearchFilterField>
               <FieldLabel htmlFor="campaign-status-filter" label="Status" />
               <StatusMultiSelect
                 id="campaign-status-filter"
@@ -577,79 +594,64 @@ export function CampaignsPage() {
                 selected={parseStatusFilterValue(draftFilters.status)}
                 onChange={(values) => setDraftFilters((c) => ({ ...c, status: values.join(",") }))}
               />
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-product-filter" label="Product" />
-              <select
-                id="campaign-product-filter"
-                value={draftFilters.productId}
-                onChange={(e) => setDraftFilters((c) => ({ ...c, productId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                <option value="">All</option>
-                {verticalOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-buyer-filter" label="Buyer" />
-              <select
-                id="campaign-buyer-filter"
-                value={draftFilters.buyerId}
-                onChange={(e) => setDraftFilters((c) => ({ ...c, buyerId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                <option value="">All</option>
-                {buyerOptions.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-type-filter" label="Type" />
-              <select
-                id="campaign-type-filter"
-                value={draftFilters.type}
-                onChange={(e) => setDraftFilters((c) => ({ ...c, type: e.target.value }))}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-              >
-                <option value="All">All</option>
-                {CAMPAIGN_TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <div>
+            </SearchFilterField>
+            <SearchFilterSelect
+              id="campaign-product-filter"
+              label="Product"
+              value={draftFilters.productId}
+              onChange={(value) => setDraftFilters((c) => ({ ...c, productId: value }))}
+              options={[
+                { value: "", label: "All" },
+                ...verticalOptions.map((option) => ({ value: option.id, label: option.label })),
+              ]}
+            />
+            <SearchFilterSelect
+              id="campaign-buyer-filter"
+              label="Buyer"
+              value={draftFilters.buyerId}
+              onChange={(value) => setDraftFilters((c) => ({ ...c, buyerId: value }))}
+              options={[
+                { value: "", label: "All" },
+                ...buyerOptions.map((option) => ({ value: option.id, label: option.label })),
+              ]}
+            />
+            <SearchFilterSelect
+              id="campaign-type-filter"
+              label="Type"
+              value={draftFilters.type}
+              onChange={(value) => setDraftFilters((c) => ({ ...c, type: value }))}
+              options={[
+                { value: "All", label: "All" },
+                ...CAMPAIGN_TYPE_OPTIONS.map((type) => ({ value: type, label: type })),
+              ]}
+            />
+            <SearchFilterField>
               <FieldLabel htmlFor="campaign-date-range" label="Date" />
               <DateRangePicker
                 id="campaign-date-range"
+                className={SEARCH_FILTER_DATE_RANGE_CLASS}
                 value={{ from: draftFilters.dateFrom, to: draftFilters.dateTo }}
                 onChange={(range) =>
                   setDraftFilters((current) => ({ ...current, dateFrom: range.from, dateTo: range.to }))
                 }
               />
-            </div>
-          </div>
+            </SearchFilterField>
+          </SearchFilterGrid>
 
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-            <SearchButton
-              onClick={() => {
-                setAppliedFilters(draftFilters);
-                setPage(1);
-              }}
-            />
-            <ClearButton
-              onClick={() => {
-                const cleared = createDefaultCampaignFilters();
-                setDraftFilters(cleared);
-                setAppliedFilters(cleared);
-                setSelectedIds([]);
-                setPage(1);
-              }}
-            />
-          </div>
-        </div>
+          <SearchFilterActions
+            onSearch={() => {
+              setAppliedFilters(draftFilters);
+              setPage(1);
+            }}
+            onClear={() => {
+              const cleared = createDefaultCampaignFilters();
+              setDraftFilters(cleared);
+              setAppliedFilters(cleared);
+              setSelectedIds([]);
+              setPage(1);
+            }}
+          />
+        </SearchFilterPanel>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <ListTableToolbar

@@ -13,6 +13,12 @@ import { resolvePublisherDistributionForLead } from "@/lib/publisher-distributio
 
 const MAX_ALLOCATION_RETRIES = 8;
 
+/**
+ * Set to `true` to use Distribution by Publisher splits instead of Ping Tree Settings.
+ * Temporarily disabled for allocation testing — flip this flag to re-enable.
+ */
+const USE_PUBLISHER_DISTRIBUTION_OVERRIDE = false;
+
 export type WeightedPingTreeCandidate = {
   id: string;
   percent: number;
@@ -267,7 +273,9 @@ export async function selectPingTreeConfig(params: {
 
   const canUsePublisherDistribution = isPublisherDistributionType(params.processingType);
   const publisherDistribution =
-    params.sellerRefId && canUsePublisherDistribution
+    USE_PUBLISHER_DISTRIBUTION_OVERRIDE &&
+    params.sellerRefId &&
+    canUsePublisherDistribution
       ? await resolvePublisherDistributionForLead({
           sellerRefId: params.sellerRefId,
           verticalRefId: params.verticalRefId,
@@ -276,7 +284,7 @@ export async function selectPingTreeConfig(params: {
         })
       : null;
 
-  if (publisherDistribution) {
+  if (USE_PUBLISHER_DISTRIBUTION_OVERRIDE && publisherDistribution) {
     const weightedConfigs = configs.filter((config) => {
       const id = config._id?.toString() ?? "";
       return publisherDistribution.weights.has(id);

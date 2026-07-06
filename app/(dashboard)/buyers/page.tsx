@@ -7,12 +7,10 @@ import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
 import {
   AddNewButton,
   CancelButton,
-  ClearButton,
   DangerButton,
   DeleteSelectedButton,
   DetailNameLink,
   ExportButton,
-  SearchButton,
   TableActionButton,
   TableActionLink,
 } from "@/components/ui/action-buttons";
@@ -20,6 +18,14 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_DATE_RANGE_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+  SearchFilterSelect,
+} from "@/components/ui/search-filter-layout";
 import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -315,42 +321,38 @@ export default function BuyersPage() {
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Buyer Agent</label>
-                <select
-                  value={agentFilter}
-                  onChange={(event) => setAgentFilter(event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50"
-                >
-                  <option value="All">All</option>
-                  {BUYER_MANAGER_OPTIONS.map((manager) => (
-                    <option key={manager.id} value={manager.id}>
-                      [{manager.id}] {manager.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <SearchFilterPanel>
+            <SearchFilterGrid>
+              <SearchFilterSelect
+                id="buyer-agent-filter"
+                label="Buyer Agent"
+                value={agentFilter}
+                onChange={setAgentFilter}
+                options={[
+                  { value: "All", label: "All" },
+                  ...BUYER_MANAGER_OPTIONS.map((manager) => ({
+                    value: manager.id,
+                    label: `[${manager.id}] ${manager.name}`,
+                  })),
+                ]}
+              />
 
-              <div>
+              <SearchFilterField>
                 <FieldLabel htmlFor="buyer-date-range" label="Date" />
                 <DateRangePicker
                   id="buyer-date-range"
+                  className={SEARCH_FILTER_DATE_RANGE_CLASS}
                   value={{ from: dateFrom, to: dateTo }}
                   onChange={(range) => {
                     setDateFrom(range.from);
                     setDateTo(range.to);
                   }}
                 />
-              </div>
-            </div>
+              </SearchFilterField>
+            </SearchFilterGrid>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-              <SearchButton onClick={handleSearch} />
-              <ClearButton onClick={clearFilters} />
-            </div>
-          </div>
+            <SearchFilterActions onSearch={handleSearch} onClear={clearFilters} />
+          </SearchFilterPanel>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <ListTableToolbar

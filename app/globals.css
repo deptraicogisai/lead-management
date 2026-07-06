@@ -1,6 +1,24 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: var(--font-inter), "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Dashboard reference scale: 12px labels, 13px UI, 14px emphasis */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl: 1.25rem;
+  --text-2xl--line-height: 1.75rem;
+}
+
 :root {
   color-scheme: light;
 }
@@ -11,12 +29,48 @@ html.dark {
 
 body {
   margin: 0;
-  font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  font-weight: 400;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   background: #f8fafc;
   color: #0f172a;
   transition: background-color 200ms ease, color 200ms ease;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+table {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+
+table th {
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  font-weight: 600;
+}
+
+table td {
+  font-variant-numeric: tabular-nums;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
 }
 
 html.dark body {
@@ -354,12 +408,51 @@ select:disabled {
   scrollbar-width: thin;
 }
 
+.sidebar-nav-scroll,
 .mobile-nav-scroll {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225 / 0.7) transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar,
+.mobile-nav-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-track,
+.mobile-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb,
+.mobile-nav-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225 / 0.65);
+  border-radius: 9999px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover,
+.mobile-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184 / 0.85);
+}
+
+.dark .sidebar-nav-scroll,
+.dark .mobile-nav-scroll {
+  scrollbar-color: rgb(71 85 105 / 0.75) transparent;
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb,
+.dark .mobile-nav-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(71 85 105 / 0.65);
+}
+
+.dark .sidebar-nav-scroll::-webkit-scrollbar-thumb:hover,
+.dark .mobile-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(100 116 139 / 0.85);
 }
 
 .mobile-safe-top {

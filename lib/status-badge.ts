@@ -112,6 +112,11 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     solid: { background: "#e11d48", text: "#ffffff", border: "#be123c" },
     outline: { background: "#fff1f2", text: "#9f1239", border: "#f43f5e" },
   },
+  "post error": {
+    pill: { background: "#fdba74", text: "#7c2d12", border: "#ea580c" },
+    solid: { background: "#ea580c", text: "#ffffff", border: "#c2410c" },
+    outline: { background: "#fff7ed", text: "#9a3412", border: "#ea580c" },
+  },
   "not redirected": {
     pill: { background: "#d8b4fe", text: "#581c87", border: "#a855f7" },
     solid: { background: "#9333ea", text: "#ffffff", border: "#7e22ce" },
@@ -201,6 +206,7 @@ const STATUS_LABELS: Record<string, string> = {
   accept: "Accept",
   accepted: "Accepted",
   reject: "Reject",
+  "post error": "Post Error",
   pl: "PL",
   dnpl: "DNPL",
   unassigned: "Unassigned",

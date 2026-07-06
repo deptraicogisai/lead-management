@@ -6,11 +6,9 @@ import { SellerForm } from "@/components/forms/seller-form";
 import {
   AddNewButton,
   CancelButton,
-  ClearButton,
   DangerButton,
   DetailNameLink,
   ExportButton,
-  SearchButton,
   TableActionButton,
   TableActionLink,
 } from "@/components/ui/action-buttons";
@@ -18,6 +16,14 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SEARCH_FILTER_DATE_RANGE_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+} from "@/components/ui/search-filter-layout";
 import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -301,12 +307,13 @@ export default function SellersPage() {
     <div className="space-y-6">
       <PageSection>
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
+          <SearchFilterPanel>
+            <SearchFilterGrid>
+              <SearchFilterField>
                 <FieldLabel htmlFor="publisher-name-email" label="Name / Email" />
                 <Input
                   id="publisher-name-email"
+                  className={SEARCH_FILTER_CONTROL_CLASS}
                   value={nameEmailFilter}
                   onChange={(event) => setNameEmailFilter(event.target.value)}
                   placeholder="Search by name or email"
@@ -317,35 +324,33 @@ export default function SellersPage() {
                     }
                   }}
                 />
-              </div>
+              </SearchFilterField>
 
-              <div>
+              <SearchFilterField>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
                 <StatusMultiSelect
                   options={SELLER_STATUS_MULTI_OPTIONS}
                   selected={statusFilter}
                   onChange={setStatusFilter}
                 />
-              </div>
+              </SearchFilterField>
 
-              <div>
+              <SearchFilterField>
                 <FieldLabel htmlFor="publisher-date-range" label="Date" />
                 <DateRangePicker
                   id="publisher-date-range"
+                  className={SEARCH_FILTER_DATE_RANGE_CLASS}
                   value={{ from: dateFrom, to: dateTo }}
                   onChange={(range) => {
                     setDateFrom(range.from);
                     setDateTo(range.to);
                   }}
                 />
-              </div>
-            </div>
+              </SearchFilterField>
+            </SearchFilterGrid>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-              <SearchButton onClick={handleSearch} />
-              <ClearButton onClick={clearFilters} />
-            </div>
-          </div>
+            <SearchFilterActions onSearch={handleSearch} onClear={clearFilters} />
+          </SearchFilterPanel>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <ListTableToolbar

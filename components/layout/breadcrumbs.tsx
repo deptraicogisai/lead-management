@@ -35,7 +35,7 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
                 <span
                   className={cn(
                     "inline-flex min-w-0 items-center gap-1 truncate px-1 py-0.5",
-                    isLast ? "text-base font-semibold text-slate-900 dark:text-slate-100" : ""
+                    isLast ? "text-sm font-semibold text-slate-900 dark:text-slate-100" : ""
                   )}
                   aria-current={isLast ? "page" : undefined}
                 >
@@ -73,7 +73,7 @@ export function MobilePageTitle({ items, className }: BreadcrumbsProps) {
         <p className="mb-0.5 truncate text-xs font-medium text-slate-500 dark:text-slate-400">{parent.label}</p>
       ) : null}
       <h1
-        className="truncate text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100"
+        className="truncate text-base font-semibold leading-tight text-slate-900 dark:text-slate-100"
         suppressHydrationWarning
       >
         {current.label}

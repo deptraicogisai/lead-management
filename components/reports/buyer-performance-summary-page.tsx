@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Download } from "lucide-react";
-import { SearchButton } from "@/components/ui/action-buttons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FieldLabel } from "@/components/ui/form-controls";
 import {
@@ -19,26 +18,22 @@ import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
-import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { downloadCsv } from "@/lib/csv-export";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 import {
-  defaultPublisherPerformanceFilters,
-  emptyPublisherPerformanceMetrics,
+  defaultBuyerPerformanceFilters,
+  emptyBuyerPerformanceMetrics,
   formatPerformanceCount,
   formatPerformanceMoney,
   formatPerformancePercent,
-  type PublisherPerformanceFilters,
-  type PublisherPerformanceMetrics,
-  type PublisherPerformanceRow,
-} from "@/lib/publisher-performance-summary";
-import {
-  buildPublisherLeadDetailsHref,
-  type PublisherLeadScope,
-} from "@/lib/publisher-lead-details";
+  type BuyerPerformanceFilters,
+  type BuyerPerformanceMetrics,
+  type BuyerPerformanceRow,
+} from "@/lib/buyer-performance-summary";
+import { buildBuyerLeadDetailsHref, type BuyerLeadScope } from "@/lib/buyer-lead-details";
 import {
   metricLinkClassName,
   publisherCellLinkClassName,
@@ -53,89 +48,85 @@ type FilterOption = {
   label: string;
 };
 
-type PublisherPerformanceResponse = {
-  items: PublisherPerformanceRow[];
-  totals: PublisherPerformanceMetrics;
+type BuyerPerformanceResponse = {
+  items: BuyerPerformanceRow[];
+  totals: BuyerPerformanceMetrics;
   page: number;
   pageSize: number;
   totalItems: number;
   totalPages: number;
   filters: {
     products: FilterOption[];
+    buyers: FilterOption[];
     publishers: FilterOption[];
-    publisherTags: string[];
   };
 };
 
-function buildDefaultFilters(): PublisherPerformanceFilters {
-  return { ...defaultPublisherPerformanceFilters };
+const ALL_OPTION = [{ value: "", label: "All" }];
+
+function buildDefaultFilters(): BuyerPerformanceFilters {
+  return { ...defaultBuyerPerformanceFilters };
 }
 
 type SummaryColumn = {
   key: string;
   label: string;
-  align: "left" | "right";
   valueColorClass: string;
-  linkMetric?: PublisherLeadScope;
+  linkScope?: BuyerLeadScope | "post";
   linkRedirect?: boolean;
-  render: (row: PublisherPerformanceRow) => ReactNode;
-  renderTotal: (totals: PublisherPerformanceMetrics) => ReactNode;
-  csv: (metrics: PublisherPerformanceMetrics) => string;
+  render: (row: BuyerPerformanceRow) => ReactNode;
+  renderTotal: (totals: BuyerPerformanceMetrics) => ReactNode;
+  csv: (metrics: BuyerPerformanceMetrics) => string;
 };
 
 const PERFORMANCE_METRIC_COLORS = {
-  post: "text-slate-800 dark:text-slate-100",
-  lead: "text-emerald-600 dark:text-emerald-400",
-  sold: "text-slate-400 dark:text-slate-500",
-  reject: "text-amber-600 dark:text-amber-400",
+  post: "text-emerald-600 dark:text-emerald-400",
+  rejected: "text-amber-600 dark:text-amber-400",
+  accept: "text-emerald-600 dark:text-emerald-400",
   redirect: redirectMetricColorClassName,
+  sendError: "text-amber-600 dark:text-amber-400",
+  timeout: "text-amber-600 dark:text-amber-400",
 } as const;
 
 const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "post",
     label: "Post",
-    align: "right",
     valueColorClass: PERFORMANCE_METRIC_COLORS.post,
-    linkMetric: "post",
+    linkScope: "post",
     render: (row) => formatPerformanceCount(row.post),
     renderTotal: (totals) => formatPerformanceCount(totals.post),
     csv: (metrics) => String(metrics.post),
   },
   {
-    key: "lead",
-    label: "Lead",
-    align: "right",
-    valueColorClass: PERFORMANCE_METRIC_COLORS.lead,
-    linkMetric: "lead",
-    render: (row) => formatPerformanceCount(row.lead),
-    renderTotal: (totals) => formatPerformanceCount(totals.lead),
-    csv: (metrics) => String(metrics.lead),
+    key: "rejected",
+    label: "Rejected",
+    valueColorClass: PERFORMANCE_METRIC_COLORS.rejected,
+    linkScope: "reject",
+    render: (row) => formatPerformanceCount(row.rejected),
+    renderTotal: (totals) => formatPerformanceCount(totals.rejected),
+    csv: (metrics) => String(metrics.rejected),
   },
   {
-    key: "sold",
-    label: "Sold",
-    align: "right",
-    valueColorClass: PERFORMANCE_METRIC_COLORS.sold,
-    linkMetric: "sold",
-    render: (row) => formatPerformanceCount(row.sold),
-    renderTotal: (totals) => formatPerformanceCount(totals.sold),
-    csv: (metrics) => String(metrics.sold),
+    key: "accept",
+    label: "Accept",
+    valueColorClass: PERFORMANCE_METRIC_COLORS.accept,
+    linkScope: "accept",
+    render: (row) => formatPerformanceCount(row.accept),
+    renderTotal: (totals) => formatPerformanceCount(totals.accept),
+    csv: (metrics) => String(metrics.accept),
   },
   {
-    key: "reject",
-    label: "Reject",
-    align: "right",
-    valueColorClass: PERFORMANCE_METRIC_COLORS.reject,
-    linkMetric: "reject",
-    render: (row) => formatPerformanceCount(row.reject),
-    renderTotal: (totals) => formatPerformanceCount(totals.reject),
-    csv: (metrics) => String(metrics.reject),
+    key: "acceptRate",
+    label: "Accept Rate %",
+    valueColorClass: "text-slate-700 dark:text-slate-200",
+    render: (row) => formatPerformancePercent(row.acceptRate),
+    renderTotal: (totals) => formatPerformancePercent(totals.acceptRate),
+    csv: (metrics) => formatPerformancePercent(metrics.acceptRate),
   },
   {
     key: "redirect",
-    label: "Redirect",
-    align: "right",
+    label: "Redirects %",
     valueColorClass: PERFORMANCE_METRIC_COLORS.redirect,
     linkRedirect: true,
     render: (row) => (
@@ -153,27 +144,16 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     csv: (metrics) => `${metrics.redirect} (${formatPerformancePercent(metrics.redirectRate)})`,
   },
   {
-    key: "epl",
-    label: "EPL",
-    align: "right",
+    key: "cpl",
+    label: "CPL",
     valueColorClass: "text-slate-700 dark:text-slate-200",
-    render: (row) => formatPerformanceMoney(row.epl),
-    renderTotal: (totals) => formatPerformanceMoney(totals.epl),
-    csv: (metrics) => formatPerformanceMoney(metrics.epl),
-  },
-  {
-    key: "alp",
-    label: "ALP",
-    align: "right",
-    valueColorClass: "text-slate-700 dark:text-slate-200",
-    render: (row) => formatPerformanceMoney(row.alp),
-    renderTotal: (totals) => formatPerformanceMoney(totals.alp),
-    csv: (metrics) => formatPerformanceMoney(metrics.alp),
+    render: (row) => formatPerformanceMoney(row.cpl),
+    renderTotal: (totals) => formatPerformanceMoney(totals.cpl),
+    csv: (metrics) => formatPerformanceMoney(metrics.cpl),
   },
   {
     key: "pub",
     label: "Pub",
-    align: "right",
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.pub),
     renderTotal: (totals) => formatPerformanceMoney(totals.pub),
@@ -182,15 +162,14 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "adm",
     label: "ADM",
-    align: "right",
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => (
-      <span className={row.adm < 0 ? PERFORMANCE_METRIC_COLORS.reject : undefined}>
+      <span className={row.adm < 0 ? PERFORMANCE_METRIC_COLORS.rejected : undefined}>
         {formatPerformanceMoney(row.adm)}
       </span>
     ),
     renderTotal: (totals) => (
-      <span className={totals.adm < 0 ? PERFORMANCE_METRIC_COLORS.reject : undefined}>
+      <span className={totals.adm < 0 ? PERFORMANCE_METRIC_COLORS.rejected : undefined}>
         {formatPerformanceMoney(totals.adm)}
       </span>
     ),
@@ -199,31 +178,49 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "ttl",
     label: "TTL",
-    align: "right",
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.ttl),
     renderTotal: (totals) => formatPerformanceMoney(totals.ttl),
     csv: (metrics) => formatPerformanceMoney(metrics.ttl),
   },
   {
-    key: "revShare",
-    label: "Rev-Share",
-    align: "right",
-    valueColorClass: "text-slate-700 dark:text-slate-200",
-    render: (row) => formatPerformancePercent(row.revShare),
-    renderTotal: (totals) => formatPerformancePercent(totals.revShare),
-    csv: (metrics) => formatPerformancePercent(metrics.revShare),
+    key: "sendError",
+    label: "Send Error",
+    valueColorClass: PERFORMANCE_METRIC_COLORS.sendError,
+    linkScope: "error",
+    render: (row) => formatPerformanceCount(row.sendError),
+    renderTotal: (totals) => formatPerformanceCount(totals.sendError),
+    csv: (metrics) => String(metrics.sendError),
+  },
+  {
+    key: "timeout",
+    label: "Timeout",
+    valueColorClass: PERFORMANCE_METRIC_COLORS.timeout,
+    linkScope: "timeout",
+    render: (row) => (
+      <span className="whitespace-nowrap">
+        {formatPerformanceCount(row.timeout)}{" "}
+        <span>({formatPerformancePercent(row.timeoutRate)})</span>
+      </span>
+    ),
+    renderTotal: (totals) => (
+      <span className="whitespace-nowrap">
+        {formatPerformanceCount(totals.timeout)}{" "}
+        <span>({formatPerformancePercent(totals.timeoutRate)})</span>
+      </span>
+    ),
+    csv: (metrics) => `${metrics.timeout} (${formatPerformancePercent(metrics.timeoutRate)})`,
   },
 ];
 
-export function PublisherPerformanceSummaryPage() {
-  const [draftFilters, setDraftFilters] = useState<PublisherPerformanceFilters>(() => buildDefaultFilters());
-  const [appliedFilters, setAppliedFilters] = useState<PublisherPerformanceFilters>(() => buildDefaultFilters());
-  const [rows, setRows] = useState<PublisherPerformanceRow[]>([]);
-  const [totals, setTotals] = useState<PublisherPerformanceMetrics>(() => emptyPublisherPerformanceMetrics());
+export function BuyerPerformanceSummaryPage() {
+  const [draftFilters, setDraftFilters] = useState<BuyerPerformanceFilters>(() => buildDefaultFilters());
+  const [appliedFilters, setAppliedFilters] = useState<BuyerPerformanceFilters>(() => buildDefaultFilters());
+  const [rows, setRows] = useState<BuyerPerformanceRow[]>([]);
+  const [totals, setTotals] = useState<BuyerPerformanceMetrics>(() => emptyBuyerPerformanceMetrics());
   const [products, setProducts] = useState<FilterOption[]>([]);
+  const [buyers, setBuyers] = useState<FilterOption[]>([]);
   const [publishers, setPublishers] = useState<FilterOption[]>([]);
-  const [publisherTags, setPublisherTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(100);
   const [totalItems, setTotalItems] = useState(0);
@@ -233,12 +230,12 @@ export function PublisherPerformanceSummaryPage() {
   const [isExporting, setIsExporting] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const updateDraft = (patch: Partial<PublisherPerformanceFilters>) => {
+  const updateDraft = (patch: Partial<BuyerPerformanceFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
   };
 
   const buildQuery = useCallback(
-    (filters: PublisherPerformanceFilters, nextPage: number, nextPageSize: number) => {
+    (filters: BuyerPerformanceFilters, nextPage: number, nextPageSize: number) => {
       const params = new URLSearchParams({
         page: String(nextPage),
         pageSize: String(nextPageSize),
@@ -247,8 +244,8 @@ export function PublisherPerformanceSummaryPage() {
       if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
       if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
       if (filters.productId) params.set("productId", filters.productId);
+      if (filters.buyerId) params.set("buyerId", filters.buyerId);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
-      if (filters.publisherTag) params.set("publisherTag", filters.publisherTag);
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
 
       return params.toString();
@@ -257,28 +254,28 @@ export function PublisherPerformanceSummaryPage() {
   );
 
   const loadRows = useCallback(
-    async (filters: PublisherPerformanceFilters, nextPage: number, nextPageSize: number) => {
+    async (filters: BuyerPerformanceFilters, nextPage: number, nextPageSize: number) => {
       beginLoad();
 
       try {
         const response = await fetch(
-          `/api/reports/publisher/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`
+          `/api/reports/buyer/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`
         );
         if (!response.ok) {
-          throw new Error("Failed to load publisher performance summary.");
+          throw new Error("Failed to load buyer performance summary.");
         }
 
-        const data = (await response.json()) as PublisherPerformanceResponse;
+        const data = (await response.json()) as BuyerPerformanceResponse;
         setRows(data.items);
         setTotals(data.totals);
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
         setProducts(data.filters.products);
+        setBuyers(data.filters.buyers);
         setPublishers(data.filters.publishers);
-        setPublisherTags(data.filters.publisherTags);
       } catch {
         setRows([]);
-        setTotals(emptyPublisherPerformanceMetrics());
+        setTotals(emptyBuyerPerformanceMetrics());
         setTotalItems(0);
         setTotalPages(1);
       } finally {
@@ -321,25 +318,24 @@ export function PublisherPerformanceSummaryPage() {
 
   const fetchAllRows = useCallback(async () => {
     const params = new URLSearchParams(buildQuery(appliedFilters, 1, Math.max(totalItems, 1)));
-    const response = await fetch(`/api/reports/publisher/performance-summary?${params.toString()}`);
+    const response = await fetch(`/api/reports/buyer/performance-summary?${params.toString()}`);
     if (!response.ok) {
-      throw new Error("Failed to export publisher performance summary.");
+      throw new Error("Failed to export buyer performance summary.");
     }
 
-    const data = (await response.json()) as PublisherPerformanceResponse;
+    const data = (await response.json()) as BuyerPerformanceResponse;
     return { items: data.items, totals: data.totals };
   }, [appliedFilters, buildQuery, totalItems]);
 
-  const buildExportMatrix = (exportRows: PublisherPerformanceRow[], exportTotals: PublisherPerformanceMetrics) => {
-    const headers = ["Publisher", "Publisher Tags", ...SUMMARY_COLUMNS.map((column) => column.label)];
+  const buildExportMatrix = (exportRows: BuyerPerformanceRow[], exportTotals: BuyerPerformanceMetrics) => {
+    const headers = ["Buyer", ...SUMMARY_COLUMNS.map((column) => column.label)];
 
     const matrix = exportRows.map((row) => [
-      row.publisherLabel,
-      row.publisherTag || "—",
+      row.buyerLabel,
       ...SUMMARY_COLUMNS.map((column) => column.csv(row)),
     ]);
 
-    matrix.push(["Totals", "", ...SUMMARY_COLUMNS.map((column) => column.csv(exportTotals))]);
+    matrix.push(["Totals", ...SUMMARY_COLUMNS.map((column) => column.csv(exportTotals))]);
 
     return { headers, matrix };
   };
@@ -352,12 +348,12 @@ export function PublisherPerformanceSummaryPage() {
       if (mode === "all-pages") {
         const result = await fetchAllRows();
         const { headers, matrix } = buildExportMatrix(result.items, result.totals);
-        downloadCsv("publisher-performance-summary-all.csv", headers, matrix);
+        downloadCsv("buyer-performance-summary-all.csv", headers, matrix);
         return;
       }
 
       const { headers, matrix } = buildExportMatrix(rows, totals);
-      downloadCsv("publisher-performance-summary-current-page.csv", headers, matrix);
+      downloadCsv("buyer-performance-summary-current-page.csv", headers, matrix);
     } catch {
       // Ignore export errors for now.
     } finally {
@@ -369,27 +365,27 @@ export function PublisherPerformanceSummaryPage() {
   const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
 
   const productOptions = useMemo(
-    () => [{ value: "", label: "All" }, ...products.map((product) => ({ value: product.id, label: product.label }))],
+    () => [...ALL_OPTION, ...products.map((product) => ({ value: product.id, label: product.label }))],
     [products]
   );
-  const publisherOptions = useMemo(
-    () => [{ value: "", label: "All" }, ...publishers.map((publisher) => ({ value: publisher.id, label: publisher.label }))],
-    [publishers]
+  const buyerOptions = useMemo(
+    () => [...ALL_OPTION, ...buyers.map((buyer) => ({ value: buyer.id, label: buyer.label }))],
+    [buyers]
   );
-  const publisherTagOptions = useMemo(
-    () => [{ value: "", label: "All" }, ...publisherTags.map((tag) => ({ value: tag, label: tag }))],
-    [publisherTags]
+  const publisherOptions = useMemo(
+    () => [...ALL_OPTION, ...publishers.map((publisher) => ({ value: publisher.id, label: publisher.label }))],
+    [publishers]
   );
 
   return (
-    <PageSection title="Publisher Performance Summary">
+    <PageSection title="Buyer Performance Summary">
       <div className="space-y-5">
         <SearchFilterPanel>
           <SearchFilterGrid>
             <SearchFilterField>
-              <FieldLabel htmlFor="performance-date-range" label="Date" />
+              <FieldLabel htmlFor="buyer-performance-date-range" label="Date" />
               <DateRangePicker
-                id="performance-date-range"
+                id="buyer-performance-date-range"
                 className={SEARCH_FILTER_DATE_RANGE_CLASS}
                 value={{ from: draftFilters.dateFrom, to: draftFilters.dateTo }}
                 onChange={(range) => updateDraft({ dateFrom: range.from, dateTo: range.to })}
@@ -397,7 +393,7 @@ export function PublisherPerformanceSummaryPage() {
             </SearchFilterField>
 
             <SearchFilterSelect
-              id="performance-product"
+              id="buyer-performance-product"
               label="Product"
               value={draftFilters.productId}
               onChange={(value) => updateDraft({ productId: value })}
@@ -405,19 +401,19 @@ export function PublisherPerformanceSummaryPage() {
             />
 
             <SearchFilterSelect
-              id="performance-publisher"
+              id="buyer-performance-buyer"
+              label="Buyer"
+              value={draftFilters.buyerId}
+              onChange={(value) => updateDraft({ buyerId: value })}
+              options={buyerOptions}
+            />
+
+            <SearchFilterSelect
+              id="buyer-performance-publisher"
               label="Publisher"
               value={draftFilters.publisherId}
               onChange={(value) => updateDraft({ publisherId: value })}
               options={publisherOptions}
-            />
-
-            <SearchFilterSelect
-              id="performance-publisher-tags"
-              label="Publisher Tags"
-              value={draftFilters.publisherTag}
-              onChange={(value) => updateDraft({ publisherTag: value })}
-              options={publisherTagOptions}
             />
           </SearchFilterGrid>
 
@@ -438,7 +434,7 @@ export function PublisherPerformanceSummaryPage() {
             tableFilter={draftFilters.tableSearch}
             onTableFilterChange={(value) => updateDraft({ tableSearch: value })}
             onTableFilterSubmit={handleSearch}
-            filterPlaceholder="Search publisher..."
+            filterPlaceholder="Filter..."
             actions={
               <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
                 <button
@@ -528,17 +524,16 @@ function PerformanceMetricLink({
 }
 
 function buildRowLeadDetailsHref(
-  row: PublisherPerformanceRow,
-  appliedFilters: PublisherPerformanceFilters,
-  options?: { leadScope?: PublisherLeadScope; redirectStatus?: "Redirected" | "Not Redirected" }
+  row: BuyerPerformanceRow,
+  appliedFilters: BuyerPerformanceFilters,
+  options?: { scope?: BuyerLeadScope | "post" }
 ) {
-  return buildPublisherLeadDetailsHref({
-    publisherId: row.id,
+  return buildBuyerLeadDetailsHref({
+    buyerId: row.id,
     dateFrom: appliedFilters.dateFrom,
     dateTo: appliedFilters.dateTo,
     productId: appliedFilters.productId,
-    leadScope: options?.leadScope,
-    redirectStatus: options?.redirectStatus,
+    scope: options?.scope && options.scope !== "post" ? options.scope : undefined,
   });
 }
 
@@ -547,14 +542,14 @@ function PerformanceSummaryTable({
   totals,
   appliedFilters,
 }: {
-  rows: PublisherPerformanceRow[];
-  totals: PublisherPerformanceMetrics;
-  appliedFilters: PublisherPerformanceFilters;
+  rows: BuyerPerformanceRow[];
+  totals: BuyerPerformanceMetrics;
+  appliedFilters: BuyerPerformanceFilters;
 }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-        No publishers found for the selected filters.
+        No buyers found for the selected filters.
       </div>
     );
   }
@@ -571,8 +566,7 @@ function PerformanceSummaryTable({
         <table className="min-w-max w-full border-separate border-spacing-0 text-sm tabular-nums">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
             <tr>
-              <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>Publisher</th>
-              <th className={cn(headerCellClassName, "text-left")}>Publisher Tags</th>
+              <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>Buyer</th>
               {SUMMARY_COLUMNS.map((column) => (
                 <th
                   key={column.key}
@@ -581,9 +575,11 @@ function PerformanceSummaryTable({
                     "text-right",
                     column.key === "redirect"
                       ? cn(redirectMetricColorClassName, metricLinkClassName)
-                      : column.key === "reject"
-                        ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
-                        : (column.linkMetric || column.linkRedirect) && metricLinkClassName
+                      : column.key === "rejected" || column.key === "sendError" || column.key === "timeout"
+                        ? cn(PERFORMANCE_METRIC_COLORS.rejected, metricLinkClassName)
+                        : column.linkScope || column.linkRedirect
+                          ? metricLinkClassName
+                          : undefined
                   )}
                 >
                   {column.label}
@@ -602,38 +598,41 @@ function PerformanceSummaryTable({
                     href={buildRowLeadDetailsHref(row, appliedFilters)}
                     className={publisherCellLinkClassName}
                   >
-                    {row.publisherLabel}
+                    {row.buyerLabel}
                   </Link>
-                </td>
-                <td className={cn(bodyCellClassName, "text-slate-600 dark:text-slate-200")}>
-                  <PublisherTagBadges tag={row.publisherTag} />
                 </td>
                 {SUMMARY_COLUMNS.map((column) => (
                   <td
                     key={column.key}
                     className={cn(bodyCellClassName, tableNumericCellClassName, column.valueColorClass)}
                   >
-                    {column.linkMetric ? (
+                    {column.linkScope ? (
                       <PerformanceMetricLink
-                        count={row[column.linkMetric]}
+                        count={
+                          column.linkScope === "post"
+                            ? row.post
+                            : column.linkScope === "accept"
+                              ? row.accept
+                              : column.linkScope === "reject"
+                                ? row.rejected
+                                : column.linkScope === "timeout"
+                                  ? row.timeout
+                                  : row.sendError
+                        }
                         colorClass={column.valueColorClass}
-                        href={buildRowLeadDetailsHref(row, appliedFilters, {
-                          leadScope: column.linkMetric,
-                        })}
+                        href={buildRowLeadDetailsHref(row, appliedFilters, { scope: column.linkScope })}
+                        suffix={
+                          column.key === "timeout" ? (
+                            <span> ({formatPerformancePercent(row.timeoutRate)})</span>
+                          ) : undefined
+                        }
                       />
                     ) : column.linkRedirect ? (
                       <PerformanceMetricLink
                         count={row.redirect}
                         colorClass={column.valueColorClass}
-                        href={buildRowLeadDetailsHref(row, appliedFilters, {
-                          redirectStatus: "Redirected",
-                        })}
-                        suffix={
-                          <span>
-                            {" "}
-                            ({formatPerformancePercent(row.redirectRate)})
-                          </span>
-                        }
+                        href={buildRowLeadDetailsHref(row, appliedFilters, { scope: "accept" })}
+                        suffix={<span> ({formatPerformancePercent(row.redirectRate)})</span>}
                       />
                     ) : (
                       column.render(row)
@@ -646,7 +645,6 @@ function PerformanceSummaryTable({
           <tfoot className="sticky bottom-0 z-10 bg-slate-100 dark:bg-slate-800">
             <tr className="font-semibold text-slate-800 dark:text-slate-100">
               <td className="border-t border-slate-300 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600">Totals</td>
-              <td className="border-t border-slate-300 px-3 py-2.5 sm:px-4 dark:border-slate-600" />
               {SUMMARY_COLUMNS.map((column) => (
                 <td
                   key={column.key}

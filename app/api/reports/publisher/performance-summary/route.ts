@@ -21,7 +21,6 @@ type LeadProjection = {
   sellerRef?: { toString(): string } | string;
   validationStatus?: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
-  redirectUrl?: string;
   soldPrice?: number | null;
   postedAt?: Date | string;
   payload?: Record<string, unknown>;
@@ -168,13 +167,12 @@ export async function GET(req: Request) {
       return NextResponse.json(buildEmptyResponse(page, pageSize, verticals, sellers));
     }
 
-    const [leads, deliveryTotals] = await Promise.all([
+    const [leads, deliveryTotals, redirectTotals] = await Promise.all([
       SellerLeadModel.find(leadMatch)
         .select({
           sellerRef: 1,
           validationStatus: 1,
           publisherStatus: 1,
-          redirectUrl: 1,
           soldPrice: 1,
           postedAt: 1,
           "payload.email": 1,
@@ -192,6 +190,15 @@ export async function GET(req: Request) {
       LeadDeliveryModel.aggregate<{ _id: Types.ObjectId | null; ttl: number }>([
         { $match: deliveryMatch },
         { $group: { _id: "$sellerRef", ttl: { $sum: { $ifNull: ["$price", 0] } } } },
+      ]),
+      SellerLeadModel.aggregate<{ _id: Types.ObjectId | null; redirect: number }>([
+        {
+          $match: {
+            ...leadMatch,
+            redirectConfirmedAt: { $ne: null },
+          },
+        },
+        { $group: { _id: "$sellerRef", redirect: { $sum: 1 } } },
       ]),
     ]);
 
@@ -224,10 +231,6 @@ export async function GET(req: Request) {
         accumulator.reject += 1;
       }
 
-      if (typeof lead.redirectUrl === "string" && lead.redirectUrl.trim()) {
-        accumulator.redirect += 1;
-      }
-
       // Duplicate windows (leads sorted ascending by postedAt above).
       const fingerprint = readFingerprint(lead.payload);
       const postedTime = lead.postedAt ? new Date(lead.postedAt).getTime() : NaN;
@@ -247,6 +250,12 @@ export async function GET(req: Request) {
       const sellerId = entry._id ? entry._id.toString() : "";
       if (!sellerId) continue;
       ensureAccumulator(sellerId).ttl += entry.ttl ?? 0;
+    }
+
+    for (const entry of redirectTotals) {
+      const sellerId = entry._id ? entry._id.toString() : "";
+      if (!sellerId) continue;
+      ensureAccumulator(sellerId).redirect = entry.redirect ?? 0;
     }
 
     const normalizedSearch = tableSearch.trim().toLowerCase();

@@ -7,6 +7,7 @@ import { Checkbox, Input, PrimaryButton, Select } from "@/components/ui/form-con
 import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
+import { formatDateTimeDisplay } from "@/lib/date-range";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
 import {
   buildSystemBuyerValidationStep,
@@ -610,17 +611,12 @@ function resolveBuyerAttemptLogId(attempt: BuyerPostAttemptSnapshot, index: numb
 
 function formatBuyerAttemptPostedDate(attempt: BuyerPostAttemptSnapshot, fallbackIso: string) {
   const iso = attempt.postedAt ?? fallbackIso;
+  if (!iso) return "-";
+
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "-";
 
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(date);
+  return formatDateTimeDisplay(date);
 }
 
 function buildCompactBuyerAttemptResponse(attempt: BuyerPostAttemptSnapshot) {

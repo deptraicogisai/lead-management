@@ -304,14 +304,14 @@ export function DataTable<T extends { id: string }>({
         >
           {isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
 
-          <table className="min-w-max w-full border-separate border-spacing-0 text-sm">
+          <table className="min-w-max w-full border-separate border-spacing-0 text-sm tabular-nums">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
             <tr>
               {isReorderable ? (
                 <th className="w-10 border-b border-slate-200 px-2 py-2 text-left sm:py-3 dark:border-slate-600" aria-label="Reorder" />
               ) : null}
               {isSelectable ? (
-                <th className="w-14 border-b border-slate-200 px-3 py-2 text-left sm:px-4 sm:py-3 dark:border-slate-600">
+                <th className="w-14 border-b border-slate-200 px-3 py-2 text-left sm:px-4 sm:py-2.5 dark:border-slate-600">
                   <input
                     type="checkbox"
                     checked={allRowsSelected}
@@ -329,7 +329,7 @@ export function DataTable<T extends { id: string }>({
                 return (
                   <th
                     key={columnKey}
-                    className="border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-3 sm:text-sm dark:border-slate-600 dark:text-slate-100"
+                    className="border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-2.5 dark:border-slate-600 dark:text-slate-100"
                   >
                     {columnSortable ? (
                       <SortableColumnHeader
@@ -384,7 +384,7 @@ export function DataTable<T extends { id: string }>({
                     </td>
                   ) : null}
                   {isSelectable ? (
-                    <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-3 dark:border-slate-700/80">
+                    <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(row.id)}
@@ -397,7 +397,7 @@ export function DataTable<T extends { id: string }>({
                   {columns.map((column) => (
                     <td
                       key={String(column.key)}
-                      className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-3 dark:border-slate-700/80 dark:text-slate-200"
+                      className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
                     >
                       {renderCellContent(row, column)}
                     </td>

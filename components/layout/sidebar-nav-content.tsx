@@ -61,7 +61,7 @@ function NavLink({
           : cn(
               "rounded-lg py-2",
               collapsed ? "justify-center px-2" : "gap-2 pl-3.5 pr-2",
-              compact ? "text-xs leading-none" : "text-[13px] leading-none"
+              compact ? "text-xs leading-none" : "text-sm leading-none"
             ),
         isActive
           ? isMobile
@@ -231,7 +231,7 @@ function CollapsibleNavSection({
 
         {flyoutOpen ? (
           <div className="absolute left-[calc(100%+0.5rem)] top-0 z-50 w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-            <p className="truncate px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <p className="truncate px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
               {label}
             </p>
             <div className="mt-1">{children}</div>
@@ -293,8 +293,8 @@ function SectionLinks({
           {section.title ? (
             <p
               className={cn(
-                "truncate font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400",
-                isMobile ? "px-3 py-2 text-[11px]" : "border-b border-dashed border-slate-300 px-1.5 pb-1.5 text-[10px] dark:border-slate-600"
+                "truncate font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300",
+                isMobile ? "px-3 py-2 text-[12px]" : "border-b border-dashed border-slate-300 px-1.5 pb-1.5 text-[11px] dark:border-slate-600"
               )}
             >
               {section.title}
@@ -344,7 +344,7 @@ export function SidebarNavContent({ collapsed = false, isMobile = false, onNavig
   const [isReportsOpen, setIsReportsOpen] = useState(() => !isMobile);
 
   return (
-    <nav className={cn(isMobile ? "space-y-1.5" : "min-w-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto")}>
+    <nav className={cn(isMobile ? "space-y-1.5" : "sidebar-nav-scroll min-w-0 flex-1 space-y-1")}>
       {navItems.map((item) => {
         const isActive =
           pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));

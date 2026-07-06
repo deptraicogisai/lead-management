@@ -5,9 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Settings2 } from "lucide-react";
 import {
   AddNewButton,
-  ClearButton,
   ExportButton,
-  SearchButton,
   TableActionButton,
 } from "@/components/ui/action-buttons";
 import {
@@ -27,6 +25,13 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
+import {
+  SEARCH_FILTER_CONTROL_CLASS,
+  SearchFilterActions,
+  SearchFilterField,
+  SearchFilterGrid,
+  SearchFilterPanel,
+} from "@/components/ui/search-filter-layout";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { downloadCsv } from "@/lib/csv-export";
 import {
@@ -511,39 +516,43 @@ export function PingTreeConfigPage() {
       />
 
       {/* Filters */}
-      <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/70">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <div>
+      <SearchFilterPanel className="mb-5">
+        <SearchFilterGrid>
+          <SearchFilterField>
             <FieldLabel htmlFor="ptc-id" label="ID" />
             <Input
               id="ptc-id"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={draftFilters.id}
               onChange={(event) => setDraftFilters((f) => ({ ...f, id: event.target.value }))}
               onKeyDown={(event) => event.key === "Enter" && handleSearch()}
             />
-          </div>
-          <div>
+          </SearchFilterField>
+          <SearchFilterField>
             <FieldLabel htmlFor="ptc-name" label="Name" />
             <Input
               id="ptc-name"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={draftFilters.name}
               onChange={(event) => setDraftFilters((f) => ({ ...f, name: event.target.value }))}
               onKeyDown={(event) => event.key === "Enter" && handleSearch()}
             />
-          </div>
-          <div>
+          </SearchFilterField>
+          <SearchFilterField>
             <FieldLabel htmlFor="ptc-comment" label="Comment" />
             <Input
               id="ptc-comment"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={draftFilters.comment}
               onChange={(event) => setDraftFilters((f) => ({ ...f, comment: event.target.value }))}
               onKeyDown={(event) => event.key === "Enter" && handleSearch()}
             />
-          </div>
-          <div>
+          </SearchFilterField>
+          <SearchFilterField>
             <FieldLabel htmlFor="ptc-posting" label="Posting Type" />
             <Select
               id="ptc-posting"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={draftFilters.postingType}
               onChange={(event) => setDraftFilters((f) => ({ ...f, postingType: event.target.value }))}
             >
@@ -554,11 +563,12 @@ export function PingTreeConfigPage() {
                 </option>
               ))}
             </Select>
-          </div>
-          <div>
+          </SearchFilterField>
+          <SearchFilterField>
             <FieldLabel htmlFor="ptc-product" label="Product" />
             <Select
               id="ptc-product"
+              className={SEARCH_FILTER_CONTROL_CLASS}
               value={draftFilters.product}
               onChange={(event) => setDraftFilters((f) => ({ ...f, product: event.target.value }))}
             >
@@ -569,20 +579,18 @@ export function PingTreeConfigPage() {
                 </option>
               ))}
             </Select>
-          </div>
-        </div>
+          </SearchFilterField>
+        </SearchFilterGrid>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        <SearchFilterActions onSearch={handleSearch} onClear={handleClear}>
           <Checkbox
             checked={draftFilters.showDeleted}
             onChange={(checked) => setDraftFilters((f) => ({ ...f, showDeleted: checked }))}
             label="Show Deleted"
             className="w-auto shrink-0"
           />
-          <SearchButton onClick={handleSearch} />
-          <ClearButton onClick={handleClear} />
-        </div>
-      </div>
+        </SearchFilterActions>
+      </SearchFilterPanel>
 
       {/* Toolbar */}
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
