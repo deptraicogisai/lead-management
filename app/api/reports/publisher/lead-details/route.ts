@@ -7,7 +7,7 @@ import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/model
 import { LeadDeliveryModel } from "@/lib/models/lead-delivery";
 import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
-import { resolveBuyerName } from "@/lib/buyer";
+import { resolveBuyerName, type BuyerDoc } from "@/lib/buyer";
 import { buildVerticalIndexMap, formatProductLabel } from "@/lib/integration-builder";
 import {
   buildPublisherLeadFieldColumnsFromLeads,
@@ -290,8 +290,8 @@ function sumAcceptedDeliveryRevenue(leadId: string, deliveries: AcceptedDelivery
 
 function buildAcceptedDeliverySummary(
   delivery: AcceptedDeliveryDoc | null,
-  campaignById: Map<string, { name?: string; displayId?: number }>,
-  buyerById: Map<string, { company?: string; name?: string; displayId?: number }>
+  campaignById: Map<string, { name?: string | null; displayId?: number | null }>,
+  buyerById: Map<string, BuyerDoc>
 ): PublisherLeadAcceptedDelivery | null {
   if (!delivery) {
     return null;
