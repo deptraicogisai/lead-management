@@ -156,13 +156,16 @@ export function CampaignTestMockModal({
             </div>
 
             <div className="min-w-0 sm:col-span-2">
-              <FieldLabel htmlFor="campaign-test-mock-redirect-url" label="Redirect URL" />
+              <FieldLabel htmlFor="campaign-test-mock-redirect-url" label="Direct URL" />
               <Input
                 id="campaign-test-mock-redirect-url"
                 value={form.redirectUrl}
                 onChange={(event) => setForm((current) => ({ ...current, redirectUrl: event.target.value }))}
-                placeholder="https://example.com/redirect/test"
+                placeholder="https://example.com/landing"
               />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Returned as <code className="text-[11px]">redirect_url</code> in the buyer JSON response.
+              </p>
             </div>
           </div>
         ) : (

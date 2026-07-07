@@ -36,6 +36,8 @@ import {
   MOCK_BUYER_POST_BODY_KEY,
   type MockBuyerPostOptions,
 } from "@/lib/mock-buyer-post";
+import { isBuyerLeadMockEndpoint } from "@/lib/buyer-lead-api";
+import { resolveBuyerPostErrorReason } from "@/lib/buyer-post-error";
 import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 
 export type BuyerDeliveryResult = {
@@ -150,9 +152,9 @@ export function prepareBuyerIntegrationRequest(params: {
   campaign?: Record<string, unknown>;
   mockBuyerPostUrl?: string;
 }): PreparedBuyerIntegrationRequest {
+  const configValues = buildIntegrationRuntimeConfig(params.integration.configFields, params.configValues);
   const systemLead = buildLeadTemplateContext(params.lead);
   const mappedValues = buildMappedValues(params.integration.arrayMappings, params.lead);
-  const configValues = buildIntegrationRuntimeConfig(params.integration.configFields, params.configValues);
   const request = buildIntegrationRequest({
     requestMapping: params.integration.requestMapping,
     lead: systemLead,
@@ -202,6 +204,9 @@ export async function deliverLeadToBuyer(params: {
     mockBuyerPostUrl: params.mockBuyerPostUrl,
   });
   const { mappedValues, requestMappingData, buyerRequest, postLeadUrl, configValues } = prepared;
+  const targetsMockEndpoint =
+    Boolean(params.mockBuyerPostUrl?.trim()) || isBuyerLeadMockEndpoint(postLeadUrl);
+  const mockBuyerPostOptions = targetsMockEndpoint ? params.mockBuyerPostOptions : undefined;
 
   const mappedSummary =
     Object.keys(mappedValues).length > 0
@@ -271,10 +276,10 @@ export async function deliverLeadToBuyer(params: {
 
   const requestDataType = params.integration.requestMapping.dataType?.trim().toUpperCase() || "JSON";
   const outboundRequestBody =
-    params.mockBuyerPostUrl && params.mockBuyerPostOptions
+    mockBuyerPostOptions
       ? {
           ...requestMappingData,
-          [MOCK_BUYER_POST_BODY_KEY]: params.mockBuyerPostOptions,
+          [MOCK_BUYER_POST_BODY_KEY]: mockBuyerPostOptions,
         }
       : requestMappingData;
   const { body, contentType } = buildRequestBody(requestDataType, outboundRequestBody);
@@ -282,7 +287,7 @@ export async function deliverLeadToBuyer(params: {
     ...buyerRequest.headers,
     "Content-Type": buyerRequest.headers["Content-Type"] || contentType,
   };
-  const mockHeaders = params.mockBuyerPostUrl ? buildMockBuyerPostHeaders(params.mockBuyerPostOptions) : {};
+  const mockHeaders = mockBuyerPostOptions ? buildMockBuyerPostHeaders(mockBuyerPostOptions) : {};
   const sentHeaders = {
     ...headers,
     ...mockHeaders,
@@ -324,15 +329,16 @@ export async function deliverLeadToBuyer(params: {
     responseBody = await response.text();
     responseHeaders = snapshotFetchResponseHeaders(response);
     responseTimeMs = Date.now() - requestStartedAt;
+    const httpErrorReason = response.ok ? "" : resolveBuyerPostErrorReason(httpStatus, responseBody);
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "http-post",
       label: "HTTP Post to Buyer",
       status: response.ok ? "pass" : "error",
-      summary: `Buyer returned HTTP ${httpStatus}.`,
+      summary: response.ok ? `Buyer returned HTTP ${httpStatus}.` : httpErrorReason,
       result: response.ok
         ? successStepResult(`HTTP ${httpStatus} OK.`)
-        : errorStepResult(`Buyer returned HTTP ${httpStatus}.`, `HTTP ${httpStatus}`),
+        : errorStepResult(httpErrorReason, `HTTP ${httpStatus}`),
     });
 
     const parsed = parseIntegrationResponse(
@@ -373,7 +379,7 @@ export async function deliverLeadToBuyer(params: {
         redirectUrl: parsed.redirectUrl,
         rejectSign: parsed.rejectSign,
         rejectReason: parsed.rejectReason,
-        errorReason: `Buyer returned HTTP ${httpStatus}.`,
+        errorReason: httpErrorReason,
         postLeadUrl,
         responseBody,
         responseHeaders,
@@ -403,7 +409,7 @@ export async function deliverLeadToBuyer(params: {
         redirectUrl: parsed.redirectUrl,
         rejectSign: parsed.rejectSign,
         rejectReason: parsed.rejectReason,
-        errorReason: `Buyer returned HTTP ${httpStatus}.`,
+        errorReason: httpErrorReason,
         postLeadUrl,
         responseBody,
         responseHeaders,
@@ -424,7 +430,10 @@ export async function deliverLeadToBuyer(params: {
       redirectUrl: parsed.redirectUrl,
       rejectSign: parsed.rejectSign,
       rejectReason: inferred.reason || parsed.rejectReason,
-      errorReason: inferred.status === "Error" ? inferred.reason || parsed.errorReason : parsed.errorReason,
+      errorReason:
+        inferred.status === "Error"
+          ? inferred.reason || parsed.errorReason || httpErrorReason
+          : parsed.errorReason,
       postLeadUrl,
       responseBody,
       responseHeaders,

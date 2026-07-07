@@ -14,6 +14,8 @@ export type BuyerListRecord = {
   personalManagerId: string;
   personalManagerName: string;
   status: BuyerStatus;
+  apiKey: string;
+  postLeadUrl: string;
   integrationIds: string[];
   integrations: string[];
   allowedPublisherIds: string[];
@@ -29,12 +31,16 @@ export type BuyerCreatePayload = {
   name: string;
   email: string;
   status: "Active" | "Inactive";
+  apiKey?: string;
+  postLeadUrl?: string;
 };
 
 export type BuyerUpdatePayload = {
   name: string;
   email: string;
   status: BuyerStatus;
+  apiKey?: string;
+  postLeadUrl?: string;
   integrationIds?: string[];
   allowedPublisherIds?: string[];
   blockedPublisherIds?: string[];
@@ -117,6 +123,8 @@ export type BuyerDoc = {
   questionnaireStatus?: "Pending" | "Completed";
   quality?: string | null;
   status?: BuyerStatus;
+  apiKey?: string | null;
+  postLeadUrl?: string | null;
   integrationRefs?: Array<{ toString(): string } | string> | null;
   allowedPublisherRefs?: Array<{ toString(): string } | string> | null;
   blockedPublisherRefs?: Array<{ toString(): string } | string> | null;
@@ -161,6 +169,8 @@ export function toBuyerListRecord(
     personalManagerId: doc.personalManagerId ?? "",
     personalManagerName: doc.personalManagerName ?? "",
     status,
+    apiKey: doc.apiKey?.trim() ?? "",
+    postLeadUrl: doc.postLeadUrl?.trim() ?? "",
     integrationIds: resolvedIntegrationIds,
     integrations: integrationLabels,
     allowedPublisherIds: resolvePublisherRefIds(doc.allowedPublisherRefs),

@@ -629,39 +629,11 @@ export async function handleSellerLeadPost(req: Request) {
         publisherResponsePrice: distribution.publisherResponsePrice,
       });
     } else if (distribution.publisherStatus === "Test") {
-      responsePayload = buildPublisherAcceptedResponse({
-        message: distribution.message,
-        lead_id: leadId,
-      });
+      responsePayload = buildPublisherAcceptedResponse();
     } else if (distribution.publisherStatus === "Post Error") {
-      const postErrorDelivery = distribution.campaignDeliveries.find(
-        (entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout"
-      );
-      responsePayload = buildPublisherRejectedResponse([distribution.message], {
-        lead_id: leadId,
-        ...(postErrorDelivery?.errorReason ? { buyer_post_error: postErrorDelivery.errorReason } : {}),
-        ...(postErrorDelivery?.postLeadUrl ? { post_lead_url: postErrorDelivery.postLeadUrl } : {}),
-        ...(postErrorDelivery?.httpStatus ? { buyer_http_status: postErrorDelivery.httpStatus } : {}),
-      });
+      responsePayload = buildPublisherRejectedResponse([distribution.message]);
     } else {
-      const redirectAttempt = distribution.campaignDeliveries.find(
-        (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
-      );
-      const silentAttempt = distribution.campaignDeliveries.find(
-        (entry) => entry.pingTreeType === "Silent" && entry.buyerStatus !== "Skipped"
-      );
-      const primaryAttempt =
-        redirectAttempt ??
-        silentAttempt ??
-        distribution.campaignDeliveries.find((entry) => entry.buyerStatus !== "Skipped");
-
-      responsePayload = buildPublisherRejectedResponse([distribution.message], {
-        ...(primaryAttempt?.rejectReason ? { buyer_reject_reason: primaryAttempt.rejectReason } : {}),
-        ...(primaryAttempt?.buyerStatus ? { buyer_status: primaryAttempt.buyerStatus } : {}),
-        ...(primaryAttempt?.responseBody
-          ? { buyer_response: String(primaryAttempt.responseBody).slice(0, 500) }
-          : {}),
-      });
+      responsePayload = buildPublisherRejectedResponse([distribution.message]);
     }
 
     await createSellerIntakeLog({

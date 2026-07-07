@@ -59,7 +59,7 @@ def build_payload(index: int, run_tag: str) -> dict[str, Any]:
 def extract_redirect_url(response: Any) -> str | None:
     if not isinstance(response, dict):
         return None
-    redirect_url = response.get("redirect_url") or response.get("redirectUrl")
+    redirect_url = response.get("redirect_url") or response.get("redirectUrl") or response.get("direct_url")
     if isinstance(redirect_url, str) and redirect_url.strip():
         return redirect_url.strip()
     return None

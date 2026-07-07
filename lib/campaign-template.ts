@@ -8,6 +8,7 @@ export type CampaignTemplateSource = {
   minPrice?: number | string;
   buyerId?: string;
   buyerLabel?: string;
+  buyerApiKey?: string;
   productLabel?: string;
   verticalId?: string;
   integrationId?: string;
@@ -27,6 +28,7 @@ export const CAMPAIGN_TEMPLATE_FIELDS: Array<{ path: string; description: string
   { path: "timezone", description: "Campaign timezone" },
   { path: "buyerId", description: "Buyer ID" },
   { path: "buyerLabel", description: "Buyer company name" },
+  { path: "buyerApiKey", description: "Buyer API key for x-api-key header" },
   { path: "productLabel", description: "Product / vertical label" },
   { path: "verticalId", description: "Vertical ID" },
   { path: "integrationId", description: "Integration ID" },
@@ -56,6 +58,7 @@ export function buildCampaignTemplateContext(source: CampaignTemplateSource = {}
     minPrice: source.minPrice != null ? String(source.minPrice) : "",
     buyerId: source.buyerId?.trim() ?? "",
     buyerLabel: source.buyerLabel?.trim() ?? "",
+    buyerApiKey: source.buyerApiKey?.trim() ?? "",
     productLabel: source.productLabel?.trim() ?? "",
     verticalId: source.verticalId?.trim() ?? "",
     integrationId: source.integrationId?.trim() ?? "",

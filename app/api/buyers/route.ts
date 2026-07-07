@@ -14,6 +14,7 @@ import {
 } from "@/lib/buyer-integrations";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
+import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
 
 type LegacyBuyerPayload = {
   firstName?: string;
@@ -59,8 +60,6 @@ function isLegacyBuyerPayload(body: LegacyBuyerPayload & CreateBuyerPayload) {
       body.phone ||
       body.company ||
       body.verticalId ||
-      body.apiKey ||
-      body.postLeadUrl ||
       body.mappings
   );
 }
@@ -195,6 +194,9 @@ export async function POST(req: Request) {
     const latest = await BuyerModel.findOne().sort({ displayId: -1 }).select({ displayId: 1 }).lean();
     const nextDisplayId = (latest?.displayId ?? 0) + 1;
     const trimmedName = body.name.trim();
+    const apiKey = body.apiKey?.trim() || generateBuyerApiKey();
+    const requestUrl = new URL(req.url);
+    const postLeadUrl = body.postLeadUrl?.trim() || buildBuyerLeadPostUrl(requestUrl.origin);
 
     const buyer = await BuyerModel.create({
       displayId: nextDisplayId,
@@ -202,6 +204,8 @@ export async function POST(req: Request) {
       company: trimmedName,
       email: body.email?.trim() ?? "",
       status: body.status ?? "Active",
+      apiKey,
+      postLeadUrl,
       buyerLabel: "-",
       buyerType: "-",
       personalManagerId: "",

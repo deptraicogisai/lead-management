@@ -1,5 +1,5 @@
-/** Toggle off before production. Forces buyer accept responses to use the URL below. */
-export const USE_HARDCODED_BUYER_REDIRECT_URL_FOR_TEST = true;
+/** Toggle on only for local experiments. Campaign mock redirect_url is used by default. */
+export const USE_HARDCODED_BUYER_REDIRECT_URL_FOR_TEST = false;
 export const HARDCODED_BUYER_REDIRECT_URL = "https://www.tiktok.com";
 
 export function resolveBuyerRedirectUrl(

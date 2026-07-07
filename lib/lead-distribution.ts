@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { resolveBuyerMockPostUrl, isBuyerLeadMockEndpoint } from "@/lib/buyer-lead-api";
 import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
@@ -252,6 +253,11 @@ async function buildCampaignBuyerRequestPreview(params: {
   payload: Record<string, unknown>;
   origin: string;
   mockBuyerPost: boolean;
+  buyer: {
+    _id?: { toString(): string };
+    postLeadUrl?: string | null;
+    apiKey?: string | null;
+  };
   buyerId: string;
 }) {
   const integrationId = params.campaign.integrationRef?.toString() ?? "";
@@ -262,7 +268,7 @@ async function buildCampaignBuyerRequestPreview(params: {
 
   const configValues = normalizeCampaignIntegrationConfigValues(params.campaign.integrationSettings);
   const mockBuyerPostUrl = params.mockBuyerPost
-    ? `${params.origin}/api/buyers/${encodeURIComponent(params.buyerId)}/post`
+    ? resolveBuyerMockPostUrl(params.buyer, params.origin, params.buyerId)
     : undefined;
 
   return prepareBuyerIntegrationRequest({
@@ -285,6 +291,11 @@ async function attachMockBuyerRequestPreview(
     publisherPayload: Record<string, unknown>;
     origin: string;
     mockBuyerPost: boolean;
+    buyer: {
+      _id?: { toString(): string };
+      postLeadUrl?: string | null;
+      apiKey?: string | null;
+    };
     buyerId: string;
   }
 ) {
@@ -297,6 +308,7 @@ async function attachMockBuyerRequestPreview(
     payload: options.payload,
     origin: options.origin,
     mockBuyerPost: options.mockBuyerPost,
+    buyer: options.buyer,
     buyerId: options.buyerId,
   });
 
@@ -548,6 +560,7 @@ async function processCampaignAttempt(params: {
         publisherPayload: params.payload,
         origin: params.origin,
         mockBuyerPost: params.mockBuyerPost,
+        buyer: { _id: { toString: () => campaign.buyerRef?.toString() ?? "" } },
         buyerId: campaign.buyerRef?.toString() ?? "",
       }
     );
@@ -595,6 +608,7 @@ async function processCampaignAttempt(params: {
         publisherPayload: params.payload,
         origin: params.origin,
         mockBuyerPost: params.mockBuyerPost,
+        buyer: buyer ?? { _id: { toString: () => campaign.buyerRef?.toString() ?? "" } },
         buyerId: buyer?._id?.toString() ?? campaign.buyerRef?.toString() ?? "",
       }
     );
@@ -836,10 +850,20 @@ async function processCampaignAttempt(params: {
   });
 
   const mockBuyerPostUrl = params.mockBuyerPost
-    ? `${params.origin}/api/buyers/${encodeURIComponent(buyerId)}/post`
+    ? resolveBuyerMockPostUrl(buyer, params.origin, buyerId)
     : undefined;
+  const campaignMockOptions = mergeMockBuyerPostOptions(
+    params.mockBuyerPostOptions,
+    params.campaignTestMocks?.[params.campaignId] ?? null
+  );
+  const resolvedPostUrl =
+    mockBuyerPostUrl?.trim() ||
+    normalizeCampaignIntegrationConfigValues(campaign.integrationSettings).url?.trim() ||
+    buyer.postLeadUrl?.trim() ||
+    "";
+  const usesMockEndpoint = Boolean(mockBuyerPostUrl) || isBuyerLeadMockEndpoint(resolvedPostUrl);
 
-  if (mockBuyerPostUrl) {
+  if (usesMockEndpoint) {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
       key: "mock-buyer-endpoint",
       label: "Mock Buyer Endpoint",
@@ -848,6 +872,8 @@ async function processCampaignAttempt(params: {
       result: skippedStepResult("Using internal mock buyer endpoint."),
     });
   }
+
+  const buyerApiKey = buyer.apiKey?.trim() ?? "";
 
   const delivery = await deliverLeadToBuyer({
     integration,
@@ -864,18 +890,14 @@ async function processCampaignAttempt(params: {
       minPrice: campaign.minPrice,
       buyerId,
       buyerLabel: buyerCompany,
+      buyerApiKey,
       verticalId: campaign.verticalRef?.toString() ?? "",
       integrationId,
     }),
     minPrice: campaign.minPrice ?? 0,
     pingTreeType: params.pingTreeType,
     mockBuyerPostUrl,
-    mockBuyerPostOptions: params.mockBuyerPost
-      ? mergeMockBuyerPostOptions(
-          params.mockBuyerPostOptions,
-          params.campaignTestMocks?.[params.campaignId] ?? null
-        )
-      : undefined,
+    mockBuyerPostOptions: usesMockEndpoint ? campaignMockOptions : undefined,
   });
 
   traceSteps = [...traceSteps, ...delivery.traceSteps];
@@ -1512,9 +1534,7 @@ export async function distributeLeadAfterIntake(params: {
       publisherStatus === "Sold"
         ? "Lead sold to buyer."
         : publisherStatus === "Post Error"
-          ? firstPostError?.errorReason
-            ? `Lead could not be sold due to buyer post errors: ${firstPostError.errorReason}`
-            : "Lead could not be sold due to buyer post errors."
+          ? firstPostError?.errorReason?.trim() || "Buyer post failed."
           : publisherStatus === "Test"
             ? "Test lead was not posted to buyers."
             : buildPublisherRejectMessage(coreDeliveries),

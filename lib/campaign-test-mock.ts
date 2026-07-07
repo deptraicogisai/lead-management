@@ -17,9 +17,25 @@ export const DEFAULT_CAMPAIGN_TEST_MOCK: CampaignTestMockResponse = {
   timeoutSeconds: 0,
   status: "Accept",
   price: 25,
-  redirectUrl: "https://example.com/redirect/test",
+  redirectUrl: "https://example.com/landing",
   reasons: ["Buyer declined the lead."],
 };
+
+function readConfiguredDirectUrl(record: Record<string, unknown>) {
+  if (typeof record.redirectUrl === "string" && record.redirectUrl.trim()) {
+    return record.redirectUrl.trim();
+  }
+
+  if (typeof record.directUrl === "string" && record.directUrl.trim()) {
+    return record.directUrl.trim();
+  }
+
+  if (typeof record.direct_url === "string" && record.direct_url.trim()) {
+    return record.direct_url.trim();
+  }
+
+  return "";
+}
 
 function sanitizeOptionalNumber(value: unknown) {
   const parsed = Number(value);
@@ -83,12 +99,7 @@ function migrateLegacyMock(record: Record<string, unknown>): CampaignTestMockRes
     timeoutSeconds: sanitizeOptionalNumber(record.timeoutSeconds ?? record.responseDelaySeconds),
     status: "Accept",
     price: sanitizeOptionalNumber(legacy.price ?? record.buyerPrice) ?? DEFAULT_CAMPAIGN_TEST_MOCK.price,
-    redirectUrl:
-      typeof legacy.redirectUrl === "string"
-        ? legacy.redirectUrl.trim()
-        : typeof legacy.redirect_url === "string"
-          ? legacy.redirect_url.trim()
-          : DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl,
+    redirectUrl: readConfiguredDirectUrl(legacy) || DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl,
     reasons: [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons],
   };
 }
@@ -115,11 +126,9 @@ export function sanitizeCampaignTestMock(value: unknown): CampaignTestMockRespon
         status,
         price: status === "Accept" ? sanitizeOptionalNumber(record.price) ?? DEFAULT_CAMPAIGN_TEST_MOCK.price : null,
         redirectUrl:
-          status === "Accept" && typeof record.redirectUrl === "string"
-            ? record.redirectUrl.trim()
-            : status === "Accept"
-              ? DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl
-              : "",
+          status === "Accept"
+            ? readConfiguredDirectUrl(record) || DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl
+            : "",
         reasons: status === "Reject" ? sanitizeReasons(record.reasons) : [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons],
       };
     }
@@ -141,9 +150,9 @@ export function buildCampaignTestMockBuyerResponse(mock: CampaignTestMockRespons
       response.price = Number(mock.price).toFixed(2);
     }
 
-    const redirectUrl = mock.redirectUrl.trim();
-    if (redirectUrl) {
-      response.redirectUrl = redirectUrl;
+    const directUrl = mock.redirectUrl.trim();
+    if (directUrl) {
+      response.redirect_url = directUrl;
     }
 
     return response;
@@ -238,12 +247,21 @@ export function buildMockBuyerResponseFromOptions(options: MockBuyerPostOptions)
   const price = Number.isFinite(Number(priceValue)) ? Number(priceValue).toFixed(2) : "0.00";
 
   if (isAccept) {
-    return {
+    const response: Record<string, unknown> = {
       status: 1,
       status_text: "Sold",
       price,
-      redirectUrl: `https://example.com/redirect/${Math.random().toString(36).slice(2, 10)}`,
     };
+
+    if (options.response?.redirect_url) {
+      response.redirect_url = options.response.redirect_url;
+    } else if (options.response?.direct_url) {
+      response.redirect_url = options.response.direct_url;
+    } else if (options.response?.redirectUrl) {
+      response.redirect_url = options.response.redirectUrl;
+    }
+
+    return response;
   }
 
   return {

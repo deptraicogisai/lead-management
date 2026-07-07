@@ -319,6 +319,17 @@ function normalizeParsedBuyerResponseAcceptIndicators(parsed: ParsedBuyerRespons
   return parsed;
 }
 
+function readRedirectUrlFromBuyerResponse(parsedResponse: unknown) {
+  if (!parsedResponse || typeof parsedResponse !== "object" || Array.isArray(parsedResponse)) {
+    return "";
+  }
+
+  const responseRecord = parsedResponse as Record<string, unknown>;
+  return stringifyTemplateValue(
+    responseRecord.redirectUrl ?? responseRecord.redirect_url ?? responseRecord.direct_url
+  ).trim();
+}
+
 export function parseIntegrationResponse(
   responseMapping: IntegrationBuilderResponseMapping,
   rawResponseText: string,
@@ -398,7 +409,9 @@ export function parseIntegrationResponse(
     result.rejectSign = isAcceptedSoldSign(status) ? "" : status;
     result.rejectReason = stringifyTemplateValue(responseRecord.reject_reason ?? responseRecord.rejectReason);
     result.errorReason = stringifyTemplateValue(responseRecord.error_reason ?? responseRecord.errorReason);
-    result.redirectUrl = stringifyTemplateValue(responseRecord.redirectUrl ?? responseRecord.redirect_url);
+    result.redirectUrl = stringifyTemplateValue(
+      responseRecord.redirectUrl ?? responseRecord.redirect_url ?? responseRecord.direct_url
+    );
     const price = Number(responseRecord.price);
     result.soldPrice = Number.isFinite(price) ? price : null;
   }
@@ -435,6 +448,10 @@ export function parseIntegrationResponse(
         result.errorReason = "Response mapping could not determine buyer status.";
       }
     }
+  }
+
+  if (!result.redirectUrl.trim()) {
+    result.redirectUrl = readRedirectUrlFromBuyerResponse(parsedResponse);
   }
 
   return normalizeParsedBuyerResponseAcceptIndicators(result);

@@ -50,8 +50,6 @@ function isLegacyBuyerPayload(body: LegacyBuyerPayload & Partial<BuyerUpdatePayl
       body.phone ||
       body.company ||
       body.verticalId ||
-      body.apiKey ||
-      body.postLeadUrl ||
       body.mappings
   );
 }
@@ -228,6 +226,14 @@ export async function PATCH(req: Request, context: Params) {
 
     if (body.integrationIds !== undefined) {
       updatePayload.integrationRefs = sanitizeIntegrationIds(body.integrationIds);
+    }
+
+    if (body.apiKey !== undefined) {
+      updatePayload.apiKey = body.apiKey.trim();
+    }
+
+    if (body.postLeadUrl !== undefined) {
+      updatePayload.postLeadUrl = body.postLeadUrl.trim();
     }
 
     const buyer = await BuyerModel.findByIdAndUpdate(id, updatePayload, { new: true }).lean();

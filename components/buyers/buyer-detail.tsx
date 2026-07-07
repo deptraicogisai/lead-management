@@ -16,7 +16,9 @@ import {
   Share2,
   X,
 } from "lucide-react";
-import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
+import { CopyableValue } from "@/components/ui/copy-button";
+import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
 import {
   SearchableMultiSelect,
   type SearchableMultiSelectOption,
@@ -100,6 +102,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [name, setName] = useState(buyer.name);
   const [email, setEmail] = useState(buyer.email);
   const [status, setStatus] = useState<BuyerStatus>(normalizeBuyerStatus(buyer.status));
+  const [apiKey, setApiKey] = useState(buyer.apiKey);
+  const [postLeadUrl, setPostLeadUrl] = useState(buyer.postLeadUrl);
   const [selectedIntegrationIds, setSelectedIntegrationIds] = useState<string[]>(buyer.integrationIds);
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
   const [activeIntegrationIds, setActiveIntegrationIds] = useState<Set<string>>(new Set());
@@ -139,6 +143,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     setName(buyer.name);
     setEmail(buyer.email);
     setStatus(normalizeBuyerStatus(buyer.status));
+    setApiKey(buyer.apiKey);
+    setPostLeadUrl(buyer.postLeadUrl);
     setSelectedIntegrationIds(buyer.integrationIds);
     setBlockedPublisherIds(buyer.blockedPublisherIds);
     setSelectedPlDnplIds(buyer.plDnplListIds);
@@ -258,6 +264,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     </div>
   );
 
+  const handleGenerateApi = () => {
+    const nextApiKey = generateBuyerApiKey();
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    setApiKey(nextApiKey);
+    setPostLeadUrl(origin ? buildBuyerLeadPostUrl(origin) : postLeadUrl);
+    if (saveError) setSaveError("");
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       setSaveError("Name cannot be blank.");
@@ -268,6 +282,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
       name: name.trim(),
       email: email.trim(),
       status,
+      apiKey: apiKey.trim(),
+      postLeadUrl: postLeadUrl.trim(),
     };
 
     setIsSaving(true);
@@ -463,6 +479,38 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                 </option>
               ))}
             </select>
+          )}
+          {renderDetailRow(
+            "Lead API",
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Post to <code className="text-[11px]">/api/lists/addlead</code>. Set{" "}
+                  <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
+                </p>
+                <SecondaryButton type="button" onClick={handleGenerateApi}>
+                  Generate API
+                </SecondaryButton>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API Key</p>
+                  {apiKey ? (
+                    <CopyableValue value={apiKey} copyLabel="Copy API key" />
+                  ) : (
+                    <Input id="buyer-api-key" value="" readOnly placeholder="Not generated yet" />
+                  )}
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API URL</p>
+                  {postLeadUrl ? (
+                    <CopyableValue value={postLeadUrl} copyLabel="Copy API URL" />
+                  ) : (
+                    <Input id="buyer-post-lead-url" value="" readOnly placeholder="Generated automatically" />
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
             <div aria-hidden />

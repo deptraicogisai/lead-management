@@ -17,47 +17,33 @@ export const PUBLISHER_RESPONSE_STATUS_TEXT = {
 export type PublisherResponseStatusCode =
   (typeof PUBLISHER_RESPONSE_STATUS)[keyof typeof PUBLISHER_RESPONSE_STATUS];
 
-export function buildPublisherAcceptedResponse(
-  extra: Record<string, unknown> = {}
-): Record<string, unknown> {
+export function buildPublisherAcceptedResponse(): Record<string, unknown> {
   return {
     status: PUBLISHER_RESPONSE_STATUS.accepted,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.accepted,
-    ...extra,
   };
 }
 
-export function buildPublisherRejectedResponse(
-  reasons: string[],
-  extra: Record<string, unknown> = {}
-): Record<string, unknown> {
+export function buildPublisherRejectedResponse(reasons: string[]): Record<string, unknown> {
   return {
     status: PUBLISHER_RESPONSE_STATUS.rejected,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.rejected,
     reasons: formatPublisherReasons(reasons),
-    ...extra,
   };
 }
 
-export function buildPublisherInProgressResponse(
-  extra: Record<string, unknown> = {}
-): Record<string, unknown> {
+export function buildPublisherInProgressResponse(): Record<string, unknown> {
   return {
     status: PUBLISHER_RESPONSE_STATUS.inProgress,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.inProgress,
-    ...extra,
   };
 }
 
-export function buildPublisherErrorResponse(
-  reasons: string[],
-  extra: Record<string, unknown> = {}
-): Record<string, unknown> {
+export function buildPublisherErrorResponse(reasons: string[]): Record<string, unknown> {
   return {
     status: PUBLISHER_RESPONSE_STATUS.error,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.error,
     reasons: formatPublisherReasons(reasons),
-    ...extra,
   };
 }
 
