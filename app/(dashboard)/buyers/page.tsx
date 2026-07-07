@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
@@ -53,6 +54,7 @@ type BuyerListResponse = {
 const emptyDateRange = buildEmptySearchDateRange();
 
 export default function BuyersPage() {
+  const router = useRouter();
   const [buyerRows, setBuyerRows] = useState<BuyerListRecord[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isSaving, setIsSaving] = useState(false);
@@ -66,6 +68,7 @@ export default function BuyersPage() {
   const [deleteMode, setDeleteMode] = useState<"single" | "bulk" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BuyerListRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const [agentFilter, setAgentFilter] = useState("All");
@@ -200,6 +203,29 @@ export default function BuyersPage() {
     setDeleteMode("bulk");
   };
 
+  const handleDuplicate = async (row: BuyerListRecord) => {
+    setDuplicatingId(row.id);
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(row.id)}/duplicate`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(result?.message ?? "Failed to duplicate buyer.");
+        return;
+      }
+
+      const duplicated = (await response.json()) as BuyerListRecord;
+      toast.success(`Buyer duplicated as "${duplicated.name}".`);
+      router.push(`/buyers/${encodeURIComponent(duplicated.id)}`);
+    } catch {
+      toast.error("Failed to duplicate buyer.");
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
   const handleDelete = async () => {
     const idsToDelete =
       deleteMode === "bulk" ? selectedIds : deleteTarget ? [deleteTarget.id] : [];
@@ -306,6 +332,12 @@ export default function BuyersPage() {
       render: (row) => (
         <div className="flex flex-wrap gap-2">
           <TableActionLink href={`/buyers/${encodeURIComponent(row.id)}`}>View</TableActionLink>
+          <TableActionButton
+            disabled={duplicatingId === row.id}
+            onClick={() => void handleDuplicate(row)}
+          >
+            {duplicatingId === row.id ? "Duplicating..." : "Duplicate"}
+          </TableActionButton>
           <TableActionButton variant="danger" onClick={() => openSingleDelete(row)}>
             Delete
           </TableActionButton>

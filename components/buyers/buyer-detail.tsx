@@ -121,6 +121,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [isSavingPlDnpl, setIsSavingPlDnpl] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [deleteError, setDeleteError] = useState("");
 
@@ -401,6 +402,32 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     setSelectedIntegrationIds((current) => current.filter((id) => id !== integrationId));
   };
 
+  const handleDuplicate = async () => {
+    setIsDuplicating(true);
+    setSaveError("");
+
+    try {
+      const response = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}/duplicate`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(result?.message ?? "Failed to duplicate buyer.");
+        return;
+      }
+
+      const duplicated = (await response.json()) as BuyerListRecord;
+      toast.success(`Buyer duplicated as "${duplicated.name}".`);
+      router.push(`/buyers/${encodeURIComponent(duplicated.id)}`);
+      router.refresh();
+    } catch {
+      toast.error("Failed to duplicate buyer.");
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!window.confirm(`Delete buyer "${name}"?`)) return;
 
@@ -429,10 +456,18 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
 
   const renderGlobalTab = () => (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex justify-end border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+      <div className="flex justify-end gap-2 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
         <button
           type="button"
-          disabled={isDeleting}
+          disabled={isDuplicating || isDeleting}
+          onClick={() => void handleDuplicate()}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+        >
+          {isDuplicating ? "Duplicating..." : "Duplicate"}
+        </button>
+        <button
+          type="button"
+          disabled={isDeleting || isDuplicating}
           onClick={() => void handleDelete()}
           className="rounded-xl border border-orange-500 bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-60"
         >

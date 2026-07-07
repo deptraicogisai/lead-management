@@ -182,3 +182,28 @@ export function toBuyerListRecord(
     prepaid: Boolean(doc.prepaid),
   };
 }
+
+export function resolveBuyerDuplicateNameRoot(name: string) {
+  const trimmed = name.trim();
+  const match = trimmed.match(/^(.+?) (\d+)$/);
+  return match?.[1]?.trim() || trimmed;
+}
+
+export function buildNextDuplicateBuyerName(sourceName: string, existingNames: string[]) {
+  const root = resolveBuyerDuplicateNameRoot(sourceName);
+  const escapedRoot = root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedRoot}(?: (\\d+))?$`, "i");
+
+  let maxSequence = 0;
+  for (const existingName of existingNames) {
+    const match = existingName.trim().match(pattern);
+    if (!match) continue;
+
+    const sequence = match[1] ? Number(match[1]) : 1;
+    if (Number.isFinite(sequence)) {
+      maxSequence = Math.max(maxSequence, sequence);
+    }
+  }
+
+  return `${root} ${maxSequence + 1}`;
+}
