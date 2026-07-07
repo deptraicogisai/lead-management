@@ -125,6 +125,44 @@ function normalizeRef(value?: RefValue) {
   return typeof value === "string" ? value : value.toString();
 }
 
+function normalizeIntakePayload(body: unknown): Record<string, unknown> {
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    return body as Record<string, unknown>;
+  }
+
+  return { _rawPayload: body ?? null };
+}
+
+async function persistRejectedSellerLead(params: {
+  sellerRef?: RefValue;
+  verticalRef?: RefValue;
+  mappingRef?: RefValue;
+  payload: Record<string, unknown>;
+  reasons: string[];
+  postedAt: Date;
+  userAgent: string;
+}) {
+  if (params.reasons.length === 0) {
+    return;
+  }
+
+  try {
+    await ensureSellerLeadReferencesMigrated();
+    await SellerLeadModel.create({
+      sellerRef: normalizeRef(params.sellerRef),
+      verticalRef: normalizeRef(params.verticalRef),
+      mappingRef: normalizeRef(params.mappingRef),
+      payload: params.payload,
+      validationStatus: "fail",
+      validationErrors: params.reasons,
+      postedAt: params.postedAt,
+      userAgent: params.userAgent,
+    });
+  } catch (error) {
+    console.error("Failed to persist rejected seller lead:", error);
+  }
+}
+
 function isMissingRequired(value: unknown) {
   return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
 }
@@ -336,7 +374,15 @@ export async function handleSellerLeadPost(req: Request) {
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       await connectToDatabase();
 
-      const responsePayload = buildPublisherRejectedResponse(["Payload must be a JSON object."]);
+      const reasons = ["Payload must be a JSON object."];
+      const responsePayload = buildPublisherRejectedResponse(reasons);
+
+      await persistRejectedSellerLead({
+        payload: normalizeIntakePayload(body),
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -359,7 +405,15 @@ export async function handleSellerLeadPost(req: Request) {
     await ensureSellerLeadReferencesMigrated();
 
     if (!requestApiKey) {
-      const responsePayload = buildPublisherErrorResponse(["Authentication failed. API key is required."]);
+      const reasons = ["Authentication failed. API key is required."];
+      const responsePayload = buildPublisherErrorResponse(reasons);
+
+      await persistRejectedSellerLead({
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -379,7 +433,15 @@ export async function handleSellerLeadPost(req: Request) {
     }).lean()) as SellerMapping | null;
 
     if (!matchedMapping) {
-      const responsePayload = buildPublisherErrorResponse(["Authentication failed. Invalid API key."]);
+      const reasons = ["Authentication failed. Invalid API key."];
+      const responsePayload = buildPublisherErrorResponse(reasons);
+
+      await persistRejectedSellerLead({
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -395,7 +457,17 @@ export async function handleSellerLeadPost(req: Request) {
 
     const sellerRefId = normalizeRef(matchedMapping.sellerRef as RefValue) ?? "";
     if (!Types.ObjectId.isValid(sellerRefId)) {
-      const responsePayload = buildPublisherErrorResponse(["Publisher not found for this API key."]);
+      const reasons = ["Publisher not found for this API key."];
+      const responsePayload = buildPublisherErrorResponse(reasons);
+
+      await persistRejectedSellerLead({
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        mappingRef: matchedMapping._id as RefValue,
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -411,7 +483,17 @@ export async function handleSellerLeadPost(req: Request) {
 
     const seller = await SellerModel.findById(sellerRefId).lean();
     if (!seller) {
-      const responsePayload = buildPublisherErrorResponse(["Publisher not found for this API key."]);
+      const reasons = ["Publisher not found for this API key."];
+      const responsePayload = buildPublisherErrorResponse(reasons);
+
+      await persistRejectedSellerLead({
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        mappingRef: matchedMapping._id as RefValue,
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         endpointUrl,
@@ -452,7 +534,18 @@ export async function handleSellerLeadPost(req: Request) {
     );
 
     if (apiFields.length === 0) {
-      const responsePayload = buildLeadRejectResponse(["API mapping does not have any configured fields."]);
+      const reasons = ["API mapping does not have any configured fields."];
+      const responsePayload = buildLeadRejectResponse(reasons);
+
+      await persistRejectedSellerLead({
+        sellerRef: seller._id,
+        verticalRef: vertical?._id,
+        mappingRef: matchedMapping._id,
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
 
       await createSellerIntakeLog({
         sellerRef: seller._id,
@@ -596,6 +689,14 @@ export async function handleSellerLeadPost(req: Request) {
 
     try {
       await connectToDatabase();
+      await persistRejectedSellerLead({
+        sellerRef: sellerRefForLog,
+        verticalRef: verticalRefForLog,
+        payload: normalizeIntakePayload(requestPayloadForLog),
+        reasons: ["Unexpected server error while processing lead."],
+        postedAt: new Date(),
+        userAgent: req.headers.get("user-agent")?.trim() || "Unknown",
+      });
       await createSellerIntakeLog({
         sellerRef: sellerRefForLog,
         verticalRef: verticalRefForLog,

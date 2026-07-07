@@ -1,7 +1,6 @@
-import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, createAuthSession, encodeAuthSession } from "@/lib/auth";
-import { connectToDatabase } from "@/lib/mongodb";
+import { connectToDatabase, isMongoNetworkError, mongoTarget } from "@/lib/mongodb";
 
 type LoginPayload = {
   identifier?: string;
@@ -37,8 +36,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Username/email and password are required." }, { status: 400 });
     }
 
-    await connectToDatabase();
-    const db = mongoose.connection.db;
+    const connection = await connectToDatabase();
+    const db = connection.connection.db;
 
     if (!db) {
       return NextResponse.json({ message: "Database connection is unavailable." }, { status: 500 });
@@ -93,7 +92,21 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Login failed:", error);
+
+    if (isMongoNetworkError(error)) {
+      return NextResponse.json(
+        {
+          message:
+            mongoTarget === "production"
+              ? "Cannot connect to the production database. Check MONGODB_URI_PRODUCTION, Atlas network access, and DNS settings."
+              : "Cannot connect to the local database. Make sure MongoDB is running and MONGODB_URI_LOCAL is correct.",
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json({ message: "Failed to sign in." }, { status: 500 });
   }
 }

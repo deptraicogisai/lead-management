@@ -102,6 +102,11 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     solid: { background: "#ef4444", text: "#ffffff", border: "#dc2626" },
     outline: { background: "#fef2f2", text: "#b91c1c", border: "#ef4444" },
   },
+  "intake reject": {
+    pill: { background: "#fbcfe8", text: "#831843", border: "#db2777" },
+    solid: { background: "#db2777", text: "#ffffff", border: "#be185d" },
+    outline: { background: "#fdf2f8", text: "#9d174d", border: "#db2777" },
+  },
   fail: {
     pill: { background: "#fca5a5", text: "#7f1d1d", border: "#ef4444" },
     solid: { background: "#ef4444", text: "#ffffff", border: "#dc2626" },
@@ -206,6 +211,7 @@ const STATUS_LABELS: Record<string, string> = {
   accept: "Accept",
   accepted: "Accepted",
   reject: "Reject",
+  "intake reject": "Intake Reject",
   "post error": "Post Error",
   pl: "PL",
   dnpl: "DNPL",

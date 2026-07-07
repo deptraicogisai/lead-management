@@ -101,18 +101,20 @@ function buildMongoFilter(params: {
   } else if (normalizedScope === "reject") {
     andConditions.push({ publisherStatus: { $in: ["Reject", "Post Error"] } });
   } else {
-    andConditions.push({ validationStatus: "success" });
-
+    // Default view includes every publisher post, including intake validation failures.
     const normalizedStatus = params.status.toLowerCase();
     if (normalizedStatus === "sold") {
-      andConditions.push({ publisherStatus: "Sold" });
+      andConditions.push({ validationStatus: "success", publisherStatus: "Sold" });
+    } else if (normalizedStatus === "intake reject") {
+      andConditions.push({ validationStatus: "fail" });
     } else if (normalizedStatus === "reject") {
-      andConditions.push({ publisherStatus: "Reject" });
+      andConditions.push({ validationStatus: "success", publisherStatus: "Reject" });
     } else if (normalizedStatus === "post error") {
-      andConditions.push({ publisherStatus: "Post Error" });
+      andConditions.push({ validationStatus: "success", publisherStatus: "Post Error" });
     } else if (normalizedStatus === "test") {
-      andConditions.push({ publisherStatus: "Test" });
+      andConditions.push({ validationStatus: "success", publisherStatus: "Test" });
     } else if (normalizedStatus === "new") {
+      andConditions.push({ validationStatus: "success" });
       andConditions.push({
         $or: [
           { publisherStatus: { $exists: false } },
@@ -121,7 +123,7 @@ function buildMongoFilter(params: {
         ],
       });
     } else if (normalizedStatus === "accepted") {
-      andConditions.push({ publisherStatus: "Sold" });
+      andConditions.push({ validationStatus: "success", publisherStatus: "Sold" });
     }
   }
 
@@ -139,7 +141,15 @@ function buildMongoFilter(params: {
   }
 
   if (params.productId && Types.ObjectId.isValid(params.productId)) {
-    andConditions.push({ verticalRef: new Types.ObjectId(params.productId) });
+    andConditions.push({
+      $or: [
+        { verticalRef: new Types.ObjectId(params.productId) },
+        {
+          validationStatus: "fail",
+          $or: [{ verticalRef: null }, { verticalRef: { $exists: false } }],
+        },
+      ],
+    });
   }
 
   if (params.publisherId && Types.ObjectId.isValid(params.publisherId)) {

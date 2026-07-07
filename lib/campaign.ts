@@ -691,6 +691,11 @@ export function syncGeneralFiltersWithFields(
           return false;
         }
 
+        // Drop stale filters when the field still exists but its filter shape changed.
+        if (built.some((item) => item.fieldName === filter.fieldName)) {
+          return false;
+        }
+
         if (
           filter.dataTypeFilter === "Multi Select" &&
           !filter.multiSelectMode &&
@@ -708,13 +713,17 @@ export function syncGeneralFiltersWithFields(
 
 export function buildGeneralFiltersFromVerticalFields(fields: VerticalFieldLike[]): CampaignGeneralFilter[] {
   const allowed = new Set<DataTypeFilterKind>(["Text", "Range", "Checkbox", "Multi Select"]);
+  const uniqueFields = new Map<string, VerticalFieldLike & { dataTypeFilter: DataTypeFilterKind }>();
 
-  return fields
-    .filter(
-      (field): field is VerticalFieldLike & { dataTypeFilter: DataTypeFilterKind } =>
-        Boolean(field.dataTypeFilter && allowed.has(field.dataTypeFilter as DataTypeFilterKind))
-    )
-    .flatMap((field): CampaignGeneralFilter[] => {
+  for (const field of fields) {
+    if (!field.dataTypeFilter || !allowed.has(field.dataTypeFilter as DataTypeFilterKind)) {
+      continue;
+    }
+
+    uniqueFields.set(field.fieldName, field as VerticalFieldLike & { dataTypeFilter: DataTypeFilterKind });
+  }
+
+  return Array.from(uniqueFields.values()).flatMap((field): CampaignGeneralFilter[] => {
       const baseFieldId = field.id ?? field._id?.toString() ?? field.fieldName;
       const label = stripMultiSelectModeSuffix(field.description);
 

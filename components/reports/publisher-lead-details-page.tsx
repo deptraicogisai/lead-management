@@ -58,7 +58,7 @@ type PublisherLeadDetailsResponse = {
   };
 };
 
-const STATUS_OPTIONS = ["All", "Sold", "Reject", "Post Error", "Test"];
+const STATUS_OPTIONS = ["All", "Sold", "Intake Reject", "Reject", "Post Error", "Test"];
 const METHOD_OPTIONS = ["All"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 

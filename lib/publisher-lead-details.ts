@@ -26,7 +26,7 @@ export type PublisherLeadDetailsRow = {
   qualityDots: boolean[];
   postedAt: string;
   createdAt: string;
-  statusLabel: "Sold" | "Reject" | "Post Error" | "Test" | "New";
+  statusLabel: "Sold" | "Reject" | "Intake Reject" | "Post Error" | "Test" | "New";
   tier: number;
   publisherLabel: string;
   redirectLabel: string;
@@ -215,7 +215,14 @@ export function buildPublisherLeadDisplayCode(id: string) {
   return `W_${suffix || "LEAD"}`;
 }
 
-export function buildQualityDots(publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null) {
+export function buildQualityDots(
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null,
+  validationStatus?: "success" | "fail"
+) {
+  if (validationStatus === "fail") {
+    return [false, false, true, false];
+  }
+
   if (publisherStatus === "Sold") {
     return [true, true, true, false];
   }
@@ -223,13 +230,15 @@ export function buildQualityDots(publisherStatus?: "Sold" | "Reject" | "Post Err
   return [false, true, false, false];
 }
 
-function resolvePublisherLeadDetailStatus(
-  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null
-): PublisherLeadDetailsRow["statusLabel"] {
-  if (publisherStatus === "Sold") return "Sold";
-  if (publisherStatus === "Test") return "Test";
-  if (publisherStatus === "Post Error") return "Post Error";
-  if (publisherStatus === "Reject") return "Reject";
+export function resolvePublisherLeadDetailStatus(input: {
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
+  validationStatus?: "success" | "fail";
+}): PublisherLeadDetailsRow["statusLabel"] {
+  if (input.validationStatus === "fail") return "Intake Reject";
+  if (input.publisherStatus === "Sold") return "Sold";
+  if (input.publisherStatus === "Test") return "Test";
+  if (input.publisherStatus === "Post Error") return "Post Error";
+  if (input.publisherStatus === "Reject") return "Reject";
   return "New";
 }
 
@@ -482,10 +491,13 @@ export function mapLeadDocToPublisherRow(input: {
   return {
     id: input.id,
     displayCode: buildPublisherLeadDisplayCode(input.id),
-    qualityDots: buildQualityDots(input.publisherStatus),
+    qualityDots: buildQualityDots(input.publisherStatus, input.validationStatus),
     postedAt: input.postedAt,
     createdAt: input.createdAt,
-    statusLabel: resolvePublisherLeadDetailStatus(input.publisherStatus),
+    statusLabel: resolvePublisherLeadDetailStatus({
+      publisherStatus: input.publisherStatus,
+      validationStatus: input.validationStatus,
+    }),
     tier: 0,
     publisherLabel: input.publisherIndex
       ? `[${input.publisherIndex}] ${input.publisherName}`
