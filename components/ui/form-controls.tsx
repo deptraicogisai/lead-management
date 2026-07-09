@@ -2,11 +2,13 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   forwardRef,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
 import type { LucideIcon } from "lucide-react";
+import { formatDecimalInputDisplayValue, sanitizeNumberInputValue } from "@/lib/decimal-input";
 import { cn } from "@/lib/utils";
 import {
   buttonLabelText,
@@ -94,14 +96,46 @@ export function FieldLabel({
 export const Input = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }
->(function Input({ className, disabled, readOnly, tabIndex, invalid, ...restProps }, ref) {
+>(function Input(
+  { className, disabled, readOnly, tabIndex, invalid, type, onChange, value, lang, min, step, ...restProps },
+  ref
+) {
+  const isDecimalNumberInput = type === "number";
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    if (!onChange) {
+      return;
+    }
+
+    if (isDecimalNumberInput) {
+      const sanitized = sanitizeNumberInputValue(event.target.value, { step, min });
+      if (sanitized === null) {
+        event.target.value = String(value ?? "");
+        return;
+      }
+
+      if (sanitized !== event.target.value) {
+        event.target.value = sanitized;
+      }
+    }
+
+    onChange(event);
+  };
+
   return (
     <input
       ref={ref}
+      type={isDecimalNumberInput ? "text" : type}
+      inputMode={isDecimalNumberInput ? "decimal" : restProps.inputMode}
+      lang={isDecimalNumberInput ? (lang ?? "en") : lang}
+      min={min}
+      step={step}
       disabled={disabled}
       readOnly={disabled ? true : readOnly}
       tabIndex={disabled ? -1 : tabIndex}
       aria-invalid={invalid || undefined}
+      value={isDecimalNumberInput ? formatDecimalInputDisplayValue(value) : value}
+      onChange={isDecimalNumberInput ? handleChange : onChange}
       {...restProps}
       className={cn(
         "w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition duration-200 dark:placeholder:text-slate-400",

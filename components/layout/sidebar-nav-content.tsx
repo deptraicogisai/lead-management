@@ -68,8 +68,8 @@ function NavLink({
             ? "bg-blue-600 text-white shadow-md shadow-blue-600/20 dark:bg-blue-500 dark:shadow-blue-500/20"
             : "bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-500/18 dark:text-blue-200"
           : isMobile
-            ? "text-slate-700 active:bg-slate-100 dark:text-slate-100 dark:active:bg-slate-800"
-            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+            ? "text-slate-700 hover:bg-slate-100 active:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800 dark:active:bg-slate-800"
+            : "text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
       )}
     >
       {!collapsed && !isMobile ? (
@@ -182,7 +182,7 @@ function CollapsibleNavSection({
             "flex min-h-[48px] w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-[15px] font-semibold transition",
             isActive
               ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-              : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+              : "bg-slate-100 text-slate-800 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-3">
@@ -222,7 +222,7 @@ function CollapsibleNavSection({
               "flex w-full items-center justify-center rounded-lg border py-2 transition duration-200",
               isActive || flyoutOpen
                 ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/18 dark:text-blue-200"
-                : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-100 dark:hover:bg-slate-800"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-100 dark:hover:bg-slate-700"
             )}
           >
             <Icon size={18} className={isActive ? "text-blue-600 dark:text-blue-300" : undefined} />
@@ -250,7 +250,7 @@ function CollapsibleNavSection({
           "flex w-full min-w-0 max-w-full items-center justify-between gap-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3.5 pr-2 text-left text-[13px] font-semibold leading-none transition duration-200 dark:border-slate-700 dark:bg-slate-800/70",
           isActive
             ? "text-blue-700 dark:text-blue-200"
-            : "text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+            : "text-slate-700 hover:bg-slate-200 dark:text-slate-100 dark:hover:bg-slate-700"
         )}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">

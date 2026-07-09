@@ -5,6 +5,11 @@ import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/form-controls";
 import { IdBadge } from "@/components/ui/id-badge";
+import {
+  FILTER_DROPDOWN_ITEM_CLASS,
+  FILTER_DROPDOWN_MAX_VISIBLE_ITEMS,
+  FILTER_DROPDOWN_SCROLL_CLASS,
+} from "@/components/ui/search-filter-layout";
 import { cn } from "@/lib/utils";
 
 export type SearchableMultiSelectOption = {
@@ -204,7 +209,12 @@ export function SearchableMultiSelect({
                 />
               </div>
 
-              <div className="max-h-60 overflow-y-auto py-1">
+              <div
+                className={cn(
+                  "py-1",
+                  filteredOptions.length > FILTER_DROPDOWN_MAX_VISIBLE_ITEMS && FILTER_DROPDOWN_SCROLL_CLASS
+                )}
+              >
                 {filteredOptions.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
                 ) : (
@@ -216,7 +226,10 @@ export function SearchableMultiSelect({
                         id={`${id ?? "multi-select"}-${option.id}`}
                         checked={checked}
                         onChange={(nextChecked) => toggleOption(option.id, nextChecked)}
-                        className="rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                        className={cn(
+                          "rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70",
+                          FILTER_DROPDOWN_ITEM_CLASS
+                        )}
                         label={
                           option.displayId !== undefined || option.description ? (
                             <span className="flex min-w-0 items-start gap-2.5">

@@ -6,7 +6,7 @@ import { CampaignModel } from "@/lib/models/campaign";
 import { PingTreeModel } from "@/lib/models/ping-tree";
 import { connectToDatabase } from "@/lib/mongodb";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
-import { toPingTreeRecord, type PingTreeCampaignCard } from "@/lib/ping-tree";
+import { sortInactiveCampaignsByBuyerMinPrice, toPingTreeRecord, type PingTreeCampaignCard } from "@/lib/ping-tree";
 import { normalizeCampaignTestMocks, sanitizeCampaignTestMock } from "@/lib/campaign-test-mock";
 
 type Params = { params: Promise<{ id: string }> };
@@ -103,13 +103,15 @@ export async function GET(_: Request, context: Params) {
       .filter((item): item is PingTreeCampaignCard => item !== null);
 
     const inactiveOrder = buildInactiveIdOrder(tree.inactiveCampaignIds, activeIds, records);
-    const notInPingTree = inactiveOrder
-      .map((campaignId) => {
-        const record = records.find((item) => item.id === campaignId);
-        if (!record) return null;
-        return toCard(record, Number(priorities[campaignId] ?? 0));
-      })
-      .filter((item): item is PingTreeCampaignCard => item !== null);
+    const notInPingTree = sortInactiveCampaignsByBuyerMinPrice(
+      inactiveOrder
+        .map((campaignId) => {
+          const record = records.find((item) => item.id === campaignId);
+          if (!record) return null;
+          return toCard(record, Number(priorities[campaignId] ?? 0));
+        })
+        .filter((item): item is PingTreeCampaignCard => item !== null)
+    );
 
     return NextResponse.json({
       tree: toPingTreeRecord(tree),

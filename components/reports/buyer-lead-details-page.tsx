@@ -36,6 +36,7 @@ import {
   formatBuyerLeadTableTime,
   formatBuyerLeadTime,
   parseBuyerLeadDetailsFiltersFromSearchParams,
+  BUYER_LEAD_DETAILS_STATUS_OPTIONS,
   type BuyerLeadDetailsFilters,
   type BuyerLeadDetailsRow,
 } from "@/lib/buyer-lead-details";
@@ -215,9 +216,7 @@ export function BuyerLeadDetailsPage() {
   }, [exportOpen]);
 
   const handleSearch = () => {
-    const nextFilters = { ...draftFilters, status: "All" };
-    setDraftFilters(nextFilters);
-    setAppliedFilters(nextFilters);
+    setAppliedFilters(draftFilters);
     setPage(1);
   };
 
@@ -233,7 +232,7 @@ export function BuyerLeadDetailsPage() {
   const buildExportMatrix = (exportRows: BuyerLeadDetailsRow[]) => {
     const headers = [
       "Date",
-      "Post",
+      "Status",
       "Lead ID",
       "Product",
       "Buyer",
@@ -329,7 +328,7 @@ export function BuyerLeadDetailsPage() {
       },
       {
         key: "postStatus",
-        label: "Post",
+        label: "Status",
         sortValue: (row) => row.postStatus,
         render: (row) => <StatusBadge status={row.postStatus} />,
       },
@@ -557,6 +556,14 @@ export function BuyerLeadDetailsPage() {
               value={draftFilters.publisherTag}
               onChange={(value) => updateDraft({ publisherTag: value })}
               options={publisherTagOptions}
+            />
+
+            <SearchFilterSelect
+              id="buyer-lead-status"
+              label="Status"
+              value={draftFilters.status}
+              onChange={(value) => updateDraft({ status: value })}
+              options={BUYER_LEAD_DETAILS_STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
             />
           </SearchFilterGrid>
 

@@ -1,16 +1,7 @@
 import mongoose, { Schema, model, models } from "mongoose";
+import { BUYER_LEAD_STATUSES, type BuyerLeadStatus } from "@/lib/buyer-lead-status";
 
-export const BUYER_LEAD_STATUSES = [
-  "Accept",
-  "Reject",
-  "Timeout",
-  "Price Conflict",
-  "Error",
-  "Price Reject",
-  "Skipped",
-] as const;
-
-export type BuyerLeadStatus = (typeof BUYER_LEAD_STATUSES)[number];
+export { BUYER_LEAD_STATUSES, type BuyerLeadStatus };
 
 const leadDeliverySchema = new Schema(
   {

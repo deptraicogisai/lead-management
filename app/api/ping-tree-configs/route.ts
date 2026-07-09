@@ -4,12 +4,15 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import {
   ensurePingTreeConfigDisplayIdMigrated,
+  ensureOfficialPingTreePercentForBucket,
+  ensurePingTreeOfficialPercentsMigrated,
   getNextPingTreeConfigDisplayId,
   PingTreeConfigModel,
 } from "@/lib/models/ping-tree-config";
 import {
   isPingTreePostingType,
   isPingTreeProcessingType,
+  resolveInitialPingTreePercent,
   toPingTreeConfigRecord,
 } from "@/lib/ping-tree-config";
 import { buildPingTreeProductMap } from "@/lib/ping-tree-config-products";
@@ -34,6 +37,7 @@ export async function GET(req: Request) {
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensurePingTreeConfigDisplayIdMigrated();
+    await ensurePingTreeOfficialPercentsMigrated();
 
     const filters: Array<Record<string, unknown>> = [];
     if (isPingTreeProcessingType(processingType)) {
@@ -91,6 +95,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Product not found." }, { status: 404 });
     }
 
+    const existingTreeCount = await PingTreeConfigModel.countDocuments({
+      verticalRef: vertical._id,
+      processingType: body.processingType,
+      ...excludeDeletedStatusFilter(),
+    });
+
     const created = await PingTreeConfigModel.create({
       displayId: await getNextPingTreeConfigDisplayId(),
       name: body.name.trim(),
@@ -98,9 +108,16 @@ export async function POST(req: Request) {
       processingType: body.processingType,
       postingType: isPingTreePostingType(body.postingType) ? body.postingType : "Direct Post",
       verticalRef: vertical._id,
-      percent: 0,
+      percent: resolveInitialPingTreePercent(existingTreeCount),
       status: "Active",
     });
+
+    await ensureOfficialPingTreePercentForBucket(vertical._id, body.processingType);
+
+    const saved = await PingTreeConfigModel.findById(created._id).lean();
+    if (!saved) {
+      return NextResponse.json({ message: "Failed to create ping tree." }, { status: 500 });
+    }
 
     const productMap = await buildPingTreeProductMap();
     const product = productMap.get(vertical._id.toString()) ?? {
@@ -109,7 +126,7 @@ export async function POST(req: Request) {
       productLabel: "Unknown",
     };
 
-    return NextResponse.json(toPingTreeConfigRecord(created.toObject(), product), { status: 201 });
+    return NextResponse.json(toPingTreeConfigRecord(saved, product), { status: 201 });
   } catch {
     return NextResponse.json({ message: "Failed to create ping tree." }, { status: 500 });
   }

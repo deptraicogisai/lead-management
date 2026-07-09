@@ -6,7 +6,6 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronUp,
-  Crosshair,
   Filter,
   Search,
   Settings2,
@@ -24,6 +23,7 @@ import {
   type PingTreeCampaignCard,
   type PingTreeCampaignType,
   type PingTreeRecord,
+  sortInactiveCampaignsByBuyerMinPrice,
 } from "@/lib/ping-tree";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,40 @@ function dropTargetKey(target: DropTarget | null) {
   return `${target.side}:${target.index}`;
 }
 
+function toDescendingPosition(index: number, listLength: number) {
+  return Math.max(1, listLength - index);
+}
+
+function descendingPositionToIndex(position: number, listLength: number) {
+  const clamped = Math.max(1, Math.min(listLength, Math.round(position)));
+  return listLength - clamped;
+}
+
+function resolveDescendingPosition(value: number, listLength: number) {
+  if (listLength <= 0) return 1;
+  return toDescendingPosition(descendingPositionToIndex(value, listLength), listLength);
+}
+
+function buildDescendingPriorities(activeIds: string[], inactiveIds: string[]) {
+  return syncDescendingPriorities(inactiveIds, syncDescendingPriorities(activeIds, {}));
+}
+
+function syncDescendingPriorities(ids: string[], current: Record<string, number>) {
+  const next = { ...current };
+  ids.forEach((id, index) => {
+    next[id] = toDescendingPosition(index, ids.length);
+  });
+  return next;
+}
+
+function shouldIgnoreCardDrag(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(target.closest("button, input, textarea, select, a, label, [data-no-drag]"));
+}
+
 function countByStatus(cards: PingTreeCampaignCard[]) {
   const active = cards.filter((card) => card.status === "Active").length;
   return {
@@ -60,6 +94,27 @@ function countByStatus(cards: PingTreeCampaignCard[]) {
 
 function formatCampaignLabel(card: PingTreeCampaignCard) {
   return `#${card.displayId}: ${card.productLabel} : ${card.buyerLabel} : ${card.name}`;
+}
+
+function CampaignNameLabel({
+  card,
+  variant,
+}: {
+  card: PingTreeCampaignCard;
+  variant: "active" | "inactive";
+}) {
+  return (
+    <p
+      className={cn(
+        "min-w-0 leading-snug text-blue-700 dark:text-blue-300",
+        variant === "active"
+          ? "text-sm font-medium"
+          : "truncate text-[13px] font-normal sm:text-sm"
+      )}
+    >
+      {formatCampaignLabel(card)}
+    </p>
+  );
 }
 
 function matchesSearch(card: PingTreeCampaignCard, query: string) {
@@ -75,6 +130,14 @@ function matchesSearch(card: PingTreeCampaignCard, query: string) {
   );
 }
 
+function readCardIndexDataset(element: HTMLElement, cardSelector: string) {
+  if (cardSelector.includes("inactive")) {
+    return Number.parseInt(element.dataset.pingTreeInactiveCardIndex ?? "0", 10);
+  }
+
+  return Number.parseInt(element.dataset.pingTreeCardIndex ?? "0", 10);
+}
+
 function resolveInsertIndexFromPointer(
   listElement: HTMLElement,
   pointerY: number,
@@ -88,7 +151,7 @@ function resolveInsertIndexFromPointer(
 
   for (const element of cardElements) {
     const rect = element.getBoundingClientRect();
-    const cardIndex = Number.parseInt(element.dataset.pingTreeCardIndex ?? "0", 10);
+    const cardIndex = readCardIndexDataset(element, cardSelector);
     const midpoint = rect.top + rect.height / 2;
 
     if (pointerY < midpoint) {
@@ -135,8 +198,30 @@ function ColumnStatsBar({ disabled, active, total }: { disabled: number; active:
 
 const greenControlClass = cn(
   compactPrimaryButtonClassName,
-  "rounded disabled:cursor-not-allowed disabled:opacity-40"
+  "shrink-0 rounded disabled:cursor-not-allowed disabled:opacity-40"
 );
+
+const iconActionClass = cn("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full", greenControlClass);
+
+const arrowActionClass = cn(
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white",
+  greenControlClass
+);
+
+const textActionClass = cn(
+  "inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[11px] font-medium",
+  greenControlClass
+);
+
+const draggingCardClassName =
+  "border-slate-400 bg-slate-100 opacity-75 dark:border-slate-500 dark:bg-slate-800/80";
+
+const highlightedCardClassName =
+  "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300/80 dark:border-emerald-500 dark:bg-emerald-500/10 dark:ring-emerald-500/30";
+
+const cardActionsClass = "flex items-center justify-end gap-1";
+const inactiveCardActionsClass =
+  "flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-2.5 py-2 dark:border-slate-800";
 
 function DropIndicator({ top, tone }: { top: number; tone: "active" | "inactive" }) {
   const isActive = tone === "active";
@@ -157,59 +242,60 @@ function DropIndicator({ top, tone }: { top: number; tone: "active" | "inactive"
   );
 }
 
-function DragHandle({
-  onPointerDown,
-  compact = false,
-  className,
-}: {
-  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-  compact?: boolean;
-  className?: string;
-}) {
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      title="Drag to move"
-      style={{ touchAction: "none" }}
-      className={cn(
-        "flex shrink-0 cursor-grab items-center justify-center rounded transition active:cursor-grabbing",
-        greenControlClass,
-        compact ? "h-7 w-7" : "h-8 w-8",
-        className
-      )}
-    >
-      <Crosshair size={compact ? 14 : 16} />
-    </div>
-  );
-}
-
 function PriorityControls({
-  priority,
-  onPriorityChange,
-  onSetPriority,
-  compact = false,
+  position,
+  onApplyPosition,
 }: {
-  priority: number;
-  onPriorityChange: (value: number) => void;
-  onSetPriority: () => void;
-  compact?: boolean;
+  position: number;
+  onApplyPosition: (value: number) => number;
 }) {
+  const [draft, setDraft] = useState(String(position));
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(String(position));
+    }
+  }, [isEditing, position]);
+
+  const apply = () => {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(position));
+      setIsEditing(false);
+      return;
+    }
+
+    const resolved = onApplyPosition(Math.max(1, Math.round(parsed)));
+    setDraft(String(resolved));
+    setIsEditing(false);
+  };
+
   return (
     <>
-      <input
+      <Input
         type="number"
-        value={priority}
-        onChange={(event) => onPriorityChange(Number(event.target.value))}
+        min={1}
+        value={draft}
+        onFocus={() => setIsEditing(true)}
+        onChange={(event) => {
+          setIsEditing(true);
+          setDraft(event.target.value);
+        }}
+        onBlur={apply}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            apply();
+            event.currentTarget.blur();
+          }
+        }}
         className={cn(
-          "rounded border border-slate-300 bg-white text-center dark:border-slate-600 dark:bg-slate-800",
-          compact ? "h-7 w-10 text-[11px]" : "h-8 w-12 text-xs"
+          "!box-border !h-7 !w-8 !min-w-8 !max-w-8 !shrink-0 !rounded !px-0.5 !py-0 text-center text-[11px]",
+          "border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
         )}
       />
-      <button
-        type="button"
-        onClick={onSetPriority}
-        className={cn("rounded font-medium", greenControlClass, compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1.5 text-xs")}
-      >
+      <button type="button" onClick={apply} className={textActionClass}>
         Set
       </button>
     </>
@@ -218,28 +304,26 @@ function PriorityControls({
 
 function ActiveCampaignCard({
   card,
-  index,
+  position,
   isDragging,
-  priority,
+  isHighlighted,
   canMoveUp,
   canMoveDown,
-  onGripPointerDown,
-  onPriorityChange,
-  onSetPriority,
+  onCardPointerDown,
+  onApplyPosition,
   onRemove,
   onMoveUp,
   onMoveDown,
   onConfigureMock,
 }: {
   card: PingTreeCampaignCard;
-  index: number;
+  position: number;
   isDragging: boolean;
-  priority: number;
+  isHighlighted: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  onGripPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-  onPriorityChange: (value: number) => void;
-  onSetPriority: () => void;
+  onCardPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onApplyPosition: (value: number) => number;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -247,68 +331,42 @@ function ActiveCampaignCard({
 }) {
   return (
     <div
+      onPointerDown={onCardPointerDown}
+      style={{ touchAction: "none" }}
       className={cn(
-        "rounded border bg-white dark:bg-slate-900",
-        isDragging ? "border-emerald-400 opacity-50" : "border-slate-300 dark:border-slate-600"
+        "cursor-grab overflow-hidden rounded border bg-white transition-colors duration-500 active:cursor-grabbing dark:bg-slate-900",
+        isDragging ? draggingCardClassName : "border-slate-300 dark:border-slate-600",
+        isHighlighted && highlightedCardClassName
       )}
     >
-      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:gap-3 sm:p-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start gap-2">
-            <StatusBadge status={card.status} />
-            <p className="text-sm leading-snug text-slate-800 dark:text-slate-100">{formatCampaignLabel(card)}</p>
-          </div>
-          <p className="mt-2 text-sm font-semibold text-slate-800 sm:hidden dark:text-slate-100">
-            ${card.minPrice.toFixed(2)}
-          </p>
+      <div className="flex items-start justify-between gap-2 px-2.5 py-2">
+        <div className="min-w-0 flex flex-1 flex-wrap items-center gap-1.5">
+          <StatusBadge status={card.status} compact />
+          <CampaignNameLabel card={card} variant="active" />
         </div>
 
-        <div className="w-full shrink-0 border-t border-slate-100 pt-3 sm:w-auto sm:border-0 sm:pt-0 sm:text-right dark:border-slate-800">
-          <p className="hidden text-sm font-semibold text-slate-800 sm:block dark:text-slate-100">
-            ${card.minPrice.toFixed(2)}
-          </p>
-          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto sm:mt-1.5 sm:justify-end">
-            <DragHandle onPointerDown={onGripPointerDown} />
-            <button
-              type="button"
-              disabled={!canMoveUp}
-              onClick={onMoveUp}
-              title="Move up"
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded", greenControlClass)}
-            >
-              <ChevronUp size={16} />
+        <div className="flex shrink-0 flex-col items-end gap-1.5" data-no-drag>
+          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
+          <div className={cardActionsClass}>
+            <button type="button" disabled={!canMoveUp} onClick={onMoveUp} title="Move up" className={arrowActionClass}>
+              <ChevronUp size={16} strokeWidth={2.5} />
             </button>
-            <button
-              type="button"
-              disabled={!canMoveDown}
-              onClick={onMoveDown}
-              title="Move down"
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded", greenControlClass)}
-            >
-              <ChevronDown size={16} />
+            <button type="button" disabled={!canMoveDown} onClick={onMoveDown} title="Move down" className={arrowActionClass}>
+              <ChevronDown size={16} strokeWidth={2.5} />
             </button>
+            <button type="button" onClick={onRemove} className={textActionClass}>
+              Remove
+            </button>
+            <PriorityControls position={position} onApplyPosition={onApplyPosition} />
             <button
               type="button"
               onClick={onConfigureMock}
               title="Configure test lead mock response"
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded", greenControlClass)}
+              className={iconActionClass}
             >
-              <Settings2 size={16} />
-            </button>
-            <PriorityControls
-              priority={priority}
-              onPriorityChange={onPriorityChange}
-              onSetPriority={onSetPriority}
-            />
-            <button
-              type="button"
-              onClick={onRemove}
-              className={cn("rounded px-2.5 py-1.5 text-xs font-medium", greenControlClass)}
-            >
-              Remove
+              <Settings2 size={14} />
             </button>
           </div>
-          <p className="mt-1 text-[10px] text-slate-400 sm:text-right">#{index + 1}</p>
         </div>
       </div>
     </div>
@@ -317,77 +375,63 @@ function ActiveCampaignCard({
 
 function InactiveCampaignCard({
   card,
-  priority,
+  position,
   canMoveToTop,
   canMoveToBottom,
   isDragging,
-  onGripPointerDown,
-  onPriorityChange,
-  onSetPriority,
+  isHighlighted,
+  onCardPointerDown,
+  onApplyPosition,
   onMoveToTop,
   onMoveToBottom,
   onConfigureMock,
 }: {
   card: PingTreeCampaignCard;
-  priority: number;
+  position: number;
   canMoveToTop: boolean;
   canMoveToBottom: boolean;
   isDragging: boolean;
-  onGripPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
-  onPriorityChange: (value: number) => void;
-  onSetPriority: () => void;
+  isHighlighted: boolean;
+  onCardPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onApplyPosition: (value: number) => number;
   onMoveToTop: () => void;
   onMoveToBottom: () => void;
   onConfigureMock: () => void;
 }) {
   return (
     <div
+      onPointerDown={onCardPointerDown}
+      style={{ touchAction: "none" }}
       className={cn(
-        "rounded border bg-white dark:bg-slate-900",
-        isDragging ? "border-emerald-400 opacity-50" : "border-slate-300 dark:border-slate-600"
+        "cursor-grab overflow-hidden rounded border bg-white transition-colors duration-500 active:cursor-grabbing dark:bg-slate-900",
+        isDragging ? draggingCardClassName : "border-slate-300 dark:border-slate-600",
+        isHighlighted && highlightedCardClassName
       )}
     >
-      <div className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={card.status} compact />
-            <p className="text-xs leading-snug text-slate-800 dark:text-slate-100 sm:truncate">{formatCampaignLabel(card)}</p>
-          </div>
+      <div className="flex items-start justify-between gap-3 px-2.5 py-2">
+        <div className="min-w-0 flex flex-1 items-center gap-1.5">
+          <StatusBadge status={card.status} compact />
+          <CampaignNameLabel card={card} variant="inactive" />
         </div>
         <p className="shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
       </div>
 
-      <div className="flex flex-nowrap items-center gap-1 overflow-x-auto border-t border-slate-100 px-2.5 py-2 dark:border-slate-800 sm:px-2 sm:py-1.5">
-        <DragHandle onPointerDown={onGripPointerDown} compact />
-        <button
-          type="button"
-          disabled={!canMoveToTop}
-          onClick={onMoveToTop}
-          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
-        >
+      <div className={inactiveCardActionsClass} data-no-drag>
+        <button type="button" disabled={!canMoveToTop} onClick={onMoveToTop} className={textActionClass}>
           To the top
         </button>
-        <button
-          type="button"
-          disabled={!canMoveToBottom}
-          onClick={onMoveToBottom}
-          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
-        >
+        <button type="button" disabled={!canMoveToBottom} onClick={onMoveToBottom} className={textActionClass}>
           To the bottom
         </button>
+        <PriorityControls position={position} onApplyPosition={onApplyPosition} />
         <button
           type="button"
           onClick={onConfigureMock}
-          className={cn("rounded px-2 py-1 text-[11px] font-medium", greenControlClass)}
+          title="Configure test lead mock response"
+          className={iconActionClass}
         >
-          Test mock
+          <Settings2 size={14} />
         </button>
-        <PriorityControls
-          priority={priority}
-          onPriorityChange={onPriorityChange}
-          onSetPriority={onSetPriority}
-          compact
-        />
       </div>
     </div>
   );
@@ -418,6 +462,8 @@ export function PingTreeSettingsPage({
   const [isDirty, setIsDirty] = useState(false);
   const [mockModalCard, setMockModalCard] = useState<PingTreeCampaignCard | null>(null);
   const [isSavingMock, setIsSavingMock] = useState(false);
+  const [highlightedCampaignId, setHighlightedCampaignId] = useState<string | null>(null);
+  const [positionSyncKey, setPositionSyncKey] = useState(0);
 
   const pingTreeListRef = useRef(pingTreeList);
   const notInPingTreeRef = useRef(notInPingTree);
@@ -429,6 +475,27 @@ export function PingTreeSettingsPage({
   const inactiveColumnRef = useRef<HTMLDivElement | null>(null);
   const inactiveListRef = useRef<HTMLDivElement | null>(null);
   const isFirstTreeLoadRef = useRef(true);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashHighlight = useCallback((campaignId: string) => {
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+
+    setHighlightedCampaignId(campaignId);
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedCampaignId(null);
+      highlightTimeoutRef.current = null;
+    }, 1200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     pingTreeListRef.current = pingTreeList;
@@ -465,7 +532,18 @@ export function PingTreeSettingsPage({
       groups.set(key, bucket);
     }
 
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([buyerLabel, cards]) => [
+        buyerLabel,
+        [...cards].sort((left, right) => {
+          if (left.minPrice !== right.minPrice) {
+            return left.minPrice - right.minPrice;
+          }
+
+          return left.displayId - right.displayId;
+        }),
+      ] as const);
   }, [filteredInactiveList]);
 
   const setDropTargetWithRef = useCallback((target: DropTarget | null) => {
@@ -485,12 +563,13 @@ export function PingTreeSettingsPage({
     }) => {
       setTree(data.tree);
       setPingTreeList(data.pingTreeList);
-      setNotInPingTree(data.notInPingTree);
+      const sortedInactive = sortInactiveCampaignsByBuyerMinPrice(data.notInPingTree);
+      setNotInPingTree(sortedInactive);
 
-      const nextPriorities: Record<string, number> = {};
-      for (const card of data.pingTreeList) nextPriorities[card.id] = card.priority;
-      for (const card of data.notInPingTree) nextPriorities[card.id] = card.priority;
-      setPriorities(nextPriorities);
+      const activeIds = data.pingTreeList.map((card) => card.id);
+      const inactiveIds = sortedInactive.map((card) => card.id);
+      setPriorities(buildDescendingPriorities(activeIds, inactiveIds));
+      setPositionSyncKey((current) => current + 1);
       setIsDirty(false);
     },
     []
@@ -670,6 +749,7 @@ export function PingTreeSettingsPage({
         if (response.ok) {
           toast.success("Ping tree saved.");
           setIsDirty(false);
+          await loadTree(tree.id, { withSpinner: false });
           return true;
         }
 
@@ -684,11 +764,12 @@ export function PingTreeSettingsPage({
   );
 
   const handleSave = useCallback(() => {
-    void saveTree(
-      pingTreeListRef.current.map((item) => item.id),
-      notInPingTreeRef.current.map((item) => item.id),
-      prioritiesRef.current
-    );
+    const activeIds = pingTreeListRef.current.map((item) => item.id);
+    const inactiveIds = notInPingTreeRef.current.map((item) => item.id);
+    const syncedPriorities = buildDescendingPriorities(activeIds, inactiveIds);
+    setPriorities(syncedPriorities);
+    prioritiesRef.current = syncedPriorities;
+    void saveTree(activeIds, inactiveIds, syncedPriorities);
   }, [saveTree]);
 
   const applyLists = useCallback((nextActiveIds: string[], nextInactiveIds: string[]) => {
@@ -699,9 +780,11 @@ export function PingTreeSettingsPage({
     const nextActive = nextActiveIds
       .map((id) => lookup.get(id))
       .filter((item): item is PingTreeCampaignCard => Boolean(item));
-    const nextInactive = nextInactiveIds
-      .map((id) => lookup.get(id))
-      .filter((item): item is PingTreeCampaignCard => Boolean(item));
+    const nextInactive = sortInactiveCampaignsByBuyerMinPrice(
+      nextInactiveIds
+        .map((id) => lookup.get(id))
+        .filter((item): item is PingTreeCampaignCard => Boolean(item))
+    );
 
     pingTreeListRef.current = nextActive;
     notInPingTreeRef.current = nextInactive;
@@ -709,12 +792,25 @@ export function PingTreeSettingsPage({
     setNotInPingTree(nextInactive);
   }, []);
 
+  const inactiveDisplayOrder = useMemo(
+    () => inactiveGroups.flatMap(([, cards]) => cards),
+    [inactiveGroups]
+  );
+
   const applyOrderChange = useCallback(
-    (nextActiveIds: string[], nextInactiveIds: string[]) => {
+    (nextActiveIds: string[], nextInactiveIds: string[], highlightId?: string) => {
       applyLists(nextActiveIds, nextInactiveIds);
+      const sortedInactiveIds = notInPingTreeRef.current.map((item) => item.id);
+      setPriorities((current) =>
+        syncDescendingPriorities(sortedInactiveIds, syncDescendingPriorities(nextActiveIds, current))
+      );
+      setPositionSyncKey((current) => current + 1);
       setIsDirty(true);
+      if (highlightId) {
+        flashHighlight(highlightId);
+      }
     },
-    [applyLists]
+    [applyLists, flashHighlight]
   );
 
   const insertAtIndex = (ids: string[], campaignId: string, insertIndex: number | "end") => {
@@ -728,36 +824,30 @@ export function PingTreeSettingsPage({
   };
 
   const insertIntoActive = useCallback(
-    (campaignId: string, insertIndex: number | "end") => {
+    (campaignId: string, insertIndex: number | "end", highlightId?: string) => {
       const activeIds = insertAtIndex(
         pingTreeListRef.current.map((item) => item.id),
         campaignId,
         insertIndex
       );
       const inactiveIds = notInPingTreeRef.current.map((item) => item.id).filter((id) => id !== campaignId);
-      applyOrderChange(activeIds, inactiveIds);
+      applyOrderChange(activeIds, inactiveIds, highlightId ?? campaignId);
     },
     [applyOrderChange]
   );
 
   const insertIntoInactive = useCallback(
-    (campaignId: string, insertIndex: number | "end") => {
+    (campaignId: string, insertIndex: number | "end", highlightId?: string) => {
       const activeIds = pingTreeListRef.current.map((item) => item.id).filter((id) => id !== campaignId);
       const inactiveIds = insertAtIndex(
         notInPingTreeRef.current.map((item) => item.id),
         campaignId,
         insertIndex
       );
-      applyOrderChange(activeIds, inactiveIds);
+      applyOrderChange(activeIds, inactiveIds, highlightId ?? campaignId);
     },
     [applyOrderChange]
   );
-
-  const getActiveIndex = (campaignId: string) =>
-    pingTreeListRef.current.findIndex((item) => item.id === campaignId);
-
-  const getInactiveIndex = (campaignId: string) =>
-    notInPingTreeRef.current.findIndex((item) => item.id === campaignId);
 
   const moveActiveByStep = (campaignId: string, direction: "up" | "down") => {
     const activeIds = pingTreeListRef.current.map((item) => item.id);
@@ -769,21 +859,43 @@ export function PingTreeSettingsPage({
 
     const [movedId] = activeIds.splice(index, 1);
     activeIds.splice(targetIndex, 0, movedId);
-    applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id));
+    applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id), campaignId);
   };
 
-  const moveActiveToEdge = (campaignId: string, edge: "top" | "bottom") => {
+  const moveActiveToPosition = (campaignId: string, descendingPosition: number) => {
     const activeIds = pingTreeListRef.current.map((item) => item.id);
-    const index = activeIds.indexOf(campaignId);
-    if (index < 0) return;
+    const listLength = activeIds.length;
+    if (listLength === 0) return 1;
 
-    const [movedId] = activeIds.splice(index, 1);
-    if (edge === "top") {
-      activeIds.unshift(movedId);
-    } else {
-      activeIds.push(movedId);
+    const index = activeIds.indexOf(campaignId);
+    if (index < 0) return 1;
+
+    const targetIndex = descendingPositionToIndex(descendingPosition, listLength);
+    if (targetIndex !== index) {
+      const [movedId] = activeIds.splice(index, 1);
+      activeIds.splice(targetIndex, 0, movedId);
+      applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id), campaignId);
     }
-    applyOrderChange(activeIds, notInPingTreeRef.current.map((item) => item.id));
+
+    return resolveDescendingPosition(descendingPosition, listLength);
+  };
+
+  const moveInactiveToPosition = (campaignId: string, descendingPosition: number) => {
+    const inactiveIds = notInPingTreeRef.current.map((item) => item.id);
+    const listLength = inactiveIds.length;
+    if (listLength === 0) return 1;
+
+    const index = inactiveIds.indexOf(campaignId);
+    if (index < 0) return 1;
+
+    const targetIndex = descendingPositionToIndex(descendingPosition, listLength);
+    if (targetIndex !== index) {
+      const [movedId] = inactiveIds.splice(index, 1);
+      inactiveIds.splice(targetIndex, 0, movedId);
+      applyOrderChange(pingTreeListRef.current.map((item) => item.id), inactiveIds, campaignId);
+    }
+
+    return resolveDescendingPosition(descendingPosition, listLength);
   };
 
   const moveInactiveToEdge = (campaignId: string, edge: "top" | "bottom") => {
@@ -797,10 +909,7 @@ export function PingTreeSettingsPage({
     } else {
       inactiveIds.push(movedId);
     }
-    applyOrderChange(
-      pingTreeListRef.current.map((item) => item.id),
-      inactiveIds
-    );
+    applyOrderChange(pingTreeListRef.current.map((item) => item.id), inactiveIds, campaignId);
   };
 
   const executeDrop = useCallback(
@@ -860,7 +969,9 @@ export function PingTreeSettingsPage({
   }, [setDropTargetWithRef]);
 
   const startPointerDrag = (campaignId: string, sourceSide: "active" | "inactive", event: React.PointerEvent) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || shouldIgnoreCardDrag(event.target)) {
+      return;
+    }
 
     event.preventDefault();
     event.stopPropagation();
@@ -980,7 +1091,7 @@ export function PingTreeSettingsPage({
             {isDragging ? (
               <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
                 <ArrowDown size={14} className="shrink-0 rotate-180" />
-                Drag using the crosshair icon. A line shows where the campaign will land.
+                Drag a campaign card to reorder. A line shows where it will land.
               </p>
             ) : null}
             {isDirty ? (
@@ -1034,22 +1145,19 @@ export function PingTreeSettingsPage({
                 </div>
               ) : (
                 filteredActiveList.map((card) => {
-                  const index = getActiveIndex(card.id);
+                  const index = pingTreeList.findIndex((item) => item.id === card.id);
+                  const position = index < 0 ? 1 : toDescendingPosition(index, pingTreeList.length);
                   return (
-                    <div key={card.id} data-ping-tree-card-index={index}>
+                    <div key={`${card.id}-${positionSyncKey}`} data-ping-tree-card-index={index}>
                       <ActiveCampaignCard
                         card={card}
-                        index={index}
+                        position={position}
                         isDragging={dragSession?.campaignId === card.id}
-                        priority={priorities[card.id] ?? 0}
+                        isHighlighted={highlightedCampaignId === card.id}
                         canMoveUp={index > 0}
                         canMoveDown={index < pingTreeList.length - 1}
-                        onGripPointerDown={(event) => startPointerDrag(card.id, "active", event)}
-                        onPriorityChange={(value) => {
-                          setPriorities((current) => ({ ...current, [card.id]: value }));
-                          setIsDirty(true);
-                        }}
-                        onSetPriority={() => setIsDirty(true)}
+                        onCardPointerDown={(event) => startPointerDrag(card.id, "active", event)}
+                        onApplyPosition={(value) => moveActiveToPosition(card.id, value)}
                         onRemove={() => insertIntoInactive(card.id, 0)}
                         onMoveUp={() => moveActiveByStep(card.id, "up")}
                         onMoveDown={() => moveActiveByStep(card.id, "down")}
@@ -1082,7 +1190,7 @@ export function PingTreeSettingsPage({
             />
 
             <div className="flex flex-col gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700 sm:flex-row sm:items-center sm:gap-2">
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Not In Ping Tree</h3>
+              <h3 className="text-base font-semibold text-slate-800 sm:text-lg dark:text-slate-100">Not In Ping Tree</h3>
               <div className="relative w-full sm:ml-auto sm:max-w-xs sm:flex-1">
                 <Filter size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
@@ -1102,24 +1210,23 @@ export function PingTreeSettingsPage({
               ) : (
                 inactiveGroups.map(([buyerLabel, cards]) => (
                   <div key={buyerLabel} className="mb-3 last:mb-0">
-                    <h4 className="mb-1.5 px-1 text-sm font-bold text-slate-800 dark:text-slate-100">{buyerLabel}</h4>
+                    <h4 className="mb-1.5 px-1 text-lg font-bold text-slate-900 sm:text-xl dark:text-slate-100">{buyerLabel}</h4>
                     <div className="space-y-2">
                       {cards.map((card) => {
-                        const index = getInactiveIndex(card.id);
+                        const index = inactiveDisplayOrder.findIndex((item) => item.id === card.id);
+                        const position =
+                          index < 0 ? 1 : toDescendingPosition(index, inactiveDisplayOrder.length);
                         return (
-                          <div key={card.id} data-ping-tree-inactive-card-index={index}>
+                          <div key={`${card.id}-${positionSyncKey}`} data-ping-tree-inactive-card-index={index}>
                             <InactiveCampaignCard
                               card={card}
+                              position={position}
                               isDragging={dragSession?.campaignId === card.id}
-                              priority={priorities[card.id] ?? 0}
+                              isHighlighted={highlightedCampaignId === card.id}
                               canMoveToTop={index > 0}
-                              canMoveToBottom={index < notInPingTree.length - 1}
-                              onGripPointerDown={(event) => startPointerDrag(card.id, "inactive", event)}
-                              onPriorityChange={(value) => {
-                                setPriorities((current) => ({ ...current, [card.id]: value }));
-                                setIsDirty(true);
-                              }}
-                              onSetPriority={() => setIsDirty(true)}
+                              canMoveToBottom={index < inactiveDisplayOrder.length - 1}
+                              onCardPointerDown={(event) => startPointerDrag(card.id, "inactive", event)}
+                              onApplyPosition={(value) => moveInactiveToPosition(card.id, value)}
                               onMoveToTop={() => moveInactiveToEdge(card.id, "top")}
                               onMoveToBottom={() => moveInactiveToEdge(card.id, "bottom")}
                               onConfigureMock={() => setMockModalCard(card)}
@@ -1144,7 +1251,7 @@ export function PingTreeSettingsPage({
 
       {dragSession && pointerPosition && draggedCard ? (
         <div
-          className="pointer-events-none fixed z-50 w-72 rounded-xl border border-emerald-400 bg-white p-3 shadow-lg dark:bg-slate-900"
+          className="pointer-events-none fixed z-50 w-72 rounded-xl border border-slate-400 bg-slate-50 p-3 shadow-lg dark:border-slate-500 dark:bg-slate-900"
           style={{
             left: pointerPosition.x + 12,
             top: pointerPosition.y + 12,

@@ -88,6 +88,21 @@ export function formatPingTreeProductLabel(verticalName: string, verticalIndex: 
   return `[${verticalIndex}] ${verticalName}`;
 }
 
+export const FIRST_PING_TREE_OFFICIAL_PERCENT = 100;
+
+/** Default percent when creating a ping tree config for a product + processing type bucket. */
+export function resolveInitialPingTreePercent(existingBucketTreeCount: number): number {
+  return existingBucketTreeCount > 0 ? 0 : FIRST_PING_TREE_OFFICIAL_PERCENT;
+}
+
+export function formatPingTreePercentLabel(percent: number | null | undefined): string {
+  if (typeof percent !== "number" || !Number.isFinite(percent)) {
+    return "—";
+  }
+
+  return `${percent}%`;
+}
+
 /** Default ping tree allocation: one tree at 100%, others at 0%. Preserves existing splits that total 100%. */
 export function buildPingTreePercentMap(
   treeIds: string[],
@@ -96,7 +111,13 @@ export function buildPingTreePercentMap(
   if (treeIds.length === 0) return {};
 
   if (treeIds.length === 1) {
-    return { [treeIds[0]]: 100 };
+    const treeId = treeIds[0];
+    const storedPercent = existing[treeId];
+    if (typeof storedPercent === "number" && Number.isFinite(storedPercent)) {
+      return { [treeId]: storedPercent };
+    }
+
+    return { [treeId]: FIRST_PING_TREE_OFFICIAL_PERCENT };
   }
 
   const existingTotal = treeIds.reduce((sum, id) => sum + (existing[id] ?? 0), 0);
@@ -107,5 +128,5 @@ export function buildPingTreePercentMap(
     return Object.fromEntries(treeIds.map((id) => [id, existing[id] ?? 0]));
   }
 
-  return Object.fromEntries(treeIds.map((id, index) => [id, index === 0 ? 100 : 0]));
+  return Object.fromEntries(treeIds.map((id, index) => [id, index === 0 ? FIRST_PING_TREE_OFFICIAL_PERCENT : 0]));
 }

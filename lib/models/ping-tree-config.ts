@@ -1,5 +1,6 @@
 import mongoose, { Schema, model, models } from "mongoose";
 import {
+  FIRST_PING_TREE_OFFICIAL_PERCENT,
   PING_TREE_POSTING_TYPES,
   PING_TREE_PROCESSING_TYPES,
 } from "@/lib/ping-tree-config";
@@ -67,4 +68,76 @@ export async function getNextPingTreeConfigDisplayId() {
     .select({ displayId: 1 })
     .lean();
   return (latest?.displayId ?? 0) + 1;
+}
+
+let officialPercentMigrationPromise: Promise<void> | null = null;
+
+/** Persist 100% as the official stored percent for single-tree product buckets. */
+export async function ensureOfficialPingTreePercentForBucket(
+  verticalRef: mongoose.Types.ObjectId,
+  processingType: string
+) {
+  const trees = await PingTreeConfigModel.find({
+    verticalRef,
+    processingType,
+    status: { $ne: "Deleted" },
+  })
+    .select({ _id: 1, percent: 1 })
+    .lean();
+
+  if (trees.length !== 1) {
+    return;
+  }
+
+  const onlyTree = trees[0];
+  if (onlyTree.percent === FIRST_PING_TREE_OFFICIAL_PERCENT) {
+    return;
+  }
+
+  await PingTreeConfigModel.updateOne(
+    { _id: onlyTree._id },
+    { $set: { percent: FIRST_PING_TREE_OFFICIAL_PERCENT } }
+  );
+}
+
+export async function ensurePingTreeOfficialPercentsMigrated() {
+  if (!officialPercentMigrationPromise) {
+    officialPercentMigrationPromise = (async () => {
+      const configs = await PingTreeConfigModel.find({ status: { $ne: "Deleted" } })
+        .select({ _id: 1, verticalRef: 1, processingType: 1, percent: 1 })
+        .lean();
+
+      const buckets = new Map<string, typeof configs>();
+      for (const config of configs) {
+        const key = `${config.verticalRef?.toString() ?? ""}:${config.processingType}`;
+        if (!buckets.has(key)) {
+          buckets.set(key, []);
+        }
+        buckets.get(key)!.push(config);
+      }
+
+      await Promise.all(
+        Array.from(buckets.values()).map(async (bucket) => {
+          if (bucket.length !== 1) {
+            return;
+          }
+
+          const onlyTree = bucket[0];
+          if (onlyTree.percent === FIRST_PING_TREE_OFFICIAL_PERCENT) {
+            return;
+          }
+
+          await PingTreeConfigModel.updateOne(
+            { _id: onlyTree._id },
+            { $set: { percent: FIRST_PING_TREE_OFFICIAL_PERCENT } }
+          );
+        })
+      );
+    })().catch((error) => {
+      officialPercentMigrationPromise = null;
+      throw error;
+    });
+  }
+
+  await officialPercentMigrationPromise;
 }

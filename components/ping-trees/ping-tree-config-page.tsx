@@ -31,11 +31,13 @@ import {
   SearchFilterField,
   SearchFilterGrid,
   SearchFilterPanel,
+  SearchFilterSelect,
 } from "@/components/ui/search-filter-layout";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { downloadCsv } from "@/lib/csv-export";
 import {
   buildPingTreePercentMap,
+  formatPingTreePercentLabel,
   PING_TREE_POSTING_TYPES,
   PING_TREE_PROCESSING_TYPES,
   type PingTreeConfigRecord,
@@ -70,7 +72,7 @@ const emptyFilters: DraftFilters = {
   showDeleted: false,
 };
 
-const EXPORT_HEADERS = ["ID", "Ping Tree Name", "Comment", "Product", "Status", "Global Settings"];
+const EXPORT_HEADERS = ["ID", "Ping Tree Name", "Comment", "Product", "Status", "Global settings"];
 
 /** The drag-drop editor is organised by campaign type; map each processing tab onto it. */
 const PROCESSING_TO_CAMPAIGN_TYPE: Record<PingTreeProcessingType, "Redirect" | "Silent"> = {
@@ -390,9 +392,14 @@ export function PingTreeConfigPage() {
   const configRows = useMemo(
     () =>
       configProductId
-        ? records.filter((record) => record.verticalId === configProductId && record.status !== "Deleted")
+        ? records.filter(
+            (record) =>
+              record.verticalId === configProductId &&
+              record.processingType === activeTab &&
+              record.status !== "Deleted"
+          )
         : [],
-    [configProductId, records]
+    [activeTab, configProductId, records]
   );
 
   useEffect(() => {
@@ -424,7 +431,12 @@ export function PingTreeConfigPage() {
   const deleteBlockedByPublisher = deletePublisherUsages.length > 0;
 
   const openConfig = (verticalId: string) => {
-    const rows = records.filter((record) => record.verticalId === verticalId && record.status !== "Deleted");
+    const rows = records.filter(
+      (record) =>
+        record.verticalId === verticalId &&
+        record.processingType === activeTab &&
+        record.status !== "Deleted"
+    );
     const existing = Object.fromEntries(rows.map((row) => [row.id, row.percent]));
     setConfigValues(buildPingTreePercentMap(rows.map((row) => row.id), existing));
     setConfigError("");
@@ -497,7 +509,7 @@ export function PingTreeConfigPage() {
         record.comment,
         record.productLabel,
         record.status,
-        record.percent > 0 ? `${record.percent}%` : "",
+        formatPingTreePercentLabel(record.percent),
       ])
     );
   };
@@ -548,38 +560,29 @@ export function PingTreeConfigPage() {
               onKeyDown={(event) => event.key === "Enter" && handleSearch()}
             />
           </SearchFilterField>
-          <SearchFilterField>
-            <FieldLabel htmlFor="ptc-posting" label="Posting Type" />
-            <Select
-              id="ptc-posting"
-              className={SEARCH_FILTER_CONTROL_CLASS}
-              value={draftFilters.postingType}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, postingType: event.target.value }))}
-            >
-              <option value="All">All</option>
-              {PING_TREE_POSTING_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </Select>
-          </SearchFilterField>
-          <SearchFilterField>
-            <FieldLabel htmlFor="ptc-product" label="Product" />
-            <Select
-              id="ptc-product"
-              className={SEARCH_FILTER_CONTROL_CLASS}
-              value={draftFilters.product}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, product: event.target.value }))}
-            >
-              <option value="All">All</option>
-              {products.map((product) => (
-                <option key={product.verticalId} value={product.verticalId}>
-                  {product.productLabel}
-                </option>
-              ))}
-            </Select>
-          </SearchFilterField>
+          <SearchFilterSelect
+            id="ptc-posting"
+            label="Posting Type"
+            value={draftFilters.postingType}
+            onChange={(value) => setDraftFilters((f) => ({ ...f, postingType: value }))}
+            options={[
+              { value: "All", label: "All" },
+              ...PING_TREE_POSTING_TYPES.map((type) => ({ value: type, label: type })),
+            ]}
+          />
+          <SearchFilterSelect
+            id="ptc-product"
+            label="Product"
+            value={draftFilters.product}
+            onChange={(value) => setDraftFilters((f) => ({ ...f, product: value }))}
+            options={[
+              { value: "All", label: "All" },
+              ...products.map((product) => ({
+                value: product.verticalId,
+                label: product.productLabel,
+              })),
+            ]}
+          />
         </SearchFilterGrid>
 
         <SearchFilterActions onSearch={handleSearch} onClear={handleClear}>
@@ -629,7 +632,7 @@ export function PingTreeConfigPage() {
                 <th className="px-4 py-3">Comment</th>
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Global Settings</th>
+                <th className="px-4 py-3">Global settings</th>
                 <th className="px-4 py-3">Custom settings</th>
                 <th className="px-4 py-3 text-center">Action</th>
               </tr>
@@ -871,7 +874,7 @@ function GroupRows({ label, rows, onConfig, onRename, onDuplicate, onDelete, onR
           <td className="px-4 py-3 align-middle">
             <StatusBadge status={row.status} />
           </td>
-          <td className="px-4 py-3 align-middle">{row.percent > 0 ? `${row.percent}%` : "—"}</td>
+          <td className="px-4 py-3 align-middle">{formatPingTreePercentLabel(row.percent)}</td>
           <td className="px-4 py-3 align-middle text-slate-400 dark:text-slate-500">—</td>
           <td className="px-4 py-3 align-middle">
             <div className="flex flex-wrap items-center justify-center gap-1.5">

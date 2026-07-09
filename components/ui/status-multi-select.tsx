@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/form-controls";
+import {
+  FILTER_DROPDOWN_ITEM_CLASS,
+  FILTER_DROPDOWN_MAX_VISIBLE_ITEMS,
+  FILTER_DROPDOWN_SCROLL_CLASS,
+} from "@/components/ui/search-filter-layout";
 import { cn } from "@/lib/utils";
 
 export type StatusMultiSelectOption = {
@@ -158,7 +163,12 @@ export function StatusMultiSelect({
                 </button>
               </div>
 
-              <div className="max-h-60 overflow-y-auto py-1">
+              <div
+                className={cn(
+                  "py-1",
+                  options.length > FILTER_DROPDOWN_MAX_VISIBLE_ITEMS && FILTER_DROPDOWN_SCROLL_CLASS
+                )}
+              >
                 {options.length === 0 ? (
                   <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No options available.</p>
                 ) : (
@@ -168,7 +178,10 @@ export function StatusMultiSelect({
                       id={`${id ?? "status-multi-select"}-${option.value}`}
                       checked={selected.includes(option.value)}
                       onChange={(checked) => toggleOption(option.value, checked)}
-                      className="rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                      className={cn(
+                        "rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70",
+                        FILTER_DROPDOWN_ITEM_CLASS
+                      )}
                       label={option.label}
                     />
                   ))

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
-import { PingTreeConfigModel } from "@/lib/models/ping-tree-config";
+import { PingTreeConfigModel, ensureOfficialPingTreePercentForBucket } from "@/lib/models/ping-tree-config";
 import {
   isPingTreePostingType,
   toPingTreeConfigRecord,
@@ -112,6 +112,10 @@ export async function DELETE(_: Request, context: Params) {
     const config = await PingTreeConfigModel.findByIdAndUpdate(id, { $set: softDeleteUpdate() });
     if (!config) {
       return NextResponse.json({ message: "Ping tree not found." }, { status: 404 });
+    }
+
+    if (config.verticalRef && config.processingType) {
+      await ensureOfficialPingTreePercentForBucket(config.verticalRef, config.processingType);
     }
 
     return NextResponse.json({ message: "Ping tree deleted." });

@@ -1,4 +1,5 @@
 import { buildDefaultLeadDetailsDateRange, formatDateTimeDisplay } from "@/lib/date-range";
+import { BUYER_LEAD_DETAILS_STATUS_OPTIONS } from "@/lib/buyer-lead-status";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 import {
@@ -82,6 +83,8 @@ export const defaultBuyerLeadDetailsFilters: BuyerLeadDetailsFilters = {
   status: "All",
   tableSearch: "",
 };
+
+export { BUYER_LEAD_DETAILS_STATUS_OPTIONS };
 
 export function parseBuyerLeadDetailsFiltersFromSearchParams(
   searchParams: Pick<URLSearchParams, "get">

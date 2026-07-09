@@ -54,3 +54,27 @@ export function toPingTreeRecord(doc: PingTreeDoc): PingTreeRecord {
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : "",
   };
 }
+
+/** Inactive campaigns: group by buyer, sort each group by min price ascending. */
+export function sortInactiveCampaignsByBuyerMinPrice(cards: PingTreeCampaignCard[]) {
+  const groups = new Map<string, PingTreeCampaignCard[]>();
+
+  for (const card of cards) {
+    const key = card.buyerLabel || "Unknown";
+    const bucket = groups.get(key) ?? [];
+    bucket.push(card);
+    groups.set(key, bucket);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([, buyerCards]) =>
+      [...buyerCards].sort((left, right) => {
+        if (left.minPrice !== right.minPrice) {
+          return left.minPrice - right.minPrice;
+        }
+
+        return left.displayId - right.displayId;
+      })
+    );
+}
