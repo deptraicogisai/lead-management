@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -37,8 +38,21 @@ const periodOptions: Array<{ value: DashboardPeriod; label: string }> = [
   { value: "week", label: "Week" },
 ];
 
+/** Show ~10 body rows; overflow scrolls with sticky header. */
+const rankingTableScrollClassName =
+  "max-h-[calc(2.75rem+10*2.55rem)] overflow-auto";
+
+const stickyHeaderCellClassName = cn(
+  tableHeaderCellClassName,
+  "sticky top-0 z-10 bg-slate-50 dark:bg-slate-800"
+);
+
 function EmptyState() {
   return <p className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">No records found.</p>;
+}
+
+function RankingTableScroll({ children }: { children: ReactNode }) {
+  return <div className={rankingTableScrollClassName}>{children}</div>;
 }
 
 function PeriodTabs({
@@ -73,16 +87,16 @@ function PublisherTable({ rows }: { rows: DashboardPublisherRankingRow[] }) {
   if (rows.length === 0) return <EmptyState />;
 
   return (
-    <div className="overflow-x-auto">
+    <RankingTableScroll>
       <table className="min-w-full border-collapse">
         <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800/70">
-            <th className={tableHeaderCellClassName}>Publisher</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Redirect,%</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>EPL</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
+          <tr>
+            <th className={stickyHeaderCellClassName}>Publisher</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Redirect,%</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>EPL</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
           </tr>
         </thead>
         <tbody>
@@ -102,7 +116,7 @@ function PublisherTable({ rows }: { rows: DashboardPublisherRankingRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </RankingTableScroll>
   );
 }
 
@@ -110,14 +124,14 @@ function BuyerTable({ rows }: { rows: DashboardBuyerRankingRow[] }) {
   if (rows.length === 0) return <EmptyState />;
 
   return (
-    <div className="overflow-x-auto">
+    <RankingTableScroll>
       <table className="min-w-full border-collapse">
         <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800/70">
-            <th className={tableHeaderCellClassName}>Buyer</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
+          <tr>
+            <th className={stickyHeaderCellClassName}>Buyer</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
           </tr>
         </thead>
         <tbody>
@@ -133,7 +147,7 @@ function BuyerTable({ rows }: { rows: DashboardBuyerRankingRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </RankingTableScroll>
   );
 }
 
@@ -141,16 +155,16 @@ function ProductTable({ rows }: { rows: DashboardProductRankingRow[] }) {
   if (rows.length === 0) return <EmptyState />;
 
   return (
-    <div className="overflow-x-auto">
+    <RankingTableScroll>
       <table className="min-w-full border-collapse">
         <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800/70">
-            <th className={tableHeaderCellClassName}>Product</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Redirect,%</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>EPL</th>
-            <th className={cn(tableHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
+          <tr>
+            <th className={stickyHeaderCellClassName}>Product</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Leads</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Sold</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Redirect,%</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>EPL</th>
+            <th className={cn(stickyHeaderCellClassName, tableNumericCellClassName)}>Earning</th>
           </tr>
         </thead>
         <tbody>
@@ -168,7 +182,7 @@ function ProductTable({ rows }: { rows: DashboardProductRankingRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </RankingTableScroll>
   );
 }
 
@@ -176,11 +190,11 @@ function NamedTable({ rows, label }: { rows: DashboardNamedRow[]; label: string 
   if (rows.length === 0) return <EmptyState />;
 
   return (
-    <div className="overflow-x-auto">
+    <RankingTableScroll>
       <table className="min-w-full border-collapse">
         <thead>
-          <tr className="bg-slate-50 dark:bg-slate-800/70">
-            <th className={tableHeaderCellClassName}>{label}</th>
+          <tr>
+            <th className={stickyHeaderCellClassName}>{label}</th>
           </tr>
         </thead>
         <tbody>
@@ -191,7 +205,7 @@ function NamedTable({ rows, label }: { rows: DashboardNamedRow[]; label: string 
           ))}
         </tbody>
       </table>
-    </div>
+    </RankingTableScroll>
   );
 }
 

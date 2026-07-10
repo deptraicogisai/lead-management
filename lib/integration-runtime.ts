@@ -5,6 +5,7 @@ import type {
   IntegrationBuilderResponseMapping,
 } from "@/lib/integration-builder";
 import { validateBuyerPriceAgainstCampaign } from "@/lib/lead-price";
+import { DEFAULT_ERROR_REASON } from "@/lib/response-mapping";
 
 export type IntegrationTemplateContext = {
   lead: Record<string, unknown>;
@@ -271,19 +272,69 @@ export type ParsedBuyerResponse = {
   mappingError: boolean;
 };
 
-function evaluateResponseExpression(expression: string, response: unknown) {
+/** Default Error::Reason when Response Mapping cannot resolve Accept/Reject. */
+export const RESPONSE_MAPPING_ERROR_REASON = DEFAULT_ERROR_REASON;
+
+export function isResponseMappingErrorReason(reason: string | null | undefined) {
+  const normalized = reason?.trim() ?? "";
+  return (
+    normalized === RESPONSE_MAPPING_ERROR_REASON ||
+    // Legacy messages (older deliveries / in-flight requests)
+    normalized === "Could not find a matching Sold::Sign or Reject::Sign value in the buyer response. Check Response Mapping Twig paths." ||
+    normalized === "Buyer response was empty or Sold::Sign / Reject::Sign could not be resolved from Response Mapping." ||
+    normalized === "Unrecognized Sold::Sign / Reject::Sign value from Response Mapping. Neither Accept nor Reject could be determined." ||
+    normalized === "Response mapping could not determine buyer status." ||
+    normalized === "Empty or unmapped buyer response." ||
+    normalized === "Unrecognized buyer response status." ||
+    normalized === "Response mapping error."
+  );
+}
+
+function valuesEqualForResponseMapping(left: string, right: string) {
+  if (left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0) {
+    return true;
+  }
+
+  const leftNum = Number(left);
+  const rightNum = Number(right);
+  if (left !== "" && right !== "" && Number.isFinite(leftNum) && Number.isFinite(rightNum)) {
+    return leftNum === rightNum;
+  }
+
+  return false;
+}
+
+/**
+ * Evaluates Response Mapping expressions like:
+ * - response.status == "1"
+ * - response.status == 1
+ * - response.status
+ *
+ * Equality expressions return boolean. Unknown/malformed == expressions return false
+ * (never a truthy raw string — that previously caused false Accepts).
+ */
+function evaluateResponseExpression(expression: string, response: unknown): boolean | string {
   const trimmed = expression.trim();
 
-  const equalityMatch = trimmed.match(/^response\.(.+?)\s*==\s*["'](.+?)["']$/);
+  const equalityMatch = trimmed.match(/^response\.(.+?)\s*==\s*(.+)$/);
   if (equalityMatch) {
     const left = stringifyTemplateValue(getValueAtPath(response, equalityMatch[1] ?? "")).trim();
-    const right = (equalityMatch[2] ?? "").trim();
-    return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
+    let right = (equalityMatch[2] ?? "").trim();
+    const quoted = right.match(/^["'](.*)["']$/);
+    if (quoted) {
+      right = quoted[1] ?? "";
+    }
+    return valuesEqualForResponseMapping(left, right);
   }
 
   const pathMatch = trimmed.match(/^response\.(.+)$/);
   if (pathMatch) {
     return stringifyTemplateValue(getValueAtPath(response, pathMatch[1] ?? ""));
+  }
+
+  // Malformed expression (e.g. incomplete ==) must not be treated as a truthy sold sign.
+  if (trimmed.includes("==")) {
+    return false;
   }
 
   return trimmed;
@@ -432,20 +483,32 @@ export function parseIntegrationResponse(
         : "";
     }
 
-    if (!result.soldSign && !result.rejectSign && !result.errorReason && trimmed) {
-      const responseRecord = parsedResponse as Record<string, unknown>;
-      const statusText = stringifyTemplateValue(
-        responseRecord.status ??
-          responseRecord.msg ??
-          responseRecord.message ??
-          responseRecord.status_text
-      ).trim();
+    if (!result.soldSign && !result.rejectSign) {
+      const hasExplicitSignMapping = Boolean(soldTemplate) || Boolean(rejectTemplate);
 
-      if (isAcceptedSoldSign(statusText)) {
-        result.soldSign = statusText;
-      } else {
+      if (!trimmed) {
         result.mappingError = true;
-        result.errorReason = "Response mapping could not determine buyer status.";
+        result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
+      } else if (hasExplicitSignMapping) {
+        // Sold::Sign / Reject::Sign were configured but neither matched.
+        // Do not soft-accept from top-level status:1 — that hid mapping mistakes.
+        result.mappingError = true;
+        result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
+      } else {
+        const responseRecord = parsedResponse as Record<string, unknown>;
+        const statusText = stringifyTemplateValue(
+          responseRecord.status ??
+            responseRecord.msg ??
+            responseRecord.message ??
+            responseRecord.status_text
+        ).trim();
+
+        if (isAcceptedSoldSign(statusText)) {
+          result.soldSign = statusText;
+        } else {
+          result.mappingError = true;
+          result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
+        }
       }
     }
   }
@@ -465,7 +528,7 @@ export function inferBuyerStatusFromParsedResponse(
   if (parsed.mappingError) {
     return {
       status: "Error" as const,
-      reason: parsed.errorReason || "Response mapping error.",
+      reason: parsed.errorReason || RESPONSE_MAPPING_ERROR_REASON,
     };
   }
 
@@ -495,13 +558,6 @@ export function inferBuyerStatusFromParsedResponse(
     return { status: "Accept" as const, reason: "" };
   }
 
-  if (parsed.errorReason && !isAcceptedSoldSign(parsed.errorReason)) {
-    return {
-      status: "Error" as const,
-      reason: parsed.errorReason,
-    };
-  }
-
   if (soldComparable.includes("timeout")) {
     return { status: "Timeout" as const, reason: parsed.rejectReason || "Buyer request timed out." };
   }
@@ -518,9 +574,7 @@ export function inferBuyerStatusFromParsedResponse(
     return { status: "Reject" as const, reason: parsed.rejectReason || "Buyer rejected the lead." };
   }
 
-  if (parsed.soldSign || parsed.rejectSign) {
-    return { status: "Error" as const, reason: "Unrecognized buyer response status." };
-  }
-
-  return { status: "Error" as const, reason: "Empty or unmapped buyer response." };
+  // Error::Reason is a message only — status Error when Sold/Reject did not resolve.
+  const errorReason = parsed.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
+  return { status: "Error" as const, reason: errorReason };
 }

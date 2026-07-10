@@ -116,6 +116,7 @@ export function PublisherLeadDetailsPage() {
   const [viewLead, setViewLead] = useState<PublisherLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateDraft = (patch: Partial<PublisherLeadDetailsFilters>) => {
@@ -149,7 +150,10 @@ export function PublisherLeadDetailsPage() {
       beginLoad();
 
       try {
-        const response = await fetch(`/api/reports/publisher/lead-details?${buildQuery(filters, nextPage, nextPageSize)}`);
+        const response = await fetch(
+          `/api/reports/publisher/lead-details?${buildQuery(filters, nextPage, nextPageSize)}`,
+          { cache: "no-store" }
+        );
         if (!response.ok) {
           throw new Error("Failed to load publisher lead details.");
         }
@@ -188,7 +192,7 @@ export function PublisherLeadDetailsPage() {
 
   useEffect(() => {
     void loadRows(appliedFilters, page, pageSize);
-  }, [appliedFilters, page, pageSize, loadRows]);
+  }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
     if (!exportOpen) {
@@ -210,6 +214,7 @@ export function PublisherLeadDetailsPage() {
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
     setPage(1);
+    setSearchNonce((current) => current + 1);
   };
 
   const handleClearAll = () => {

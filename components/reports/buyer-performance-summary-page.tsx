@@ -228,6 +228,7 @@ export function BuyerPerformanceSummaryPage() {
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateDraft = (patch: Partial<BuyerPerformanceFilters>) => {
@@ -259,7 +260,8 @@ export function BuyerPerformanceSummaryPage() {
 
       try {
         const response = await fetch(
-          `/api/reports/buyer/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`
+          `/api/reports/buyer/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`,
+          { cache: "no-store" }
         );
         if (!response.ok) {
           throw new Error("Failed to load buyer performance summary.");
@@ -287,7 +289,7 @@ export function BuyerPerformanceSummaryPage() {
 
   useEffect(() => {
     void loadRows(appliedFilters, page, pageSize);
-  }, [appliedFilters, page, pageSize, loadRows]);
+  }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
     if (!exportOpen) {
@@ -307,6 +309,7 @@ export function BuyerPerformanceSummaryPage() {
   const handleSearch = () => {
     setAppliedFilters({ ...draftFilters });
     setPage(1);
+    setSearchNonce((current) => current + 1);
   };
 
   const handleClearAll = () => {

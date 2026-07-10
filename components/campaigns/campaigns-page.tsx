@@ -203,7 +203,9 @@ export function CampaignsPage() {
     beginLoad();
 
     try {
-      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, page, pageSize)}`);
+      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, page, pageSize)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) return;
 
       const data = (await response.json()) as CampaignListResponse;
@@ -640,8 +642,9 @@ export function CampaignsPage() {
 
           <SearchFilterActions
             onSearch={() => {
-              setAppliedFilters(draftFilters);
+              setAppliedFilters({ ...draftFilters });
               setPage(1);
+              setReloadKey((current) => current + 1);
             }}
             onClear={() => {
               const cleared = createDefaultCampaignFilters();
@@ -649,6 +652,7 @@ export function CampaignsPage() {
               setAppliedFilters(cleared);
               setSelectedIds([]);
               setPage(1);
+              setReloadKey((current) => current + 1);
             }}
           />
         </SearchFilterPanel>

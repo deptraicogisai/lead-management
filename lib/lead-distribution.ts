@@ -333,9 +333,11 @@ async function resolvePingTreeCampaignIds(params: {
   pingTreeType: PingTreeCampaignType;
   verticalRefId: string;
   mockBuyerPost: boolean;
+  /** When false, never expand an empty tree to all vertical campaigns. */
+  allowEmptyTreeFallback?: boolean;
 }) {
   const orderedFromTree = orderPingTreeActiveCampaignIds(params.treeActiveCampaignIds);
-  if (orderedFromTree.length > 0 || !params.mockBuyerPost) {
+  if (orderedFromTree.length > 0 || !params.mockBuyerPost || params.allowEmptyTreeFallback === false) {
     return orderedFromTree;
   }
 
@@ -384,6 +386,8 @@ async function resolveEligiblePingTreeCampaignIds(params: {
     pingTreeType: params.pingTreeType,
     verticalRefId: params.verticalRefId,
     mockBuyerPost: params.mockBuyerPost,
+    // Weighted config selection must honor that tree's arrangement only.
+    allowEmptyTreeFallback: !params.selectedConfig,
   });
 
   if (orderedCampaignIds.length === 0) {
@@ -1385,15 +1389,17 @@ export async function distributeLeadAfterIntake(params: {
   const pingTreeTypes = resolvePublisherPingTreeTypes(publisherApiType);
 
   // Pick the weighted PingTreeConfig for each bucket exactly once per lead.
-  // Publisher distribution overrides global % when configured; otherwise global
-  // Ping Tree Settings apply. Test/mock leads pick without counting.
-  const shouldCountAllocation = !isTestLead && !Boolean(params.mockBuyerPost);
+  // Always advance counters — peeking a frozen live bucket (e.g. Main currently
+  // "owes" the next slot) makes every Test Lead pick the same tree (100% Main).
+  // Test/mock posts use a separate `test:` bucket so they do not skew live totals.
+  const isTestAllocation = isTestLead || Boolean(params.mockBuyerPost);
   const selectedConfigByType = new Map<PingTreeCampaignType, SelectedPingTreeConfig | null>();
   for (const pingTreeType of pingTreeTypes) {
     const selected = await selectPingTreeConfig({
       verticalRefId: params.verticalRefId,
       processingType: mapPingTreeTypeToProcessingType(pingTreeType),
-      count: shouldCountAllocation,
+      count: true,
+      allocationScope: isTestAllocation ? "test" : "live",
       sellerRefId: params.sellerRefId,
       mappingRefId: params.mappingRefId ?? null,
     });

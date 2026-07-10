@@ -10,7 +10,7 @@ import {
   Search,
   Settings2,
 } from "lucide-react";
-import { Input, PrimaryButton, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
+import { Input, PrimaryButton, ToggleSwitch, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import { LoadingOverlay } from "@/components/ui/loading-indicator";
@@ -37,12 +37,23 @@ type DragSession = {
   campaignId: string;
   sourceSide: "active" | "inactive";
   pointerId: number;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  activated: boolean;
 };
 
-type DropIndicatorPosition = {
-  side: "active" | "inactive";
-  top: number;
-};
+type DragPreviewItem =
+  | { kind: "card"; card: PingTreeCampaignCard; hitIndex: number }
+  | { kind: "placeholder" };
+
+const DRAG_ACTIVATION_DISTANCE_PX = 6;
+const DRAG_AUTO_SCROLL_EDGE_PX = 48;
+const DRAG_AUTO_SCROLL_MAX_SPEED_PX = 18;
+const DRAG_FLIP_MS = 75;
 
 function dropTargetKey(target: DropTarget | null) {
   if (!target) return "";
@@ -162,26 +173,32 @@ function resolveInsertIndexFromPointer(
   return "end";
 }
 
-function computeIndicatorTop(
-  columnElement: HTMLElement,
-  listElement: HTMLElement,
-  cardSelector: string,
-  index: number | "end"
-): number {
-  const columnRect = columnElement.getBoundingClientRect();
-  const cardElements = Array.from(listElement.querySelectorAll<HTMLElement>(cardSelector));
+function buildDragPreviewItems(
+  cards: PingTreeCampaignCard[],
+  draggedId: string | null,
+  insertIndex: number | "end" | null
+): DragPreviewItem[] {
+  const withoutDragged = draggedId ? cards.filter((card) => card.id !== draggedId) : cards;
 
-  if (cardElements.length === 0) {
-    return listElement.getBoundingClientRect().top - columnRect.top + 8;
+  if (insertIndex === null) {
+    return withoutDragged.map((card, hitIndex) => ({ kind: "card" as const, card, hitIndex }));
   }
 
-  if (index === "end") {
-    const last = cardElements[cardElements.length - 1];
-    return last.getBoundingClientRect().bottom - columnRect.top + 4;
+  const at = insertIndex === "end" ? withoutDragged.length : Math.max(0, Math.min(insertIndex, withoutDragged.length));
+  const items: DragPreviewItem[] = [];
+
+  withoutDragged.forEach((card, hitIndex) => {
+    if (hitIndex === at) {
+      items.push({ kind: "placeholder" });
+    }
+    items.push({ kind: "card", card, hitIndex });
+  });
+
+  if (at === withoutDragged.length) {
+    items.push({ kind: "placeholder" });
   }
 
-  const card = cardElements[index];
-  return card.getBoundingClientRect().top - columnRect.top - 4;
+  return items;
 }
 
 function ColumnStatsBar({ disabled, active, total }: { disabled: number; active: number; total: number }) {
@@ -214,31 +231,50 @@ const textActionClass = cn(
 );
 
 const draggingCardClassName =
-  "border-slate-400 bg-slate-100 opacity-75 dark:border-slate-500 dark:bg-slate-800/80";
+  "scale-[0.985] border-dashed border-slate-300 bg-slate-50/80 opacity-45 shadow-none dark:border-slate-600 dark:bg-slate-800/40";
 
 const highlightedCardClassName =
-  "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300/80 dark:border-emerald-500 dark:bg-emerald-500/10 dark:ring-emerald-500/30";
+  "border-emerald-400 bg-emerald-400/20 ring-2 ring-emerald-400/50 dark:border-emerald-400 dark:bg-emerald-400/25 dark:ring-emerald-400/40";
 
 const cardActionsClass = "flex items-center justify-end gap-1";
 const inactiveCardActionsClass =
   "flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-2.5 py-2 dark:border-slate-800";
 
-function DropIndicator({ top, tone }: { top: number; tone: "active" | "inactive" }) {
+function autoScrollListNearEdge(listElement: HTMLElement | null, clientY: number) {
+  if (!listElement) return;
+
+  const rect = listElement.getBoundingClientRect();
+  if (clientY < rect.top || clientY > rect.bottom) return;
+
+  const distanceFromTop = clientY - rect.top;
+  const distanceFromBottom = rect.bottom - clientY;
+
+  if (distanceFromTop < DRAG_AUTO_SCROLL_EDGE_PX) {
+    const intensity = 1 - distanceFromTop / DRAG_AUTO_SCROLL_EDGE_PX;
+    listElement.scrollTop -= Math.ceil(DRAG_AUTO_SCROLL_MAX_SPEED_PX * intensity);
+    return;
+  }
+
+  if (distanceFromBottom < DRAG_AUTO_SCROLL_EDGE_PX) {
+    const intensity = 1 - distanceFromBottom / DRAG_AUTO_SCROLL_EDGE_PX;
+    listElement.scrollTop += Math.ceil(DRAG_AUTO_SCROLL_MAX_SPEED_PX * intensity);
+  }
+}
+
+function DropPlaceholder({ height, tone }: { height: number; tone: "active" | "inactive" }) {
   const isActive = tone === "active";
 
   return (
-    <div className="pointer-events-none absolute inset-x-2 z-20 flex items-center gap-2" style={{ top }}>
-      <div className={cn("h-0.5 flex-1 rounded-full", isActive ? "bg-emerald-500" : "bg-rose-400")} />
-      <span
-        className={cn(
-          "rounded px-2 py-0.5 text-[11px] font-medium shadow-sm",
-          isActive ? "bg-emerald-600 text-white" : "bg-rose-400 text-white"
-        )}
-      >
-        Drop here
-      </span>
-      <div className={cn("h-0.5 flex-1 rounded-full", isActive ? "bg-emerald-500" : "bg-rose-400")} />
-    </div>
+    <div
+      aria-hidden
+      className={cn(
+        "rounded border-2 border-dashed transition-[height,background-color,border-color] duration-75",
+        isActive
+          ? "border-emerald-400 bg-emerald-400/20 dark:border-emerald-400 dark:bg-emerald-400/25"
+          : "border-rose-400 bg-rose-400/20 dark:border-rose-400 dark:bg-rose-400/25"
+      )}
+      style={{ height: Math.max(height, 56) }}
+    />
   );
 }
 
@@ -307,6 +343,7 @@ function ActiveCampaignCard({
   position,
   isDragging,
   isHighlighted,
+  isGhost = false,
   canMoveUp,
   canMoveDown,
   onCardPointerDown,
@@ -315,28 +352,34 @@ function ActiveCampaignCard({
   onMoveUp,
   onMoveDown,
   onConfigureMock,
+  showMockButton = false,
 }: {
   card: PingTreeCampaignCard;
   position: number;
   isDragging: boolean;
   isHighlighted: boolean;
+  isGhost?: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
-  onCardPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onCardPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onApplyPosition: (value: number) => number;
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onConfigureMock: () => void;
+  showMockButton?: boolean;
 }) {
   return (
     <div
-      onPointerDown={onCardPointerDown}
-      style={{ touchAction: "none" }}
+      onPointerDown={isGhost ? undefined : onCardPointerDown}
+      style={{ touchAction: isGhost ? undefined : "none" }}
       className={cn(
-        "cursor-grab overflow-hidden rounded border bg-white transition-colors duration-500 active:cursor-grabbing dark:bg-slate-900",
-        isDragging ? draggingCardClassName : "border-slate-300 dark:border-slate-600",
-        isHighlighted && highlightedCardClassName
+        "overflow-hidden rounded border bg-white dark:bg-slate-900",
+        isGhost
+          ? "cursor-grabbing border-slate-300 shadow-2xl ring-2 ring-slate-400/40 dark:border-slate-500 dark:ring-slate-300/20"
+          : "cursor-grab transition-[opacity,transform,background-color,border-color,box-shadow] duration-150 ease-out active:cursor-grabbing",
+        !isGhost && (isDragging ? draggingCardClassName : !isHighlighted && "border-slate-300 dark:border-slate-600"),
+        !isGhost && isHighlighted && highlightedCardClassName
       )}
     >
       <div className="flex items-start justify-between gap-2 px-2.5 py-2">
@@ -348,24 +391,39 @@ function ActiveCampaignCard({
         <div className="flex shrink-0 flex-col items-end gap-1.5" data-no-drag>
           <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
           <div className={cardActionsClass}>
-            <button type="button" disabled={!canMoveUp} onClick={onMoveUp} title="Move up" className={arrowActionClass}>
-              <ChevronUp size={16} strokeWidth={2.5} />
-            </button>
-            <button type="button" disabled={!canMoveDown} onClick={onMoveDown} title="Move down" className={arrowActionClass}>
-              <ChevronDown size={16} strokeWidth={2.5} />
-            </button>
-            <button type="button" onClick={onRemove} className={textActionClass}>
-              Remove
-            </button>
-            <PriorityControls position={position} onApplyPosition={onApplyPosition} />
             <button
               type="button"
-              onClick={onConfigureMock}
-              title="Configure test lead mock response"
-              className={iconActionClass}
+              disabled={isGhost || !canMoveUp}
+              onClick={isGhost ? undefined : onMoveUp}
+              title="Move up"
+              className={arrowActionClass}
             >
-              <Settings2 size={14} />
+              <ChevronUp size={16} strokeWidth={2.5} />
             </button>
+            <button
+              type="button"
+              disabled={isGhost || !canMoveDown}
+              onClick={isGhost ? undefined : onMoveDown}
+              title="Move down"
+              className={arrowActionClass}
+            >
+              <ChevronDown size={16} strokeWidth={2.5} />
+            </button>
+            <button type="button" disabled={isGhost} onClick={isGhost ? undefined : onRemove} className={textActionClass}>
+              Remove
+            </button>
+            <PriorityControls position={position} onApplyPosition={isGhost ? () => position : onApplyPosition} />
+            {showMockButton ? (
+              <button
+                type="button"
+                disabled={isGhost}
+                onClick={isGhost ? undefined : onConfigureMock}
+                title="Configure test lead mock response"
+                className={iconActionClass}
+              >
+                <Settings2 size={14} />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -380,11 +438,13 @@ function InactiveCampaignCard({
   canMoveToBottom,
   isDragging,
   isHighlighted,
+  isGhost = false,
   onCardPointerDown,
   onApplyPosition,
   onMoveToTop,
   onMoveToBottom,
   onConfigureMock,
+  showMockButton = false,
 }: {
   card: PingTreeCampaignCard;
   position: number;
@@ -392,20 +452,25 @@ function InactiveCampaignCard({
   canMoveToBottom: boolean;
   isDragging: boolean;
   isHighlighted: boolean;
-  onCardPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  isGhost?: boolean;
+  onCardPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onApplyPosition: (value: number) => number;
   onMoveToTop: () => void;
   onMoveToBottom: () => void;
   onConfigureMock: () => void;
+  showMockButton?: boolean;
 }) {
   return (
     <div
-      onPointerDown={onCardPointerDown}
-      style={{ touchAction: "none" }}
+      onPointerDown={isGhost ? undefined : onCardPointerDown}
+      style={{ touchAction: isGhost ? undefined : "none" }}
       className={cn(
-        "cursor-grab overflow-hidden rounded border bg-white transition-colors duration-500 active:cursor-grabbing dark:bg-slate-900",
-        isDragging ? draggingCardClassName : "border-slate-300 dark:border-slate-600",
-        isHighlighted && highlightedCardClassName
+        "overflow-hidden rounded border bg-white dark:bg-slate-900",
+        isGhost
+          ? "cursor-grabbing border-slate-300 shadow-2xl ring-2 ring-slate-400/40 dark:border-slate-500 dark:ring-slate-300/20"
+          : "cursor-grab transition-[opacity,transform,background-color,border-color,box-shadow] duration-150 ease-out active:cursor-grabbing",
+        !isGhost && (isDragging ? draggingCardClassName : !isHighlighted && "border-slate-300 dark:border-slate-600"),
+        !isGhost && isHighlighted && highlightedCardClassName
       )}
     >
       <div className="flex items-start justify-between gap-3 px-2.5 py-2">
@@ -417,21 +482,34 @@ function InactiveCampaignCard({
       </div>
 
       <div className={inactiveCardActionsClass} data-no-drag>
-        <button type="button" disabled={!canMoveToTop} onClick={onMoveToTop} className={textActionClass}>
-          To the top
-        </button>
-        <button type="button" disabled={!canMoveToBottom} onClick={onMoveToBottom} className={textActionClass}>
-          To the bottom
-        </button>
-        <PriorityControls position={position} onApplyPosition={onApplyPosition} />
         <button
           type="button"
-          onClick={onConfigureMock}
-          title="Configure test lead mock response"
-          className={iconActionClass}
+          disabled={isGhost || !canMoveToTop}
+          onClick={isGhost ? undefined : onMoveToTop}
+          className={textActionClass}
         >
-          <Settings2 size={14} />
+          To the top
         </button>
+        <button
+          type="button"
+          disabled={isGhost || !canMoveToBottom}
+          onClick={isGhost ? undefined : onMoveToBottom}
+          className={textActionClass}
+        >
+          To the bottom
+        </button>
+        <PriorityControls position={position} onApplyPosition={isGhost ? () => position : onApplyPosition} />
+        {showMockButton ? (
+          <button
+            type="button"
+            disabled={isGhost}
+            onClick={isGhost ? undefined : onConfigureMock}
+            title="Configure test lead mock response"
+            className={iconActionClass}
+          >
+            <Settings2 size={14} />
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -454,12 +532,19 @@ export function PingTreeSettingsPage({
   const [inactiveFilter, setInactiveFilter] = useState("");
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<DropIndicatorPosition | null>(null);
-  const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTabRefreshing, setIsTabRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [testMode, setTestMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("ping-tree-test-mode") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [mockModalCard, setMockModalCard] = useState<PingTreeCampaignCard | null>(null);
   const [isSavingMock, setIsSavingMock] = useState(false);
   const [highlightedCampaignId, setHighlightedCampaignId] = useState<string | null>(null);
@@ -470,6 +555,11 @@ export function PingTreeSettingsPage({
   const prioritiesRef = useRef(priorities);
   const dropTargetRef = useRef<DropTarget | null>(null);
   const dropTargetKeyRef = useRef("");
+  const dragSessionRef = useRef<DragSession | null>(null);
+  const dragGhostRef = useRef<HTMLDivElement | null>(null);
+  const dragRafRef = useRef<number | null>(null);
+  const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const flipRectsRef = useRef<Map<string, DOMRect>>(new Map());
   const activeColumnRef = useRef<HTMLDivElement | null>(null);
   const activeListRef = useRef<HTMLDivElement | null>(null);
   const inactiveColumnRef = useRef<HTMLDivElement | null>(null);
@@ -486,7 +576,7 @@ export function PingTreeSettingsPage({
     highlightTimeoutRef.current = setTimeout(() => {
       setHighlightedCampaignId(null);
       highlightTimeoutRef.current = null;
-    }, 1200);
+    }, 1600);
   }, []);
 
   useEffect(() => {
@@ -522,6 +612,29 @@ export function PingTreeSettingsPage({
     [notInPingTree, inactiveFilter]
   );
 
+  const inactiveDisplayOrder = useMemo(() => {
+    const groups = new Map<string, PingTreeCampaignCard[]>();
+
+    for (const card of filteredInactiveList) {
+      const key = card.buyerLabel || "Unknown";
+      const bucket = groups.get(key) ?? [];
+      bucket.push(card);
+      groups.set(key, bucket);
+    }
+
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .flatMap(([, cards]) =>
+        [...cards].sort((left, right) => {
+          if (left.minPrice !== right.minPrice) {
+            return left.minPrice - right.minPrice;
+          }
+
+          return left.displayId - right.displayId;
+        })
+      );
+  }, [filteredInactiveList]);
+
   const inactiveGroups = useMemo(() => {
     const groups = new Map<string, PingTreeCampaignCard[]>();
 
@@ -545,6 +658,27 @@ export function PingTreeSettingsPage({
         }),
       ] as const);
   }, [filteredInactiveList]);
+
+  const activePreviewItems = useMemo(() => {
+    if (!dragSession?.activated) {
+      return filteredActiveList.map((card) => {
+        const hitIndex = pingTreeList.findIndex((item) => item.id === card.id);
+        return { kind: "card" as const, card, hitIndex: Math.max(0, hitIndex) };
+      });
+    }
+
+    const insertIndex = dropTarget?.side === "active" ? dropTarget.index : null;
+    return buildDragPreviewItems(filteredActiveList, dragSession.campaignId, insertIndex);
+  }, [dragSession, dropTarget, filteredActiveList, pingTreeList]);
+
+  const inactivePreviewItems = useMemo(() => {
+    if (!dragSession?.activated) {
+      return null;
+    }
+
+    const insertIndex = dropTarget?.side === "inactive" ? dropTarget.index : null;
+    return buildDragPreviewItems(inactiveDisplayOrder, dragSession.campaignId, insertIndex);
+  }, [dragSession, dropTarget, inactiveDisplayOrder]);
 
   const setDropTargetWithRef = useCallback((target: DropTarget | null) => {
     const nextKey = dropTargetKey(target);
@@ -578,7 +712,7 @@ export function PingTreeSettingsPage({
   const editorTreeUrl = useCallback(
     (treeId: string) =>
       configId
-        ? `/api/ping-tree-configs/${encodeURIComponent(configId)}/tree`
+        ? `/api/ping-tree-configs/tree/${encodeURIComponent(treeId)}`
         : `/api/ping-trees/${encodeURIComponent(treeId)}`,
     [configId]
   );
@@ -594,13 +728,19 @@ export function PingTreeSettingsPage({
 
       try {
         const response = await fetch(editorTreeUrl(treeId));
-        if (!response.ok) return;
+        if (!response.ok) {
+          setLoadError("Failed to load ping tree campaigns. Please go back and try again.");
+          return;
+        }
         const data = (await response.json()) as {
           tree: PingTreeRecord;
           pingTreeList: PingTreeCampaignCard[];
           notInPingTree: PingTreeCampaignCard[];
         };
+        setLoadError(null);
         applyTreeData(data);
+      } catch {
+        setLoadError("Failed to load ping tree campaigns. Please go back and try again.");
       } finally {
         if (withSpinner) {
           setIsLoading(false);
@@ -648,11 +788,12 @@ export function PingTreeSettingsPage({
     setActiveSearch("");
     setInactiveFilter("");
     setDragSession(null);
+    dragSessionRef.current = null;
     setDropTarget(null);
-    setDropIndicator(null);
-    setPointerPosition(null);
+    latestPointerRef.current = null;
     dropTargetKeyRef.current = "";
     dropTargetRef.current = null;
+    flipRectsRef.current.clear();
     setIsDirty(false);
     setActiveTab(tab);
   };
@@ -791,11 +932,6 @@ export function PingTreeSettingsPage({
     setPingTreeList(nextActive);
     setNotInPingTree(nextInactive);
   }, []);
-
-  const inactiveDisplayOrder = useMemo(
-    () => inactiveGroups.flatMap(([, cards]) => cards),
-    [inactiveGroups]
-  );
 
   const applyOrderChange = useCallback(
     (nextActiveIds: string[], nextInactiveIds: string[], highlightId?: string) => {
@@ -960,13 +1096,39 @@ export function PingTreeSettingsPage({
     [resolvePointerDropTarget, setDropTargetWithRef]
   );
 
+  const updateGhostPosition = useCallback((clientX: number, clientY: number) => {
+    const ghost = dragGhostRef.current;
+    const session = dragSessionRef.current;
+    if (!ghost || !session) return;
+
+    ghost.style.transform = `translate3d(${clientX - session.offsetX}px, ${clientY - session.offsetY}px, 0)`;
+    ghost.style.width = `${session.width}px`;
+  }, []);
+
   const clearDragState = useCallback(() => {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+
+    dragSessionRef.current = null;
+    latestPointerRef.current = null;
+    flipRectsRef.current.clear();
     setDragSession(null);
     setDropTargetWithRef(null);
-    setDropIndicator(null);
-    setPointerPosition(null);
     dropTargetKeyRef.current = "";
   }, [setDropTargetWithRef]);
+
+  const activateDragSession = useCallback(
+    (session: DragSession, clientX: number, clientY: number) => {
+      const activatedSession = { ...session, activated: true };
+      dragSessionRef.current = activatedSession;
+      setDragSession(activatedSession);
+      latestPointerRef.current = { x: clientX, y: clientY };
+      updateDropTargetFromPointer(clientX, clientY);
+    },
+    [updateDropTargetFromPointer]
+  );
 
   const startPointerDrag = (campaignId: string, sourceSide: "active" | "inactive", event: React.PointerEvent) => {
     if (event.button !== 0 || shouldIgnoreCardDrag(event.target)) {
@@ -976,36 +1138,74 @@ export function PingTreeSettingsPage({
     event.preventDefault();
     event.stopPropagation();
 
-    setDragSession({
+    const cardElement = event.currentTarget as HTMLElement;
+    const rect = cardElement.getBoundingClientRect();
+
+    const session: DragSession = {
       campaignId,
       sourceSide,
       pointerId: event.pointerId,
-    });
-    setPointerPosition({ x: event.clientX, y: event.clientY });
-    updateDropTargetFromPointer(event.clientX, event.clientY);
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      activated: false,
+    };
+
+    dragSessionRef.current = session;
+    latestPointerRef.current = { x: event.clientX, y: event.clientY };
+    setDragSession(session);
   };
 
   useLayoutEffect(() => {
-    if (!dragSession || !dropTarget) {
-      setDropIndicator(null);
+    if (!dragSession?.activated) return;
+
+    const pointer = latestPointerRef.current;
+    if (!pointer) return;
+
+    updateGhostPosition(pointer.x, pointer.y);
+  }, [dragSession?.activated, dragSession?.campaignId, updateGhostPosition]);
+
+  useLayoutEffect(() => {
+    if (!dragSession?.activated) {
+      flipRectsRef.current.clear();
       return;
     }
 
-    const columnRef = dropTarget.side === "active" ? activeColumnRef : inactiveColumnRef;
-    const listRef = dropTarget.side === "active" ? activeListRef : inactiveListRef;
-    const cardSelector =
-      dropTarget.side === "active" ? "[data-ping-tree-card-index]" : "[data-ping-tree-inactive-card-index]";
+    const roots = [activeListRef.current, inactiveListRef.current];
+    const nextRects = new Map<string, DOMRect>();
 
-    if (!columnRef.current || !listRef.current) {
-      setDropIndicator(null);
-      return;
+    for (const root of roots) {
+      if (!root) continue;
+
+      root.querySelectorAll<HTMLElement>("[data-flip-id]").forEach((element) => {
+        const flipId = element.dataset.flipId;
+        if (!flipId) return;
+
+        const nextRect = element.getBoundingClientRect();
+        nextRects.set(flipId, nextRect);
+
+        const prevRect = flipRectsRef.current.get(flipId);
+        if (!prevRect) return;
+
+        const dx = prevRect.left - nextRect.left;
+        const dy = prevRect.top - nextRect.top;
+        if (dx === 0 && dy === 0) return;
+
+        element.style.transition = "none";
+        element.style.transform = `translate(${dx}px, ${dy}px)`;
+
+        requestAnimationFrame(() => {
+          element.style.transition = `transform ${DRAG_FLIP_MS}ms cubic-bezier(0.2, 0.9, 0.3, 1)`;
+          element.style.transform = "";
+        });
+      });
     }
 
-    setDropIndicator({
-      side: dropTarget.side,
-      top: computeIndicatorTop(columnRef.current, listRef.current, cardSelector, dropTarget.index),
-    });
-  }, [dragSession, dropTarget, pingTreeList.length, notInPingTree.length, activeSearch, inactiveFilter]);
+    flipRectsRef.current = nextRects;
+  }, [activePreviewItems, inactivePreviewItems, dragSession?.activated]);
 
   useEffect(() => {
     if (!dragSession) return;
@@ -1013,22 +1213,49 @@ export function PingTreeSettingsPage({
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerId !== dragSession.pointerId) return;
 
-      setPointerPosition({ x: event.clientX, y: event.clientY });
-      updateDropTargetFromPointer(event.clientX, event.clientY);
+      latestPointerRef.current = { x: event.clientX, y: event.clientY };
+
+      if (dragRafRef.current !== null) return;
+
+      dragRafRef.current = requestAnimationFrame(() => {
+        dragRafRef.current = null;
+
+        const session = dragSessionRef.current;
+        const pointer = latestPointerRef.current;
+        if (!session || !pointer) return;
+
+        if (!session.activated) {
+          const distance = Math.hypot(pointer.x - session.startX, pointer.y - session.startY);
+          if (distance < DRAG_ACTIVATION_DISTANCE_PX) {
+            return;
+          }
+
+          activateDragSession(session, pointer.x, pointer.y);
+          return;
+        }
+
+        updateGhostPosition(pointer.x, pointer.y);
+        autoScrollListNearEdge(activeListRef.current, pointer.y);
+        autoScrollListNearEdge(inactiveListRef.current, pointer.y);
+        updateDropTargetFromPointer(pointer.x, pointer.y);
+      });
     };
 
     const handlePointerUp = (event: PointerEvent) => {
       if (event.pointerId !== dragSession.pointerId) return;
 
-      const target = dropTargetRef.current ?? resolvePointerDropTarget(event.clientX, event.clientY);
-      if (target) {
-        executeDrop(dragSession.campaignId, dragSession.sourceSide, target);
+      const session = dragSessionRef.current;
+      if (session?.activated) {
+        const target = dropTargetRef.current ?? resolvePointerDropTarget(event.clientX, event.clientY);
+        if (target) {
+          executeDrop(session.campaignId, session.sourceSide, target);
+        }
       }
 
       clearDragState();
     };
 
-    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerUp);
 
@@ -1037,20 +1264,31 @@ export function PingTreeSettingsPage({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [clearDragState, dragSession, executeDrop, resolvePointerDropTarget, updateDropTargetFromPointer]);
+  }, [
+    activateDragSession,
+    clearDragState,
+    dragSession,
+    executeDrop,
+    resolvePointerDropTarget,
+    updateDropTargetFromPointer,
+    updateGhostPosition,
+  ]);
 
   useEffect(() => {
-    if (!dragSession) return;
+    if (!dragSession?.activated) return;
 
     const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
     document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
 
     return () => {
       document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
     };
-  }, [dragSession]);
+  }, [dragSession?.activated]);
 
-  const isDragging = Boolean(dragSession);
+  const isDragging = Boolean(dragSession?.activated);
   const draggedCard =
     dragSession &&
     [...pingTreeList, ...notInPingTree].find((card) => card.id === dragSession.campaignId);
@@ -1082,6 +1320,12 @@ export function PingTreeSettingsPage({
 
       {isLoading && !tree ? (
         <ContentAreaLoading message="Loading ping tree..." />
+      ) : loadError && !tree ? (
+        <PageSection>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{loadError}</p>
+          </div>
+        </PageSection>
       ) : tree ? (
       <PageSection>
         <div className="relative">
@@ -1091,7 +1335,7 @@ export function PingTreeSettingsPage({
             {isDragging ? (
               <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
                 <ArrowDown size={14} className="shrink-0 rotate-180" />
-                Drag a campaign card to reorder. A line shows where it will land.
+                Drag to reorder — other cards shift to show the drop position.
               </p>
             ) : null}
             {isDirty ? (
@@ -1100,6 +1344,28 @@ export function PingTreeSettingsPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <label
+              htmlFor="ping-tree-test-mode"
+              className="mr-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+              title="Shows mock settings buttons. Mock responses are used after you Save mock on each campaign."
+            >
+              <span className="font-medium">Test Mode</span>
+              <ToggleSwitch
+                id="ping-tree-test-mode"
+                checked={testMode}
+                onChange={(checked) => {
+                  setTestMode(checked);
+                  try {
+                    window.localStorage.setItem("ping-tree-test-mode", checked ? "1" : "0");
+                  } catch {
+                    // Ignore storage errors (private mode, quota, etc.).
+                  }
+                  if (!checked) {
+                    setMockModalCard(null);
+                  }
+                }}
+              />
+            </label>
             <PrimaryButton type="button" onClick={handleSave} disabled={!isDirty || isSaving}>
               {isSaving ? "Saving..." : "Save"}
             </PrimaryButton>
@@ -1112,12 +1378,7 @@ export function PingTreeSettingsPage({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
           <div
             ref={activeColumnRef}
-            className={cn(
-              "flex flex-col overflow-hidden rounded-lg border bg-white dark:bg-slate-900",
-              isDragging && dropTarget?.side === "active"
-                ? "border-emerald-400 ring-2 ring-emerald-200 dark:border-emerald-500 dark:ring-emerald-500/20"
-                : "border-slate-300 dark:border-slate-600"
-            )}
+            className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
           >
             <ColumnStatsBar
               disabled={activeStats.disabled}
@@ -1139,49 +1400,63 @@ export function PingTreeSettingsPage({
             </div>
 
             <div ref={activeListRef} className="relative max-h-[min(52vh,28rem)] flex-1 space-y-2 overflow-y-auto p-2 sm:max-h-[72vh]">
-              {filteredActiveList.length === 0 ? (
+              {activePreviewItems.length === 0 ? (
                 <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
                   {isDragging ? "Drop here to add to ping tree" : "No campaigns in ping tree"}
                 </div>
               ) : (
-                filteredActiveList.map((card) => {
-                  const index = pingTreeList.findIndex((item) => item.id === card.id);
-                  const position = index < 0 ? 1 : toDescendingPosition(index, pingTreeList.length);
+                activePreviewItems.map((item, itemIndex) => {
+                  if (item.kind === "placeholder") {
+                    return (
+                      <DropPlaceholder
+                        key={`active-placeholder-${itemIndex}`}
+                        height={dragSession?.height ?? 72}
+                        tone="active"
+                      />
+                    );
+                  }
+
+                  const { card, hitIndex } = item;
+                  const listLength = dragSession?.activated
+                    ? Math.max(
+                        filteredActiveList.filter((entry) => entry.id !== dragSession.campaignId).length,
+                        1
+                      )
+                    : Math.max(pingTreeList.length, 1);
+                  const position = toDescendingPosition(hitIndex, listLength);
+
                   return (
-                    <div key={`${card.id}-${positionSyncKey}`} data-ping-tree-card-index={index}>
+                    <div
+                      key={card.id}
+                      data-flip-id={`active-${card.id}`}
+                      data-ping-tree-card-index={hitIndex}
+                      className="will-change-transform"
+                    >
                       <ActiveCampaignCard
                         card={card}
                         position={position}
-                        isDragging={dragSession?.campaignId === card.id}
+                        isDragging={false}
                         isHighlighted={highlightedCampaignId === card.id}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < pingTreeList.length - 1}
+                        canMoveUp={hitIndex > 0}
+                        canMoveDown={hitIndex < listLength - 1}
                         onCardPointerDown={(event) => startPointerDrag(card.id, "active", event)}
                         onApplyPosition={(value) => moveActiveToPosition(card.id, value)}
                         onRemove={() => insertIntoInactive(card.id, 0)}
                         onMoveUp={() => moveActiveByStep(card.id, "up")}
                         onMoveDown={() => moveActiveByStep(card.id, "down")}
                         onConfigureMock={() => setMockModalCard(card)}
+                        showMockButton={testMode}
                       />
                     </div>
                   );
                 })
               )}
-
-              {isDragging && dropIndicator?.side === "active" ? (
-                <DropIndicator top={dropIndicator.top} tone="active" />
-              ) : null}
             </div>
           </div>
 
           <div
             ref={inactiveColumnRef}
-            className={cn(
-              "flex flex-col overflow-hidden rounded-lg border bg-white dark:bg-slate-900",
-              isDragging && dropTarget?.side === "inactive"
-                ? "border-rose-300 ring-2 ring-rose-200 dark:border-rose-500/60 dark:ring-rose-500/20"
-                : "border-slate-300 dark:border-slate-600"
-            )}
+            className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
           >
             <ColumnStatsBar
               disabled={inactiveStats.disabled}
@@ -1203,9 +1478,60 @@ export function PingTreeSettingsPage({
             </div>
 
             <div ref={inactiveListRef} className="relative max-h-[min(52vh,28rem)] flex-1 overflow-y-auto p-2 sm:max-h-[72vh]">
-              {filteredInactiveList.length === 0 ? (
+              {isDragging && inactivePreviewItems ? (
+                inactivePreviewItems.length === 0 ? (
+                  <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
+                    Drop here to remove from ping tree
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {inactivePreviewItems.map((item, itemIndex) => {
+                      if (item.kind === "placeholder") {
+                        return (
+                          <DropPlaceholder
+                            key={`inactive-placeholder-${itemIndex}`}
+                            height={dragSession?.height ?? 72}
+                            tone="inactive"
+                          />
+                        );
+                      }
+
+                      const { card, hitIndex } = item;
+                      const listLength = Math.max(
+                        inactiveDisplayOrder.filter((entry) => entry.id !== dragSession?.campaignId).length,
+                        1
+                      );
+                      const position = toDescendingPosition(hitIndex, listLength);
+
+                      return (
+                        <div
+                          key={card.id}
+                          data-flip-id={`inactive-${card.id}`}
+                          data-ping-tree-inactive-card-index={hitIndex}
+                          className="will-change-transform"
+                        >
+                          <InactiveCampaignCard
+                            card={card}
+                            position={position}
+                            isDragging={false}
+                            isHighlighted={highlightedCampaignId === card.id}
+                            canMoveToTop={hitIndex > 0}
+                            canMoveToBottom={hitIndex < listLength - 1}
+                            onCardPointerDown={(event) => startPointerDrag(card.id, "inactive", event)}
+                            onApplyPosition={(value) => moveInactiveToPosition(card.id, value)}
+                            onMoveToTop={() => moveInactiveToEdge(card.id, "top")}
+                            onMoveToBottom={() => moveInactiveToEdge(card.id, "bottom")}
+                            onConfigureMock={() => setMockModalCard(card)}
+                            showMockButton={testMode}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : filteredInactiveList.length === 0 ? (
                 <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
-                  {isDragging ? "Drop here to remove from ping tree" : "All campaigns are in ping tree"}
+                  All campaigns are in ping tree
                 </div>
               ) : (
                 inactiveGroups.map(([buyerLabel, cards]) => (
@@ -1217,11 +1543,16 @@ export function PingTreeSettingsPage({
                         const position =
                           index < 0 ? 1 : toDescendingPosition(index, inactiveDisplayOrder.length);
                         return (
-                          <div key={`${card.id}-${positionSyncKey}`} data-ping-tree-inactive-card-index={index}>
+                          <div
+                            key={card.id}
+                            data-flip-id={`inactive-${card.id}`}
+                            data-ping-tree-inactive-card-index={index}
+                            className="will-change-transform"
+                          >
                             <InactiveCampaignCard
                               card={card}
                               position={position}
-                              isDragging={dragSession?.campaignId === card.id}
+                              isDragging={false}
                               isHighlighted={highlightedCampaignId === card.id}
                               canMoveToTop={index > 0}
                               canMoveToBottom={index < inactiveDisplayOrder.length - 1}
@@ -1230,6 +1561,7 @@ export function PingTreeSettingsPage({
                               onMoveToTop={() => moveInactiveToEdge(card.id, "top")}
                               onMoveToBottom={() => moveInactiveToEdge(card.id, "bottom")}
                               onConfigureMock={() => setMockModalCard(card)}
+                              showMockButton={testMode}
                             />
                           </div>
                         );
@@ -1238,10 +1570,6 @@ export function PingTreeSettingsPage({
                   </div>
                 ))
               )}
-
-              {isDragging && dropIndicator?.side === "inactive" ? (
-                <DropIndicator top={dropIndicator.top} tone="inactive" />
-              ) : null}
             </div>
           </div>
         </div>
@@ -1249,16 +1577,53 @@ export function PingTreeSettingsPage({
       </PageSection>
       ) : null}
 
-      {dragSession && pointerPosition && draggedCard ? (
+      {dragSession?.activated && draggedCard ? (
         <div
-          className="pointer-events-none fixed z-50 w-72 rounded-xl border border-slate-400 bg-slate-50 p-3 shadow-lg dark:border-slate-500 dark:bg-slate-900"
+          ref={dragGhostRef}
+          className="pointer-events-none fixed left-0 top-0 z-50 will-change-transform"
           style={{
-            left: pointerPosition.x + 12,
-            top: pointerPosition.y + 12,
+            transform: "translate3d(-9999px, -9999px, 0)",
+            width: dragSession.width,
           }}
         >
-          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{formatCampaignLabel(draggedCard)}</p>
-          <p className="text-xs text-slate-500">${draggedCard.minPrice.toFixed(2)}</p>
+          {dragSession.sourceSide === "active" ? (
+            <ActiveCampaignCard
+              card={draggedCard}
+              position={(() => {
+                const index = pingTreeList.findIndex((item) => item.id === draggedCard.id);
+                return index < 0 ? 1 : toDescendingPosition(index, Math.max(pingTreeList.length, 1));
+              })()}
+              isDragging={false}
+              isHighlighted={false}
+              isGhost
+              canMoveUp={false}
+              canMoveDown={false}
+              onApplyPosition={(value) => value}
+              onRemove={() => undefined}
+              onMoveUp={() => undefined}
+              onMoveDown={() => undefined}
+              onConfigureMock={() => undefined}
+              showMockButton={testMode}
+            />
+          ) : (
+            <InactiveCampaignCard
+              card={draggedCard}
+              position={(() => {
+                const index = notInPingTree.findIndex((item) => item.id === draggedCard.id);
+                return index < 0 ? 1 : toDescendingPosition(index, Math.max(notInPingTree.length, 1));
+              })()}
+              isDragging={false}
+              isHighlighted={false}
+              isGhost
+              canMoveToTop={false}
+              canMoveToBottom={false}
+              onApplyPosition={(value) => value}
+              onMoveToTop={() => undefined}
+              onMoveToBottom={() => undefined}
+              onConfigureMock={() => undefined}
+              showMockButton={testMode}
+            />
+          )}
         </div>
       ) : null}
 

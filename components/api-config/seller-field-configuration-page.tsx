@@ -801,8 +801,7 @@ export function SellerFieldConfigurationPage() {
                 disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
                 onClick={openCreateModal}
               >
-                <Plus size={15} />
-                <span>Add Field</span>
+                Add Field
               </PrimaryButton>
             </div>
           ) : null

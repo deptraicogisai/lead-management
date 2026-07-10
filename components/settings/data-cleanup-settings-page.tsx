@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { CancelButton, DangerButton } from "@/components/ui/action-buttons";
 import { PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
@@ -162,7 +162,6 @@ export function DataCleanupSettingsPage() {
             onClick={handleOpenConfirm}
             disabled={isLoading || isClearing || selectedWithData.length === 0}
           >
-            <Trash2 size={16} />
             Clear Selected Lists
           </DangerButton>
         </div>

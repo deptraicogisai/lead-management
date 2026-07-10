@@ -28,6 +28,21 @@ export function buttonLabelText(children: ReactNode): string {
   return "";
 }
 
+/** True when children already render a Lucide-style icon (has numeric `size` prop). */
+export function childrenIncludeIcon(children: ReactNode): boolean {
+  if (children == null || typeof children === "boolean") return false;
+  if (typeof children === "string" || typeof children === "number") return false;
+  if (Array.isArray(children)) return children.some(childrenIncludeIcon);
+  if (typeof children === "object" && "props" in children) {
+    const props = (children as { props?: { size?: unknown; children?: ReactNode } }).props;
+    if (props && typeof props.size === "number") {
+      return true;
+    }
+    return childrenIncludeIcon(props?.children);
+  }
+  return false;
+}
+
 export function inferPrimaryIcon(label: string): LucideIcon {
   const text = label.toLowerCase().trim();
   if (!text) return Save;
@@ -35,7 +50,7 @@ export function inferPrimaryIcon(label: string): LucideIcon {
   if (text.includes("creat") || text.includes("add") || text.includes("new")) return Plus;
   if (text.includes("import")) return Upload;
   if (text.includes("export")) return Download;
-  if (text.includes("apply") || text.includes("confirm")) return Check;
+  if (text.includes("select all") || text.includes("apply") || text.includes("confirm")) return Check;
   if (text.includes("copy")) return Copy;
   if (text.includes("test") || text.includes("run") || text.includes("mock") || text.includes("send")) return Play;
   if (text.includes("retry") || text.includes("again")) return RotateCcw;
@@ -47,13 +62,13 @@ export function inferPrimaryIcon(label: string): LucideIcon {
 export function inferTableActionIcon(label: string): LucideIcon {
   const text = label.toLowerCase().trim();
   if (text.includes("delete") || text.includes("remove")) return Trash2;
-  if (text.includes("edit")) return Pencil;
+  if (text.includes("edit") || text.includes("rename")) return Pencil;
+  if (text.includes("duplicate") || text.includes("clone") || text.includes("copy")) return Copy;
   if (text.includes("view")) return Eye;
-  if (text.includes("api") || text.includes("config")) return Settings2;
-  if (text.includes("configure")) return Settings2;
-  if (text.includes("clone")) return Copy;
+  if (text.includes("api") || text.includes("config") || text.includes("configure")) return Settings2;
   if (text.includes("export")) return Download;
   if (text.includes("test")) return Play;
+  if (text.includes("restore")) return RotateCcw;
   return Eye;
 }
 

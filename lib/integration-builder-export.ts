@@ -1,5 +1,5 @@
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
-import { normalizeResponseMapping } from "@/lib/response-mapping";
+import { DEFAULT_ERROR_REASON, normalizeResponseMapping } from "@/lib/response-mapping";
 
 const EXPORT_TYPE = "direct" as const;
 const EXPORT_VERSION = 1;
@@ -241,7 +241,7 @@ export function buildIntegrationBuilderExportPayload(
         reason: getResponseFieldValue(responseMapping.fields, "Reject::Reason"),
       },
       error: {
-        reason: getResponseFieldValue(responseMapping.fields, "Error::Reason") || "Invalid response from buyer",
+        reason: getResponseFieldValue(responseMapping.fields, "Error::Reason") || DEFAULT_ERROR_REASON,
       },
       additionalVariables: [],
       pingPostCall: {

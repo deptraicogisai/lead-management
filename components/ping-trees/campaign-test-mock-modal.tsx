@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  buildCampaignTestMockBuyerResponse,
   CAMPAIGN_TEST_MOCK_STATUS_OPTIONS,
   DEFAULT_CAMPAIGN_TEST_MOCK,
   sanitizeCampaignTestMock,
@@ -50,18 +51,28 @@ export function CampaignTestMockModal({
     setReasonsText(formatReasons(nextForm.reasons));
   }, [card, open]);
 
+  const isAccept = form.status === "Accept";
+
+  const previewMock = useMemo(
+    () =>
+      sanitizeCampaignTestMock({
+        ...form,
+        reasons: isAccept ? form.reasons : parseReasons(reasonsText),
+      }),
+    [form, isAccept, reasonsText]
+  );
+
+  const previewJson = useMemo(
+    () => JSON.stringify(buildCampaignTestMockBuyerResponse(previewMock), null, 2),
+    [previewMock]
+  );
+
   if (!open || !card) {
     return null;
   }
 
-  const isAccept = form.status === "Accept";
-
   const handleSave = async () => {
-    const nextMock = sanitizeCampaignTestMock({
-      ...form,
-      reasons: isAccept ? form.reasons : parseReasons(reasonsText),
-    });
-    await onSave(card.id, nextMock);
+    await onSave(card.id, previewMock);
   };
 
   return (
@@ -70,7 +81,7 @@ export function CampaignTestMockModal({
       title="Test Lead Mock Response"
       description={`Campaign #${card.displayId}: ${card.name}. Min price $${card.minPrice.toFixed(2)}.`}
       onClose={onClose}
-      panelClassName="max-w-lg"
+      panelClassName="max-w-xl"
       actions={
         <>
           <button
@@ -183,6 +194,17 @@ export function CampaignTestMockModal({
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">One reason per line.</p>
           </div>
         )}
+
+        <div className="min-w-0">
+          <FieldLabel label="Buyer response JSON" />
+          <pre className="mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-slate-950 px-3 py-3 text-xs leading-5 text-emerald-300 dark:border-slate-700">
+            {previewJson}
+          </pre>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Preview of the mock JSON returned to the system for this config
+            {previewMock.timeoutSeconds ? ` (after ${previewMock.timeoutSeconds}s delay)` : ""}.
+          </p>
+        </div>
       </div>
     </Modal>
   );

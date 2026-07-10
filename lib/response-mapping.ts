@@ -8,13 +8,16 @@ export type IntegrationBuilderResponseMapping = {
   fields: IntegrationBuilderResponseMappingField[];
 };
 
+/** Default value for Error::Reason in Response Mapping (editable by user). */
+export const DEFAULT_ERROR_REASON = "Invalid response from buyer";
+
 export const DEFAULT_RESPONSE_MAPPING_FIELDS: IntegrationBuilderResponseMappingField[] = [
   { key: "Sold::Sign", value: "" },
   { key: "Sold::Price", value: "" },
   { key: "Sold::RedirectUrl", value: "" },
   { key: "Reject::Sign", value: "" },
   { key: "Reject::Reason", value: "" },
-  { key: "Error::Reason", value: "" },
+  { key: "Error::Reason", value: DEFAULT_ERROR_REASON },
 ];
 
 export function normalizeResponseMapping(

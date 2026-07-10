@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import {
   AddNewButton,
   ExportButton,
@@ -127,7 +127,7 @@ export function PingTreeConfigPage() {
           processingType,
           includeDeleted: includeDeleted ? "true" : "false",
         });
-        const response = await fetch(`/api/ping-tree-configs?${params.toString()}`);
+        const response = await fetch(`/api/ping-tree-configs?${params.toString()}`, { cache: "no-store" });
         if (!response.ok) return;
         const data = (await response.json()) as PingTreeConfigRecord[];
         setRecords(data);
@@ -157,7 +157,10 @@ export function PingTreeConfigPage() {
     setQuickFilter("");
   };
 
-  const handleSearch = () => setAppliedFilters(draftFilters);
+  const handleSearch = () => {
+    setAppliedFilters({ ...draftFilters });
+    void loadRecords(activeTab, draftFilters.showDeleted);
+  };
 
   const handleClear = () => {
     setDraftFilters(emptyFilters);
@@ -333,7 +336,7 @@ export function PingTreeConfigPage() {
   const handleDuplicate = async (record: PingTreeConfigRecord) => {
     try {
       const response = await fetch(
-        `/api/ping-tree-configs/${encodeURIComponent(record.id)}/duplicate`,
+        `/api/ping-tree-configs/duplicate/${encodeURIComponent(record.id)}`,
         { method: "POST" }
       );
       if (!response.ok) {
@@ -848,7 +851,7 @@ function GroupRows({ label, rows, onConfig, onRename, onDuplicate, onDelete, onR
               onClick={onConfig}
               className="absolute right-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
             >
-              <Settings2 size={13} />
+              <SlidersHorizontal size={13} aria-hidden className="shrink-0" />
               Config
             </button>
           </div>

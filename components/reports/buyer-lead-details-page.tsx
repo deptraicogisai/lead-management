@@ -117,6 +117,7 @@ export function BuyerLeadDetailsPage() {
   const [viewRow, setViewRow] = useState<BuyerLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateDraft = (patch: Partial<BuyerLeadDetailsFilters>) => {
@@ -153,7 +154,10 @@ export function BuyerLeadDetailsPage() {
       beginLoad();
 
       try {
-        const response = await fetch(`/api/reports/buyer/lead-details?${buildQuery(filters, nextPage, nextPageSize)}`);
+        const response = await fetch(
+          `/api/reports/buyer/lead-details?${buildQuery(filters, nextPage, nextPageSize)}`,
+          { cache: "no-store" }
+        );
         if (!response.ok) {
           throw new Error("Failed to load buyer lead details.");
         }
@@ -198,7 +202,7 @@ export function BuyerLeadDetailsPage() {
 
   useEffect(() => {
     void loadRows(appliedFilters, page, pageSize);
-  }, [appliedFilters, page, pageSize, loadRows]);
+  }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
     if (!exportOpen) {
@@ -216,8 +220,9 @@ export function BuyerLeadDetailsPage() {
   }, [exportOpen]);
 
   const handleSearch = () => {
-    setAppliedFilters(draftFilters);
+    setAppliedFilters({ ...draftFilters });
     setPage(1);
+    setSearchNonce((current) => current + 1);
   };
 
   const handleClearAll = () => {

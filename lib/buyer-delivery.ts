@@ -22,6 +22,7 @@ import {
   buildLeadTemplateContext,
   buildMappedValues,
   inferBuyerStatusFromParsedResponse,
+  isResponseMappingErrorReason,
   parseIntegrationResponse,
   type ParsedBuyerResponse,
 } from "@/lib/integration-runtime";
@@ -393,10 +394,7 @@ export async function deliverLeadToBuyer(params: {
     const ambiguousHttpParseError =
       !response.ok &&
       inferred.status === "Error" &&
-      (!inferred.reason ||
-        inferred.reason === "Unrecognized buyer response status." ||
-        inferred.reason === "Empty or unmapped buyer response." ||
-        inferred.reason === "Response mapping could not determine buyer status.");
+      (!inferred.reason || isResponseMappingErrorReason(inferred.reason));
 
     if (ambiguousHttpParseError) {
       return assembleBuyerDeliveryResult({
@@ -420,6 +418,11 @@ export async function deliverLeadToBuyer(params: {
       });
     }
 
+    const resolvedErrorReason =
+      inferred.status === "Error"
+        ? inferred.reason || parsed.errorReason || httpErrorReason
+        : parsed.errorReason;
+
     return assembleBuyerDeliveryResult({
       publisherLead: params.publisherLead,
       systemLead: params.lead,
@@ -429,11 +432,11 @@ export async function deliverLeadToBuyer(params: {
       price: resolvedPrice,
       redirectUrl: parsed.redirectUrl,
       rejectSign: parsed.rejectSign,
-      rejectReason: inferred.reason || parsed.rejectReason,
-      errorReason:
+      rejectReason:
         inferred.status === "Error"
-          ? inferred.reason || parsed.errorReason || httpErrorReason
-          : parsed.errorReason,
+          ? parsed.rejectReason
+          : inferred.reason || parsed.rejectReason,
+      errorReason: resolvedErrorReason,
       postLeadUrl,
       responseBody,
       responseHeaders,

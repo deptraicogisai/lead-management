@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calendar, Copy, Filter, Pencil, Plus, Trash2 } from "lucide-react";
+import { Calendar, Copy, Filter, Pencil, Trash2 } from "lucide-react";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
+import { CopyPublisherScheduleModal } from "@/components/sellers/copy-publisher-schedule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { SectionLoading } from "@/components/ui/loading-indicator";
@@ -59,6 +60,7 @@ export function MappingIntakeSettingsTabs({
   const [isSaving, setIsSaving] = useState(false);
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
+  const [copyScheduleModalOpen, setCopyScheduleModalOpen] = useState(false);
 
   const settingsUrl = `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/intake-settings`;
 
@@ -307,26 +309,17 @@ export function MappingIntakeSettingsTabs({
       ) : null}
 
       {activeTab === "schedule" ? (
-        <DualSaveBar
-          dual={shouldUseDualSaveBar(settings.scheduleRules.length)}
-          renderActions={() => (
-            <PrimaryButton
-              type="button"
-              disabled={isSaving}
-              onClick={() => void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone: settings.timezone }, "Schedule settings saved successfully.")}
-             
-            >
-              {isSaving ? "Saving..." : "Save Schedule Settings"}
-            </PrimaryButton>
-          )}
-        >
         <div className="space-y-4">
           <div className="grid max-w-md gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-timezone" label="Timezone" />
             <select
               id="mapping-timezone"
               value={settings.timezone}
-              onChange={(event) => setSettings({ ...settings, timezone: event.target.value })}
+              onChange={(event) => {
+                const timezone = event.target.value;
+                setSettings({ ...settings, timezone });
+                void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone }, "Timezone saved successfully.");
+              }}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
             >
               {TIMEZONE_OPTIONS.map((timezone) => (
@@ -341,14 +334,15 @@ export function MappingIntakeSettingsTabs({
             <p className="text-sm text-slate-600 dark:text-slate-300">
               {settings.scheduleRules.filter((rule) => rule.active).length} active rule(s) of {settings.scheduleRules.length} total.
             </p>
-            <PrimaryButton type="button"
+            <PrimaryButton
+              type="button"
               onClick={() => {
                 setEditingScheduleRule(null);
                 setScheduleRuleModalOpen(true);
               }}
-              
-            ><Plus size={16} />
-              Add Schedule Rule</PrimaryButton>
+            >
+              Add Schedule Rule
+            </PrimaryButton>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -429,10 +423,21 @@ export function MappingIntakeSettingsTabs({
           </div>
 
           {settings.scheduleRules.length > 0 ? (
-            <CampaignScheduleCalendar rules={settings.scheduleRules} timezone={settings.timezone} />
+            <>
+              <CampaignScheduleCalendar rules={settings.scheduleRules} timezone={settings.timezone} />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCopyScheduleModalOpen(true)}
+                  className={cn(primaryButtonClassName, "inline-flex items-center gap-2")}
+                >
+                  <Copy size={16} />
+                  Copy Schedule
+                </button>
+              </div>
+            </>
           ) : null}
         </div>
-        </DualSaveBar>
       ) : null}
 
       <CampaignScheduleRuleModal
@@ -440,6 +445,13 @@ export function MappingIntakeSettingsTabs({
         onClose={closeScheduleRuleModal}
         initialRule={editingScheduleRule}
         onSave={(rule) => void handleSaveScheduleRule(rule)}
+      />
+
+      <CopyPublisherScheduleModal
+        open={copyScheduleModalOpen}
+        sourceSellerId={sellerId}
+        mappingId={mappingId}
+        onClose={() => setCopyScheduleModalOpen(false)}
       />
 
     </div>

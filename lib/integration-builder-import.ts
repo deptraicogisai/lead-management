@@ -6,6 +6,7 @@ import {
   type IntegrationBuilderResponseMapping,
 } from "@/lib/integration-builder";
 import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
+import { DEFAULT_ERROR_REASON } from "@/lib/response-mapping";
 
 export type IntegrationBuilderImportCreateData = {
   configFields: IntegrationBuilderConfigField[];
@@ -152,7 +153,7 @@ export function buildIntegrationBuilderImportCreateData(
       { key: "Sold::RedirectUrl", value: response?.success?.redirectUrl ?? "" },
       { key: "Reject::Sign", value: response?.reject?.sign ?? "" },
       { key: "Reject::Reason", value: response?.reject?.reason ?? "" },
-      { key: "Error::Reason", value: response?.error?.reason ?? "" },
+      { key: "Error::Reason", value: response?.error?.reason?.trim() || DEFAULT_ERROR_REASON },
     ],
   };
 

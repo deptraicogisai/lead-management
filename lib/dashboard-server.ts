@@ -83,7 +83,8 @@ type ReferenceData = {
   productLabelById: Map<string, string>;
 };
 
-const TOP_RANKING_LIMIT = 10;
+/** Cap ranking rows returned; UI scrolls after ~10 visible rows. */
+const TOP_RANKING_LIMIT = 50;
 const CHART_DAY_COUNT = 8;
 
 function refToString(ref?: { toString(): string } | string | null) {

@@ -111,7 +111,8 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     try {
       const params = new URLSearchParams({ status: ALL_STATUS_VALUES });
       const response = await fetch(
-        `/api/sellers/${encodeURIComponent(sellerId)}/traffic-sources?${params.toString()}`
+        `/api/sellers/${encodeURIComponent(sellerId)}/traffic-sources?${params.toString()}`,
+        { cache: "no-store" }
       );
       if (!response.ok) return;
 
@@ -192,6 +193,7 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     });
     setPage(1);
     setSelectedIds([]);
+    void loadTrafficSources();
   };
 
   const clearFilters = () => {
@@ -202,6 +204,7 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     setAppliedFilters(emptyFilters);
     setPage(1);
     setSelectedIds([]);
+    void loadTrafficSources();
   };
 
   const toggleRow = (rowId: string) => {

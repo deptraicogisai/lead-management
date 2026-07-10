@@ -231,6 +231,7 @@ export function PublisherPerformanceSummaryPage() {
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   const updateDraft = (patch: Partial<PublisherPerformanceFilters>) => {
@@ -262,7 +263,8 @@ export function PublisherPerformanceSummaryPage() {
 
       try {
         const response = await fetch(
-          `/api/reports/publisher/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`
+          `/api/reports/publisher/performance-summary?${buildQuery(filters, nextPage, nextPageSize)}`,
+          { cache: "no-store" }
         );
         if (!response.ok) {
           throw new Error("Failed to load publisher performance summary.");
@@ -290,7 +292,7 @@ export function PublisherPerformanceSummaryPage() {
 
   useEffect(() => {
     void loadRows(appliedFilters, page, pageSize);
-  }, [appliedFilters, page, pageSize, loadRows]);
+  }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
     if (!exportOpen) {
@@ -310,6 +312,7 @@ export function PublisherPerformanceSummaryPage() {
   const handleSearch = () => {
     setAppliedFilters({ ...draftFilters });
     setPage(1);
+    setSearchNonce((current) => current + 1);
   };
 
   const handleClearAll = () => {

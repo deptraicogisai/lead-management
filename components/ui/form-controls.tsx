@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import {
   buttonLabelText,
   cancelIcon,
+  childrenIncludeIcon,
   dangerIcon,
   IconText,
   inferPrimaryIcon,
@@ -234,7 +235,10 @@ export function PrimaryButton({
   className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
-  const resolvedIcon = icon === false ? null : (icon ?? inferPrimaryIcon(buttonLabelText(children)));
+  const resolvedIcon =
+    icon === false || childrenIncludeIcon(children)
+      ? null
+      : (icon ?? inferPrimaryIcon(buttonLabelText(children)));
 
   return (
     <button {...props} className={cn(primaryButtonClassName, className)}>
@@ -278,14 +282,16 @@ export function CancelButton({
   className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  const resolvedIcon = icon === false || childrenIncludeIcon(children) ? null : icon;
+
   return (
     <button {...props} className={cn(cancelButtonClassName, className)}>
-      {icon === false ? (
-        children
-      ) : (
-        <IconText icon={icon} size={iconSize}>
+      {resolvedIcon ? (
+        <IconText icon={resolvedIcon} size={iconSize}>
           {children}
         </IconText>
+      ) : (
+        children
       )}
     </button>
   );
@@ -298,14 +304,16 @@ export function DangerButton({
   className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  const resolvedIcon = icon === false || childrenIncludeIcon(children) ? null : icon;
+
   return (
     <button {...props} className={cn(dangerButtonClassName, className)}>
-      {icon === false ? (
-        children
-      ) : (
-        <IconText icon={icon} size={iconSize}>
+      {resolvedIcon ? (
+        <IconText icon={resolvedIcon} size={iconSize}>
           {children}
         </IconText>
+      ) : (
+        children
       )}
     </button>
   );
@@ -318,14 +326,16 @@ export function WarningButton({
   className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: LucideIcon | false; iconSize?: number }) {
+  const resolvedIcon = icon === false || childrenIncludeIcon(children) ? null : icon;
+
   return (
     <button {...props} className={cn(warningButtonClassName, className)}>
-      {icon === false ? (
-        children
-      ) : (
-        <IconText icon={icon} size={iconSize}>
+      {resolvedIcon ? (
+        <IconText icon={resolvedIcon} size={iconSize}>
           {children}
         </IconText>
+      ) : (
+        children
       )}
     </button>
   );

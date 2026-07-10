@@ -45,9 +45,11 @@ export function mapPingTreeTypeToProcessingType(
 
 export function buildAllocationBucketKey(
   verticalRefId: string,
-  processingType: PingTreeProcessingType
+  processingType: PingTreeProcessingType,
+  scope: "live" | "test" = "live"
 ) {
-  return `${verticalRefId}:${processingType}`;
+  const base = `${verticalRefId}:${processingType}`;
+  return scope === "test" ? `test:${base}` : base;
 }
 
 /** Counter bucket for publisher-specific distribution overrides. */
@@ -55,10 +57,12 @@ export function buildPublisherAllocationBucketKey(
   sellerRefId: string,
   verticalRefId: string,
   mappingRefId: string | null,
-  processingType: PingTreeProcessingType
+  processingType: PingTreeProcessingType,
+  scope: "live" | "test" = "live"
 ) {
   const channelKey = mappingRefId ?? "all";
-  return `publisher:${sellerRefId}:${verticalRefId}:${channelKey}:${processingType}`;
+  const base = `publisher:${sellerRefId}:${verticalRefId}:${channelKey}:${processingType}`;
+  return scope === "test" ? `test:${base}` : base;
 }
 
 function normalizeCountsMap(raw: unknown, candidateIds: string[]): Record<string, number> {
@@ -253,6 +257,9 @@ async function reserveAllocationSlot(params: {
  * When a publisher distribution exists for (seller, channel, product, type), its
  * percentages override the global Ping Tree Settings split. Otherwise the global
  * bucket (vertical + processing type) is used.
+ *
+ * `allocationScope: "test"` still advances counters (so 40/60 splits work during
+ * Test Lead / mock posts) but uses a separate bucket that does not skew live totals.
  */
 export async function selectPingTreeConfig(params: {
   verticalRefId: string;
@@ -260,9 +267,11 @@ export async function selectPingTreeConfig(params: {
   count: boolean;
   sellerRefId?: string;
   mappingRefId?: string | null;
+  allocationScope?: "live" | "test";
 }): Promise<SelectedPingTreeConfig | null> {
   await connectToDatabase();
 
+  const allocationScope = params.allocationScope ?? "live";
   const configs = await loadActiveBucketConfigs(params.verticalRefId, params.processingType);
   if (configs.length === 0) {
     return null;
@@ -300,7 +309,8 @@ export async function selectPingTreeConfig(params: {
         params.sellerRefId!,
         params.verticalRefId,
         publisherDistribution.mappingRef,
-        params.processingType
+        params.processingType,
+        allocationScope
       );
     } else {
       trees = configs.map((config) => ({
@@ -308,7 +318,7 @@ export async function selectPingTreeConfig(params: {
         percent: typeof config.percent === "number" ? config.percent : 0,
         displayId: config.displayId ?? null,
       }));
-      bucketKey = buildAllocationBucketKey(params.verticalRefId, params.processingType);
+      bucketKey = buildAllocationBucketKey(params.verticalRefId, params.processingType, allocationScope);
     }
   } else {
     trees = configs.map((config) => ({
@@ -316,7 +326,7 @@ export async function selectPingTreeConfig(params: {
       percent: typeof config.percent === "number" ? config.percent : 0,
       displayId: config.displayId ?? null,
     }));
-    bucketKey = buildAllocationBucketKey(params.verticalRefId, params.processingType);
+    bucketKey = buildAllocationBucketKey(params.verticalRefId, params.processingType, allocationScope);
   }
 
   let winnerId: string | null;
@@ -329,6 +339,7 @@ export async function selectPingTreeConfig(params: {
       trees,
     });
   } else {
+    // Peek-only: used for previews. Prefer count:true for real posts so splits advance.
     const doc = await PingTreeAllocationModel.findOne({ bucketKey }).lean();
     const counts = normalizeCountsMap(
       doc?.counts,

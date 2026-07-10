@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { Types } from "mongoose";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated } from "@/lib/models/industry";
-import { ensureVerticalMappingReferencesMigrated } from "@/lib/models/vertical-mapping";
+import {
+  ensureVerticalMappingReferencesMigrated,
+  VerticalMappingModel,
+} from "@/lib/models/vertical-mapping";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
   syncGeneralFiltersWithFields,
@@ -18,6 +22,7 @@ import {
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
+import { cloneScheduleRulesForCopy } from "@/lib/campaign-schedule-copy";
 import {
   ensureSellerVerticalMappingFieldsSeededById,
   findSellerVerticalMappingById,
@@ -31,6 +36,12 @@ type IntakeSettingsUpdatePayload = {
   duplicates?: CampaignDuplicatesSettings;
   generalFilters?: CampaignGeneralFilter[];
   scheduleRules?: CampaignScheduleRule[];
+};
+
+type IntakeSettingsActionPayload = {
+  action?: string;
+  rule?: CampaignScheduleRule;
+  targetSellerIds?: string[];
 };
 
 export async function GET(_: Request, context: Params) {
@@ -134,7 +145,7 @@ export async function PATCH(req: Request, context: Params) {
 export async function POST(req: Request, context: Params) {
   try {
     const { id, mappingId } = await context.params;
-    const body = (await req.json()) as { action?: string; rule?: CampaignScheduleRule };
+    const body = (await req.json()) as IntakeSettingsActionPayload;
 
     await connectToDatabase();
     await ensureVerticalMappingReferencesMigrated();
@@ -142,6 +153,99 @@ export async function POST(req: Request, context: Params) {
     const mapping = await findSellerVerticalMappingById(id, mappingId);
     if (!mapping) {
       return NextResponse.json({ message: "Seller API not found." }, { status: 404 });
+    }
+
+    if (body.action === "copy-schedule") {
+      const targetSellerIds = Array.isArray(body.targetSellerIds)
+        ? body.targetSellerIds.filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0
+          )
+        : [];
+
+      if (targetSellerIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one publisher." }, { status: 400 });
+      }
+
+      if (!mapping.verticalRef) {
+        return NextResponse.json(
+          { message: "This publisher mapping has no product assigned." },
+          { status: 400 }
+        );
+      }
+
+      const copiedRules = cloneScheduleRulesForCopy(
+        (mapping.scheduleRules ?? []).map((rule) => ({
+          id: rule._id?.toString() ?? "",
+          active: Boolean(rule.active),
+          action: rule.action,
+          scheduleMethod: rule.scheduleMethod,
+          days: rule.days ?? [],
+          startHour: rule.startHour,
+          startMinute: rule.startMinute,
+          endHour: rule.endHour,
+          endMinute: rule.endMinute,
+          dailySoldLeadsLimit: rule.dailySoldLeadsLimit ?? null,
+          dailyPostLeadsLimit: rule.dailyPostLeadsLimit ?? null,
+        }))
+      );
+
+      const overlapMessage = validateScheduleRulesNoOverlap(
+        copiedRules.map((rule, index) => ({ ...rule, id: `copy-${index}` }))
+      );
+      if (overlapMessage) {
+        return NextResponse.json({ message: overlapMessage }, { status: 409 });
+      }
+
+      const schedulePayload = copiedRules.map((rule) => ({
+        active: rule.active,
+        action: rule.action,
+        scheduleMethod: rule.scheduleMethod,
+        days: rule.days,
+        startHour: rule.startHour,
+        startMinute: rule.startMinute,
+        endHour: rule.endHour,
+        endMinute: rule.endMinute,
+        dailySoldLeadsLimit: rule.dailySoldLeadsLimit,
+        dailyPostLeadsLimit: rule.dailyPostLeadsLimit,
+      }));
+
+      let updatedCount = 0;
+
+      for (const targetSellerId of targetSellerIds) {
+        if (!Types.ObjectId.isValid(targetSellerId) || targetSellerId === id) {
+          continue;
+        }
+
+        const targetMappings = await VerticalMappingModel.find({
+          sellerRef: new Types.ObjectId(targetSellerId),
+          verticalRef: mapping.verticalRef,
+        });
+
+        for (const targetMapping of targetMappings) {
+          targetMapping.set("scheduleRules", schedulePayload);
+          if (mapping.timezone) {
+            targetMapping.timezone = mapping.timezone;
+          }
+          targetMapping.markModified("scheduleRules");
+          await targetMapping.save();
+          updatedCount += 1;
+        }
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json(
+          {
+            message:
+              "No matching publisher product mappings were updated. Selected publishers may not have this product configured.",
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        message: `Schedule copied to ${updatedCount} publisher mapping(s).`,
+        updatedCount,
+      });
     }
 
     if (body.action === "add-schedule-rule") {

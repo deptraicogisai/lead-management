@@ -67,7 +67,7 @@ export function PresentListsPage() {
       if (appliedFilters.listType !== "All") params.set("listType", appliedFilters.listType);
       if (appliedFilters.name) params.set("name", appliedFilters.name);
 
-      const response = await fetch(`/api/present-lists?${params.toString()}`);
+      const response = await fetch(`/api/present-lists?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) return;
       const data = (await response.json()) as PresentListResponse;
       setRows(data.items);
@@ -184,14 +184,16 @@ export function PresentListsPage() {
           </SearchFilterGrid>
           <SearchFilterActions
             onSearch={() => {
-              setAppliedFilters(draftFilters);
+              setAppliedFilters({ ...draftFilters });
               setPage(1);
+              setReloadKey((current) => current + 1);
             }}
             onClear={() => {
               const cleared = { productId: "", listType: "All", name: "" };
               setDraftFilters(cleared);
               setAppliedFilters(cleared);
               setPage(1);
+              setReloadKey((current) => current + 1);
             }}
           />
         </SearchFilterPanel>
