@@ -82,7 +82,7 @@ export function FieldLabel({
   label,
   required = false,
 }: {
-  htmlFor: string;
+  htmlFor?: string;
   label: string;
   required?: boolean;
 }) {
