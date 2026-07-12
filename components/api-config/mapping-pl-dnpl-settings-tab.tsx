@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
-import { PrimaryButton } from "@/components/ui/form-controls";
+import { CopyToTargetsPanel } from "@/components/ui/copy-to-targets-panel";
+import { Checkbox, PrimaryButton } from "@/components/ui/form-controls";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import {
   SearchableMultiSelect,
@@ -37,6 +38,10 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
   const [verticalId, setVerticalId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [copyToOtherPublishers, setCopyToOtherPublishers] = useState(false);
+  const [copyPublisherIds, setCopyPublisherIds] = useState<string[]>([]);
+  const [publisherOptions, setPublisherOptions] = useState<SearchableMultiSelectOption[]>([]);
+  const [isLoadingPublishers, setIsLoadingPublishers] = useState(false);
 
   const settingsUrl = `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/pl-dnpl-settings`;
 
@@ -79,6 +84,45 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
     void loadPresentLists();
   }, [verticalId]);
 
+  useEffect(() => {
+    if (!copyToOtherPublishers) {
+      return;
+    }
+
+    const loadPublishers = async () => {
+      setIsLoadingPublishers(true);
+      try {
+        const response = await fetch("/api/sellers");
+        if (!response.ok) {
+          toast.error("Failed to load publishers.", "Copy PL/DNPL");
+          return;
+        }
+
+        const data = (await response.json()) as Array<{
+          id: string;
+          name: string;
+          email?: string;
+          displayId?: number;
+        }>;
+
+        setPublisherOptions(
+          data
+            .filter((seller) => seller.id !== sellerId)
+            .map((seller) => ({
+              id: seller.id,
+              label: seller.name,
+              description: seller.email,
+              displayId: seller.displayId,
+            }))
+        );
+      } finally {
+        setIsLoadingPublishers(false);
+      }
+    };
+
+    void loadPublishers();
+  }, [copyToOtherPublishers, sellerId]);
+
   const options = useMemo(() => presentLists.map(toOption), [presentLists]);
 
   const selectedLists = useMemo(
@@ -97,6 +141,11 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
       return;
     }
 
+    if (copyToOtherPublishers && copyPublisherIds.length === 0) {
+      toast.error("Please select at least one publisher.", "Copy PL/DNPL");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(settingsUrl, {
@@ -111,7 +160,37 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
       }
 
       setSelectedIds(Array.isArray(data?.plDnplListIds) ? data.plDnplListIds : selectedIds);
-      toast.success("PL/DNPL settings saved successfully.");
+
+      if (copyToOtherPublishers && copyPublisherIds.length > 0) {
+        const copyResponse = await fetch(settingsUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "copy-pl-dnpl",
+            targetSellerIds: copyPublisherIds,
+            plDnplListIds: selectedIds,
+          }),
+        });
+
+        const copyData = (await copyResponse.json().catch(() => null)) as {
+          message?: string;
+          updatedCount?: number;
+        } | null;
+
+        if (!copyResponse.ok) {
+          toast.error(copyData?.message ?? "Failed to copy PL/DNPL settings.", "Copy PL/DNPL");
+          return;
+        }
+
+        toast.success(
+          copyData?.message ??
+            `PL/DNPL settings saved and copied to ${copyData?.updatedCount ?? copyPublisherIds.length} publisher(s).`
+        );
+        setCopyToOtherPublishers(false);
+        setCopyPublisherIds([]);
+      } else {
+        toast.success("PL/DNPL settings saved successfully.");
+      }
     } catch {
       toast.error("Failed to save PL/DNPL settings.");
     } finally {
@@ -124,7 +203,7 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-5">
       <div className="border-l-4 border-amber-700 bg-amber-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700 dark:border-amber-500 dark:bg-amber-500/10 dark:text-slate-200">
         Please note that the multiselect option for the PL/DNPL lists cannot be used for lists on the same lead
         fields (e.g., two or more PL/DNPL lists for the ZIP code). Adding multiple lists on the same lead field
@@ -137,21 +216,50 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
         </p>
       ) : null}
 
-      <div className="grid gap-2 md:grid-cols-[280px_minmax(0,1fr)] md:items-start">
-        <label className="flex items-center gap-1.5 pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+        <label className="flex shrink-0 items-center gap-1.5 pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
           Select PL/DNPL to apply to this publisher
           <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-slate-500 dark:border-slate-500 dark:text-slate-400">
             <CircleHelp size={10} strokeWidth={2.5} />
           </span>
         </label>
 
-        <SearchableMultiSelect
-          selectedIds={selectedIds}
-          onChange={setSelectedIds}
-          options={options}
-          placeholder="Select PL/DNPL lists..."
-          searchPlaceholder="Search PL/DNPL lists..."
-          emptyMessage="No present lists found."
+        <div className="min-w-0 flex-1">
+          <SearchableMultiSelect
+            selectedIds={selectedIds}
+            onChange={setSelectedIds}
+            options={options}
+            placeholder="Select PL/DNPL lists..."
+            searchPlaceholder="Search PL/DNPL lists..."
+            emptyMessage="No present lists found."
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <Checkbox
+          checked={copyToOtherPublishers}
+          onChange={(checked) => {
+            setCopyToOtherPublishers(checked);
+            if (!checked) {
+              setCopyPublisherIds([]);
+            }
+          }}
+          label={<>Copy &quot;PL/DNPL&quot; settings to other publishers</>}
+          className="w-fit"
+        />
+
+        <CopyToTargetsPanel
+          open={copyToOtherPublishers}
+          title="Select Publishers"
+          description="Saving will replace Present & Do Not Present Lists settings on the selected publishers with this publisher's current selection for the same product."
+          selectedIds={copyPublisherIds}
+          onSelectedIdsChange={setCopyPublisherIds}
+          options={publisherOptions}
+          isLoading={isLoadingPublishers}
+          placeholder="Select publishers..."
+          searchPlaceholder="Search publishers..."
+          emptyMessage="No other publishers available."
         />
       </div>
 

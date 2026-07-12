@@ -39,6 +39,7 @@ import {
   PUBLISHER_BUYER_REJECT_REASON,
   isPublisherCountableAccept,
   resolvePublisherBuyerPrice,
+  shouldApplyPublisherPayout,
   shouldExposePublisherResponsePrice,
 } from "@/lib/lead-price";
 import {
@@ -142,8 +143,9 @@ function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
  * Publisher Sold/Reject rules (HTTP response to publisher):
  * - Redirect API: response status/price/redirect_url follow Main Processing
  *   (Redirect) results only. Silent campaigns still post; Accept is stored as
- *   Sold on the buyer delivery and appears in buyer report, but does not change
- *   the publisher API response.
+ *   Sold on the buyer delivery and appears in buyer report, but Pub/sold price
+ *   are not applied to the publisher (Pub = 0) and the publisher API stays Reject
+ *   when all Main Processing campaigns Reject.
  * - Silent API: Sold if at least one Silent Accept with minPrice !== 0.
  *   Silent Accept with minPrice = 0 is stored for reports but Publisher gets Reject.
  */
@@ -507,6 +509,7 @@ async function buildFallbackTestLeadBuyerDelivery(params: {
       mockBuyerPost: true,
       mockBuyerPostOptions: params.mockBuyerPostOptions,
       campaignTestMocks,
+      publisherApiType: params.publisherApiType,
     });
 
     if (result?.campaignValidationChecks?.length) {
@@ -531,6 +534,7 @@ async function processCampaignAttempt(params: {
   mockBuyerPostOptions?: MockBuyerPostOptions;
   campaignTestMocks?: Record<string, CampaignTestMockResponse>;
   revShareSettings?: MappingRevShareSettingsRecord;
+  publisherApiType?: MappingApiType;
 }) {
   let traceSteps: BuyerPostTraceStep[] = [];
 
@@ -980,12 +984,15 @@ async function processCampaignAttempt(params: {
     request: delivery.buyerRequest,
   });
 
+  const publisherApiType = params.publisherApiType ?? "Redirect";
   const publisherPayout =
     delivery.buyerStatus === "Accept"
-      ? resolvePublisherPriceFromRevShare(
-          delivery.price,
-          params.revShareSettings ?? defaultMappingRevShareSettings()
-        )
+      ? shouldApplyPublisherPayout(params.pingTreeType, publisherApiType)
+        ? resolvePublisherPriceFromRevShare(
+            delivery.price,
+            params.revShareSettings ?? defaultMappingRevShareSettings()
+          )
+        : 0
       : null;
 
   await LeadDeliveryModel.create({
@@ -1063,6 +1070,7 @@ async function processPingTree(params: {
   progress?: LeadDistributionProgressHandlers;
   selectedConfig?: SelectedPingTreeConfig | null;
   revShareSettings?: MappingRevShareSettingsRecord;
+  publisherApiType?: MappingApiType;
 }) {
   const filteredCampaignIds = await resolveEligiblePingTreeCampaignIds({
     pingTreeType: params.pingTreeType,
@@ -1110,6 +1118,7 @@ async function processPingTree(params: {
           mockBuyerPostOptions: params.mockBuyerPostOptions,
           campaignTestMocks,
           revShareSettings: params.revShareSettings,
+          publisherApiType: params.publisherApiType,
         })
       )
     );
@@ -1154,6 +1163,7 @@ async function processPingTree(params: {
       mockBuyerPostOptions: params.mockBuyerPostOptions,
       campaignTestMocks,
       revShareSettings: params.revShareSettings,
+      publisherApiType: params.publisherApiType,
     });
 
     if (!result) continue;
@@ -1529,6 +1539,7 @@ export async function distributeLeadAfterIntake(params: {
         progress: params.progress,
         selectedConfig: selectedConfigByType.get(pingTreeType) ?? null,
         revShareSettings: params.revShareSettings ?? defaultMappingRevShareSettings(),
+        publisherApiType,
       })
     )
   );

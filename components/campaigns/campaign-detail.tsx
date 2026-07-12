@@ -24,8 +24,7 @@ import { CampaignTestLeadTab } from "@/components/campaigns/campaign-test-lead-t
 import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-settings";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
-import { CopyCampaignFiltersModal } from "@/components/campaigns/copy-campaign-filters-modal";
-import { CopyCampaignPlDnplModal } from "@/components/campaigns/copy-campaign-pl-dnpl-modal";
+import { CopyCampaignFiltersPanel } from "@/components/campaigns/copy-campaign-filters-panel";
 import { CopyCampaignScheduleModal } from "@/components/campaigns/copy-campaign-schedule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
@@ -107,9 +106,9 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [buyerIntegrationIds, setBuyerIntegrationIds] = useState<string[]>([]);
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
   const [copyScheduleModalOpen, setCopyScheduleModalOpen] = useState(false);
-  const [copyPlDnplModalOpen, setCopyPlDnplModalOpen] = useState(false);
-  const [copyFiltersModalOpen, setCopyFiltersModalOpen] = useState(false);
   const [copyFiltersToOtherCampaigns, setCopyFiltersToOtherCampaigns] = useState(false);
+  const [copyFilterCampaignIds, setCopyFilterCampaignIds] = useState<string[]>([]);
+  const [copyPlDnplCampaignIds, setCopyPlDnplCampaignIds] = useState<string[]>([]);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [integrationForm, setIntegrationForm] = useState({
@@ -164,7 +163,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       });
       setDuplicatesForm(data.duplicates);
       setSelectedPlDnplIds(data.plDnplListIds);
-      setCopyPlDnplToOtherCampaigns(data.copyPlDnplToOtherCampaigns);
       setBuyerPlDnplListIds([]);
 
       const [fieldsRes, listsRes, integrationsRes, buyerRes] = await Promise.all([
@@ -359,7 +357,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     }
   };
 
-  const handleSaveFilters = () => {
+  const handleSaveFilters = async () => {
     if (!campaign) return;
 
     const validationError = validateGeneralFilters(campaign.generalFilters, fieldOptionsListByName);
@@ -368,7 +366,20 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       return;
     }
 
-    void saveSection(
+    const shouldCopyFilters = filterSubTab === "general-filters" && copyFiltersToOtherCampaigns;
+    const shouldCopyPlDnpl = filterSubTab === "pl-dnpl" && copyPlDnplToOtherCampaigns;
+
+    if (shouldCopyFilters && copyFilterCampaignIds.length === 0) {
+      toast.error("Please select at least one campaign.", "Copy Filters");
+      return;
+    }
+
+    if (shouldCopyPlDnpl && copyPlDnplCampaignIds.length === 0) {
+      toast.error("Please select at least one campaign.", "Copy PL/DNPL");
+      return;
+    }
+
+    const saved = await saveSection(
       "filters",
       {
         generalFilters: normalizeGeneralFiltersForStorage(campaign.generalFilters),
@@ -377,6 +388,70 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       },
       "Filters saved successfully."
     );
+
+    if (!saved) {
+      return;
+    }
+
+    if (shouldCopyFilters) {
+      const copyResponse = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copy-filters",
+          targetCampaignIds: copyFilterCampaignIds,
+          generalFilters: normalizeGeneralFiltersForStorage(campaign.generalFilters),
+        }),
+      });
+
+      const copyData = (await copyResponse.json().catch(() => null)) as {
+        message?: string;
+        updatedCount?: number;
+      } | null;
+
+      if (!copyResponse.ok) {
+        toast.error(copyData?.message ?? "Failed to copy filter settings.", "Copy Filters");
+        return;
+      }
+
+      toast.success(
+        copyData?.message ??
+          `Filter settings copied to ${copyData?.updatedCount ?? copyFilterCampaignIds.length} campaign(s).`,
+        "Copy Filters"
+      );
+      setCopyFiltersToOtherCampaigns(false);
+      setCopyFilterCampaignIds([]);
+    }
+
+    if (shouldCopyPlDnpl) {
+      const copyResponse = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copy-pl-dnpl",
+          targetCampaignIds: copyPlDnplCampaignIds,
+          plDnplListIds: selectedPlDnplIds,
+        }),
+      });
+
+      const copyData = (await copyResponse.json().catch(() => null)) as {
+        message?: string;
+        updatedCount?: number;
+      } | null;
+
+      if (!copyResponse.ok) {
+        toast.error(copyData?.message ?? "Failed to copy PL/DNPL settings.", "Copy PL/DNPL");
+        return;
+      }
+
+      toast.success(
+        copyData?.message ??
+          `PL/DNPL settings copied to ${copyData?.updatedCount ?? copyPlDnplCampaignIds.length} campaign(s).`,
+        "Copy PL/DNPL"
+      );
+      setCopyPlDnplToOtherCampaigns(false);
+      setCopyPlDnplCampaignIds([]);
+    }
   };
 
   const updateGeneralFilter = (fieldId: string, patch: Partial<CampaignRecord["generalFilters"][number]>) => {
@@ -614,61 +689,63 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                     : false
               }
               renderActions={() => (
-                <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <span />
-                  {filterSubTab === "general-filters" ? (
-                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={copyFiltersToOtherCampaigns}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setCopyFiltersToOtherCampaigns(checked);
-                          if (checked) {
-                            setCopyFiltersModalOpen(true);
-                          }
-                        }}
-                      />
-                      Copy &quot;Filter&quot; settings to other campaigns
-                    </label>
-                  ) : (
-                    <span />
-                  )}
-                  <div className="justify-self-end">
-                    <PrimaryButton
-                      type="button"
-                      disabled={isSaving}
-                      onClick={handleSaveFilters}
-                      className="bg-emerald-800 hover:bg-emerald-700"
-                    >
-                      {isSaving ? "Saving..." : "Save Filters"}
-                    </PrimaryButton>
-                  </div>
+                <div className="flex w-full justify-end">
+                  <PrimaryButton
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleSaveFilters()}
+                    className="bg-emerald-800 hover:bg-emerald-700"
+                  >
+                    {isSaving ? "Saving..." : "Save Filters"}
+                  </PrimaryButton>
                 </div>
               )}
             >
             {filterSubTab === "general-filters" ? (
-              <>
+              <div className="space-y-4">
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   Enabled general filters are applied before a lead is posted to the buyer. Multi Select fields use Included and Excluded lists.
                 </p>
                 <GeneralFiltersGrid
-                filters={campaign.generalFilters}
-                fieldOptionsListByName={fieldOptionsListByName}
-                onPatchFilter={updateGeneralFilter}
-                onSetMultiSelectPairEnabled={setMultiSelectPairEnabled}
-              />
-              </>
+                  filters={campaign.generalFilters}
+                  fieldOptionsListByName={fieldOptionsListByName}
+                  onPatchFilter={updateGeneralFilter}
+                  onSetMultiSelectPairEnabled={setMultiSelectPairEnabled}
+                />
+                <div className="space-y-3">
+                  <Checkbox
+                    checked={copyFiltersToOtherCampaigns}
+                    onChange={(checked) => {
+                      setCopyFiltersToOtherCampaigns(checked);
+                      if (!checked) {
+                        setCopyFilterCampaignIds([]);
+                      }
+                    }}
+                    label={<>Copy &quot;Filter&quot; settings to other campaigns</>}
+                    className="w-fit"
+                  />
+                  <CopyCampaignFiltersPanel
+                    open={copyFiltersToOtherCampaigns}
+                    sourceCampaignId={campaignId}
+                    verticalId={campaign.verticalId}
+                    selectedIds={copyFilterCampaignIds}
+                    onSelectedIdsChange={setCopyFilterCampaignIds}
+                  />
+                </div>
+              </div>
             ) : (
               <CampaignPlDnplSettings
+                campaignId={campaignId}
                 buyerId={campaign.buyerId}
+                verticalId={campaign.verticalId}
                 presentLists={presentLists}
                 buyerPlDnplListIds={buyerPlDnplListIds}
                 selectedIds={selectedPlDnplIds}
                 copyToOtherCampaigns={copyPlDnplToOtherCampaigns}
+                copyCampaignIds={copyPlDnplCampaignIds}
                 onSelectedIdsChange={setSelectedPlDnplIds}
                 onCopyToOtherCampaignsChange={setCopyPlDnplToOtherCampaigns}
-                onCopyClick={() => setCopyPlDnplModalOpen(true)}
+                onCopyCampaignIdsChange={setCopyPlDnplCampaignIds}
               />
             )}
             </DualSaveBar>
@@ -878,36 +955,6 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         open={copyScheduleModalOpen}
         sourceCampaignId={campaignId}
         onClose={() => setCopyScheduleModalOpen(false)}
-      />
-
-      <CopyCampaignPlDnplModal
-        open={copyPlDnplModalOpen}
-        sourceCampaignId={campaignId}
-        verticalId={campaign.verticalId}
-        plDnplListIds={selectedPlDnplIds}
-        onClose={() => {
-          setCopyPlDnplModalOpen(false);
-          setCopyPlDnplToOtherCampaigns(false);
-        }}
-        onApplied={() => {
-          setCopyPlDnplToOtherCampaigns(true);
-          setCopyPlDnplModalOpen(false);
-        }}
-      />
-
-      <CopyCampaignFiltersModal
-        open={copyFiltersModalOpen}
-        sourceCampaignId={campaignId}
-        verticalId={campaign.verticalId}
-        generalFilters={campaign.generalFilters}
-        onClose={() => {
-          setCopyFiltersModalOpen(false);
-          setCopyFiltersToOtherCampaigns(false);
-        }}
-        onApplied={() => {
-          setCopyFiltersToOtherCampaigns(true);
-          setCopyFiltersModalOpen(false);
-        }}
       />
 
       <Modal

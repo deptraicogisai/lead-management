@@ -115,6 +115,8 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [isLoadingPublishers, setIsLoadingPublishers] = useState(true);
   const [isSavingSources, setIsSavingSources] = useState(false);
   const [selectedPlDnplIds, setSelectedPlDnplIds] = useState<string[]>(buyer.plDnplListIds);
+  const [copyPlDnplToOtherBuyers, setCopyPlDnplToOtherBuyers] = useState(false);
+  const [copyPlDnplBuyerIds, setCopyPlDnplBuyerIds] = useState<string[]>([]);
   const [presentLists, setPresentLists] = useState<PresentListRecord[]>([]);
   const [isLoadingPresentLists, setIsLoadingPresentLists] = useState(false);
   const [isSavingPlDnpl, setIsSavingPlDnpl] = useState(false);
@@ -363,6 +365,11 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   };
 
   const handleSavePlDnpl = async () => {
+    if (copyPlDnplToOtherBuyers && copyPlDnplBuyerIds.length === 0) {
+      toast.error("Please select at least one buyer.", "Copy PL/DNPL");
+      return;
+    }
+
     setIsSavingPlDnpl(true);
 
     try {
@@ -371,6 +378,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plDnplListIds: selectedPlDnplIds,
+          copyPlDnplToOtherBuyers,
         }),
       });
 
@@ -380,7 +388,37 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         return;
       }
 
-      toast.success("PL/DNPL settings saved successfully.");
+      if (copyPlDnplToOtherBuyers && copyPlDnplBuyerIds.length > 0) {
+        const copyResponse = await fetch(`/api/buyers/${encodeURIComponent(buyer.id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "copy-pl-dnpl",
+            targetBuyerIds: copyPlDnplBuyerIds,
+            plDnplListIds: selectedPlDnplIds,
+          }),
+        });
+
+        const copyData = (await copyResponse.json().catch(() => null)) as {
+          message?: string;
+          updatedCount?: number;
+        } | null;
+
+        if (!copyResponse.ok) {
+          toast.error(copyData?.message ?? "Failed to copy PL/DNPL settings.", "Copy PL/DNPL");
+          return;
+        }
+
+        toast.success(
+          copyData?.message ??
+            `PL/DNPL settings saved and copied to ${copyData?.updatedCount ?? copyPlDnplBuyerIds.length} buyer(s).`
+        );
+        setCopyPlDnplToOtherBuyers(false);
+        setCopyPlDnplBuyerIds([]);
+      } else {
+        toast.success("PL/DNPL settings saved successfully.");
+      }
+
       router.refresh();
     } catch {
       toast.error("Failed to save PL/DNPL settings.");
@@ -680,25 +718,32 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const renderPlDnplTab = () => (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="px-6 py-8">
-        <div className="mx-auto w-full max-w-4xl space-y-6">
+        <div className="mx-auto w-full max-w-3xl space-y-6">
           {isLoadingPresentLists ? (
             <p className="text-sm text-slate-500">Loading present lists...</p>
           ) : (
             <BuyerPlDnplSettings
+              buyerId={buyer.id}
               presentLists={presentLists}
               selectedIds={selectedPlDnplIds}
+              copyToOtherBuyers={copyPlDnplToOtherBuyers}
+              copyBuyerIds={copyPlDnplBuyerIds}
               onSelectedIdsChange={setSelectedPlDnplIds}
+              onCopyToOtherBuyersChange={setCopyPlDnplToOtherBuyers}
+              onCopyBuyerIdsChange={setCopyPlDnplBuyerIds}
             />
           )}
 
-          <PrimaryButton
-            type="button"
-            disabled={isSavingPlDnpl || isLoadingPresentLists}
-            onClick={() => void handleSavePlDnpl()}
-            className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-          >
-            {isSavingPlDnpl ? "Saving..." : "Save"}
-          </PrimaryButton>
+          <div className="flex justify-end">
+            <PrimaryButton
+              type="button"
+              disabled={isSavingPlDnpl || isLoadingPresentLists}
+              onClick={() => void handleSavePlDnpl()}
+              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+            >
+              {isSavingPlDnpl ? "Saving..." : "Save"}
+            </PrimaryButton>
+          </div>
         </div>
       </div>
     </div>

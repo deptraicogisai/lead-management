@@ -75,6 +75,22 @@ export function isPublisherCountableAccept(delivery: DeliveryPriceSource): boole
   return delivery.buyerStatus === "Accept" && !isSilentZeroMinPriceAccept(delivery);
 }
 
+/**
+ * Whether an Accept delivery should store a non-zero publisher payout (Pub).
+ * - Redirect API: only Main Processing (Redirect) Accepts pay the publisher.
+ *   Silent Accepts remain Sold in buyer report but Pub is always 0.
+ * - Silent API: countable Silent Accepts pay the publisher.
+ */
+export function shouldApplyPublisherPayout(
+  pingTreeType: PingTreeCampaignType,
+  apiType: MappingApiType = "Redirect"
+): boolean {
+  if (apiType === "Silent") {
+    return pingTreeType === "Silent";
+  }
+  return pingTreeType === "Redirect";
+}
+
 function silentAcceptRawPrice(delivery: DeliveryPriceSource): number | null {
   return normalizePrice(delivery.campaignMinPrice) ?? normalizePrice(delivery.price);
 }
@@ -84,7 +100,7 @@ function silentAcceptRawPrice(delivery: DeliveryPriceSource): number | null {
  * response / seller-lead soldPrice only.
  * - Redirect API: Main Processing (Redirect) Accept price only.
  *   Silent Accepts remain Sold in buyer report with their own delivery price;
- *   they do not change publisher response price.
+ *   they do not change publisher response price or Pub.
  * - Silent API: sum of campaign min prices for every countable Silent Accept.
  */
 export function resolvePublisherBuyerPrice(

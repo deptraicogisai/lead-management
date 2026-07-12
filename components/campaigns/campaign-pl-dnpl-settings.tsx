@@ -1,24 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Link2 } from "lucide-react";
+import { CopyToTargetsPanel } from "@/components/ui/copy-to-targets-panel";
+import { Checkbox } from "@/components/ui/form-controls";
 import {
   SearchableMultiSelect,
   type SearchableMultiSelectOption,
 } from "@/components/ui/searchable-multi-select";
 import type { PresentListRecord } from "@/lib/present-list";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type CampaignPlDnplSettingsProps = {
+  campaignId: string;
   buyerId: string;
+  verticalId?: string;
   presentLists: PresentListRecord[];
   buyerPlDnplListIds: string[];
   selectedIds: string[];
   copyToOtherCampaigns: boolean;
+  copyCampaignIds: string[];
   onSelectedIdsChange: (ids: string[]) => void;
   onCopyToOtherCampaignsChange: (value: boolean) => void;
-  onCopyClick: () => void;
+  onCopyCampaignIdsChange: (ids: string[]) => void;
 };
 
 function toOption(list: PresentListRecord): SearchableMultiSelectOption {
@@ -31,16 +37,21 @@ function toOption(list: PresentListRecord): SearchableMultiSelectOption {
 }
 
 export function CampaignPlDnplSettings({
+  campaignId,
   buyerId,
+  verticalId,
   presentLists,
   buyerPlDnplListIds,
   selectedIds,
   copyToOtherCampaigns,
+  copyCampaignIds,
   onSelectedIdsChange,
   onCopyToOtherCampaignsChange,
-  onCopyClick,
+  onCopyCampaignIdsChange,
 }: CampaignPlDnplSettingsProps) {
   const options = useMemo(() => presentLists.map(toOption), [presentLists]);
+  const [campaignOptions, setCampaignOptions] = useState<SearchableMultiSelectOption[]>([]);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
 
   const buyerSelectedLists = useMemo(
     () => presentLists.filter((list) => buyerPlDnplListIds.includes(list.id)),
@@ -57,8 +68,56 @@ export function CampaignPlDnplSettings({
     return new Set(fields).size !== fields.length;
   }, [campaignSelectedLists]);
 
+  const selectableOptions = useMemo(
+    () => campaignOptions.filter((option) => option.id !== campaignId),
+    [campaignId, campaignOptions]
+  );
+
+  useEffect(() => {
+    if (!copyToOtherCampaigns) {
+      return;
+    }
+
+    const loadCampaigns = async () => {
+      setIsLoadingCampaigns(true);
+      try {
+        const response = await fetch(
+          "/api/campaigns?pageSize=1000" +
+            (verticalId ? `&productId=${encodeURIComponent(verticalId)}` : "")
+        );
+        if (!response.ok) {
+          toast.error("Failed to load campaigns.", "Copy PL/DNPL");
+          return;
+        }
+
+        const data = (await response.json()) as {
+          items: Array<{
+            id: string;
+            displayId: number;
+            name: string;
+            buyerLabel: string;
+            productLabel: string;
+          }>;
+        };
+
+        setCampaignOptions(
+          data.items.map((campaign) => ({
+            id: campaign.id,
+            displayId: campaign.displayId,
+            label: campaign.name,
+            description: `[${campaign.displayId}] ${campaign.buyerLabel} · ${campaign.productLabel}`,
+          }))
+        );
+      } finally {
+        setIsLoadingCampaigns(false);
+      }
+    };
+
+    void loadCampaigns();
+  }, [copyToOtherCampaigns, verticalId]);
+
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <div className="mx-auto w-full max-w-3xl space-y-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
       <div className="border-l-4 border-amber-700 bg-amber-50/80 px-4 py-3 text-sm leading-relaxed text-slate-700 dark:border-amber-500 dark:bg-amber-500/10 dark:text-slate-200">
         Please note that the multiselect option for the PL/DNPL lists cannot be used for lists on the same lead
         fields (e.g., two or more PL/DNPL lists for the ZIP code). Adding multiple lists on the same lead field
@@ -125,36 +184,48 @@ export function CampaignPlDnplSettings({
           Campaign level Present &amp; Do Not Present Lists Settings
         </h3>
 
-        <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-start">
-          <label className="flex items-center gap-1.5 pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+          <label className="flex shrink-0 items-center gap-1.5 pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
             Select PL/DNPL
             <Link2 size={14} className="text-sky-500" />
           </label>
 
-          <SearchableMultiSelect
-            selectedIds={selectedIds}
-            onChange={onSelectedIdsChange}
-            options={options}
-            placeholder="Select PL/DNPL lists..."
-            searchPlaceholder="Search PL/DNPL lists..."
-            emptyMessage="No present lists found for this product."
-          />
+          <div className="min-w-0 flex-1">
+            <SearchableMultiSelect
+              selectedIds={selectedIds}
+              onChange={onSelectedIdsChange}
+              options={options}
+              placeholder="Select PL/DNPL lists..."
+              searchPlaceholder="Search PL/DNPL lists..."
+              emptyMessage="No present lists found for this product."
+            />
+          </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={copyToOtherCampaigns}
-            onChange={(event) => {
-              const checked = event.target.checked;
-              onCopyToOtherCampaignsChange(checked);
-              if (checked) {
-                onCopyClick();
-              }
-            }}
-          />
-          Copy &apos;Present &amp; Do Not Present Lists&apos; settings to other campaigns
-        </label>
+        <Checkbox
+          checked={copyToOtherCampaigns}
+          onChange={(checked) => {
+            onCopyToOtherCampaignsChange(checked);
+            if (!checked) {
+              onCopyCampaignIdsChange([]);
+            }
+          }}
+          label={<>Copy &quot;PL/DNPL&quot; settings to other campaigns</>}
+          className="w-fit"
+        />
+
+        <CopyToTargetsPanel
+          open={copyToOtherCampaigns}
+          title="Select Campaigns"
+          description="Saving will replace Present & Do Not Present Lists settings on the selected campaigns with this campaign's current selection."
+          selectedIds={copyCampaignIds}
+          onSelectedIdsChange={onCopyCampaignIdsChange}
+          options={selectableOptions}
+          isLoading={isLoadingCampaigns}
+          placeholder="Select campaigns..."
+          searchPlaceholder="Search campaigns..."
+          emptyMessage="No other campaigns available."
+        />
       </section>
     </div>
   );

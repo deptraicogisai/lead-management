@@ -250,6 +250,75 @@ export async function PATCH(req: Request, context: Params) {
   }
 }
 
+export async function POST(req: Request, context: Params) {
+  try {
+    const { id } = await context.params;
+    const body = (await req.json()) as {
+      action?: string;
+      targetBuyerIds?: string[];
+      plDnplListIds?: string[];
+    };
+
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid buyer id." }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    await ensureBuyerFieldsMigrated();
+
+    const buyer = await BuyerModel.findById(id).lean();
+    if (!buyer) {
+      return NextResponse.json({ message: "Buyer not found." }, { status: 404 });
+    }
+
+    if (body.action === "copy-pl-dnpl") {
+      const targetBuyerIds = Array.isArray(body.targetBuyerIds)
+        ? body.targetBuyerIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+
+      if (targetBuyerIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one buyer." }, { status: 400 });
+      }
+
+      const listIds = Array.isArray(body.plDnplListIds)
+        ? sanitizePlDnplListIds(body.plDnplListIds)
+        : sanitizePlDnplListIds((buyer as BuyerDoc).plDnplListIds ?? []);
+
+      let updatedCount = 0;
+
+      for (const targetBuyerId of targetBuyerIds) {
+        if (!Types.ObjectId.isValid(targetBuyerId) || targetBuyerId === id) {
+          continue;
+        }
+
+        const result = await BuyerModel.updateOne(
+          { _id: targetBuyerId },
+          { $set: { plDnplListIds: listIds } }
+        );
+
+        if (result.matchedCount > 0) {
+          updatedCount += 1;
+        }
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json({ message: "No valid target buyers were updated." }, { status: 400 });
+      }
+
+      await BuyerModel.updateOne({ _id: id }, { $set: { copyPlDnplToOtherBuyers: true } });
+
+      return NextResponse.json({
+        message: `PL/DNPL settings copied to ${updatedCount} buyer(s).`,
+        updatedCount,
+      });
+    }
+
+    return NextResponse.json({ message: "Unsupported action." }, { status: 400 });
+  } catch {
+    return NextResponse.json({ message: "Failed to process buyer action." }, { status: 500 });
+  }
+}
+
 export async function DELETE(_: Request, context: Params) {
   try {
     const { id } = await context.params;
