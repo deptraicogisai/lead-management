@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 import { buildCampaignLookupContext } from "@/lib/campaign-context";
 import { cloneScheduleRulesForCopy } from "@/lib/campaign-schedule-copy";
+import { cloneGeneralFiltersForTarget } from "@/lib/campaign-filters-copy";
 import {
   defaultScheduleRule,
   findScheduleRuleOverlap,
@@ -238,6 +239,8 @@ export async function POST(req: Request, context: Params) {
       action?: string;
       rule?: CampaignScheduleRule;
       targetCampaignIds?: string[];
+      plDnplListIds?: string[];
+      generalFilters?: CampaignGeneralFilter[];
     };
 
     if (!Types.ObjectId.isValid(id)) {
@@ -362,6 +365,112 @@ export async function POST(req: Request, context: Params) {
 
       return NextResponse.json({
         message: `Schedule copied to ${updatedCount} campaign(s).`,
+        updatedCount,
+      });
+    }
+
+    if (body.action === "copy-pl-dnpl") {
+      const targetCampaignIds = Array.isArray(body.targetCampaignIds)
+        ? body.targetCampaignIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+
+      if (targetCampaignIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one campaign." }, { status: 400 });
+      }
+
+      const listIds = Array.isArray(body.plDnplListIds)
+        ? body.plDnplListIds.filter((value): value is string => typeof value === "string" && Types.ObjectId.isValid(value))
+        : (campaign.plDnplListIds ?? []);
+
+      let updatedCount = 0;
+
+      for (const targetCampaignId of targetCampaignIds) {
+        if (!Types.ObjectId.isValid(targetCampaignId) || targetCampaignId === id) {
+          continue;
+        }
+
+        const result = await CampaignModel.updateOne(
+          { _id: targetCampaignId },
+          { $set: { plDnplListIds: listIds } }
+        );
+
+        if (result.matchedCount > 0) {
+          updatedCount += 1;
+        }
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json({ message: "No valid target campaigns were updated." }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        message: `PL/DNPL settings copied to ${updatedCount} campaign(s).`,
+        updatedCount,
+      });
+    }
+
+    if (body.action === "copy-filters") {
+      const targetCampaignIds = Array.isArray(body.targetCampaignIds)
+        ? body.targetCampaignIds.filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0
+          )
+        : [];
+
+      if (targetCampaignIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one campaign." }, { status: 400 });
+      }
+
+      const sourceFilters = normalizeGeneralFiltersForStorage(
+        Array.isArray(body.generalFilters)
+          ? body.generalFilters
+          : ((campaign.generalFilters ?? []) as CampaignGeneralFilter[])
+      );
+
+      let updatedCount = 0;
+
+      for (const targetCampaignId of targetCampaignIds) {
+        if (!Types.ObjectId.isValid(targetCampaignId) || targetCampaignId === id) {
+          continue;
+        }
+
+        const targetCampaign = await CampaignModel.findById(targetCampaignId);
+        if (!targetCampaign) {
+          continue;
+        }
+
+        const verticalId = targetCampaign.verticalRef?.toString() ?? "";
+        const vertical = verticalId ? await VerticalModel.findById(verticalId).lean() : null;
+        const targetFields = Array.isArray(vertical?.fields)
+          ? (vertical.fields as Array<{
+              _id?: { toString(): string };
+              fieldName?: string;
+              description?: string;
+              dataTypeFilter?: string | null;
+            }>).map((field) => ({
+              id: field._id?.toString(),
+              fieldName: field.fieldName?.trim() || "",
+              description: field.description?.trim() || field.fieldName?.trim() || "",
+              dataTypeFilter: field.dataTypeFilter,
+            }))
+          : [];
+
+        const copiedFilters = cloneGeneralFiltersForTarget(
+          sourceFilters,
+          targetFields.filter((field) => field.fieldName)
+        );
+
+        targetCampaign.set("generalFilters", copiedFilters);
+        targetCampaign.markModified("generalFilters");
+        await targetCampaign.save();
+        updatedCount += 1;
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json({ message: "No valid target campaigns were updated." }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        message: `Filter settings copied to ${updatedCount} campaign(s).`,
         updatedCount,
       });
     }

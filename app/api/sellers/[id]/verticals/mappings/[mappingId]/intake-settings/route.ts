@@ -23,6 +23,7 @@ import {
   type CampaignScheduleRule,
 } from "@/lib/campaign";
 import { cloneScheduleRulesForCopy } from "@/lib/campaign-schedule-copy";
+import { cloneGeneralFiltersForTarget } from "@/lib/campaign-filters-copy";
 import {
   ensureSellerVerticalMappingFieldsSeededById,
   findSellerVerticalMappingById,
@@ -42,6 +43,7 @@ type IntakeSettingsActionPayload = {
   action?: string;
   rule?: CampaignScheduleRule;
   targetSellerIds?: string[];
+  generalFilters?: CampaignGeneralFilter[];
 };
 
 export async function GET(_: Request, context: Params) {
@@ -244,6 +246,68 @@ export async function POST(req: Request, context: Params) {
 
       return NextResponse.json({
         message: `Schedule copied to ${updatedCount} publisher mapping(s).`,
+        updatedCount,
+      });
+    }
+
+    if (body.action === "copy-filters") {
+      const targetSellerIds = Array.isArray(body.targetSellerIds)
+        ? body.targetSellerIds.filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0
+          )
+        : [];
+
+      if (targetSellerIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one publisher." }, { status: 400 });
+      }
+
+      if (!mapping.verticalRef) {
+        return NextResponse.json(
+          { message: "This publisher mapping has no product assigned." },
+          { status: 400 }
+        );
+      }
+
+      const sourceFilters = normalizeGeneralFiltersForStorage(
+        Array.isArray(body.generalFilters)
+          ? body.generalFilters
+          : ((mapping.generalFilters ?? []) as CampaignGeneralFilter[])
+      );
+
+      let updatedCount = 0;
+
+      for (const targetSellerId of targetSellerIds) {
+        if (!Types.ObjectId.isValid(targetSellerId) || targetSellerId === id) {
+          continue;
+        }
+
+        const targetMappings = await VerticalMappingModel.find({
+          sellerRef: new Types.ObjectId(targetSellerId),
+          verticalRef: mapping.verticalRef,
+        });
+
+        for (const targetMapping of targetMappings) {
+          const targetFields = (targetMapping.fields as MappingFieldDoc[] | undefined) ?? [];
+          const copiedFilters = cloneGeneralFiltersForTarget(sourceFilters, targetFields);
+          targetMapping.set("generalFilters", copiedFilters);
+          targetMapping.markModified("generalFilters");
+          await targetMapping.save();
+          updatedCount += 1;
+        }
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json(
+          {
+            message:
+              "No matching publisher product mappings were updated. Selected publishers may not have this product configured.",
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        message: `Filter settings copied to ${updatedCount} publisher mapping(s).`,
         updatedCount,
       });
     }

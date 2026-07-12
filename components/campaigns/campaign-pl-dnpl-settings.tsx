@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, Link2, X } from "lucide-react";
+import { useMemo } from "react";
+import { ExternalLink, Link2 } from "lucide-react";
+import {
+  SearchableMultiSelect,
+  type SearchableMultiSelectOption,
+} from "@/components/ui/searchable-multi-select";
 import type { PresentListRecord } from "@/lib/present-list";
 import { cn } from "@/lib/utils";
 
@@ -14,10 +18,16 @@ type CampaignPlDnplSettingsProps = {
   copyToOtherCampaigns: boolean;
   onSelectedIdsChange: (ids: string[]) => void;
   onCopyToOtherCampaignsChange: (value: boolean) => void;
+  onCopyClick: () => void;
 };
 
-function formatListLabel(list: PresentListRecord) {
-  return `[${list.displayId}] ${list.name} (${list.listType}) · ${list.applyToField}`;
+function toOption(list: PresentListRecord): SearchableMultiSelectOption {
+  return {
+    id: list.id,
+    displayId: list.displayId,
+    label: `${list.name} (${list.listType})`,
+    description: list.applyToField,
+  };
 }
 
 export function CampaignPlDnplSettings({
@@ -28,9 +38,9 @@ export function CampaignPlDnplSettings({
   copyToOtherCampaigns,
   onSelectedIdsChange,
   onCopyToOtherCampaignsChange,
+  onCopyClick,
 }: CampaignPlDnplSettingsProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const options = useMemo(() => presentLists.map(toOption), [presentLists]);
 
   const buyerSelectedLists = useMemo(
     () => presentLists.filter((list) => buyerPlDnplListIds.includes(list.id)),
@@ -46,27 +56,6 @@ export function CampaignPlDnplSettings({
     const fields = campaignSelectedLists.map((list) => list.applyToField);
     return new Set(fields).size !== fields.length;
   }, [campaignSelectedLists]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!dropdownRef.current?.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const toggleList = (listId: string) => {
-    onSelectedIdsChange(
-      selectedIds.includes(listId) ? selectedIds.filter((id) => id !== listId) : [...selectedIds, listId]
-    );
-  };
-
-  const removeList = (listId: string) => {
-    onSelectedIdsChange(selectedIds.filter((id) => id !== listId));
-  };
 
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
@@ -111,7 +100,9 @@ export function CampaignPlDnplSettings({
                         : "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-200"
                     )}
                   >
-                    <span className="truncate">[{list.displayId}] {list.name}</span>
+                    <span className="truncate">
+                      [{list.displayId}] {list.name}
+                    </span>
                   </span>
                 ))
               )}
@@ -140,97 +131,27 @@ export function CampaignPlDnplSettings({
             <Link2 size={14} className="text-sky-500" />
           </label>
 
-          <div ref={dropdownRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setDropdownOpen((open) => !open)}
-              className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm dark:border-slate-600 dark:bg-slate-800"
-            >
-              <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-                {campaignSelectedLists.length === 0 ? (
-                  <span className="text-slate-400">Select PL/DNPL lists...</span>
-                ) : (
-                  campaignSelectedLists.map((list) => (
-                    <span
-                      key={list.id}
-                      className={cn(
-                        "inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                        list.listType === "PL"
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                          : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                      )}
-                    >
-                      <span className="truncate">[{list.displayId}] {list.name}</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          removeList(list.id);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            removeList(list.id);
-                          }
-                        }}
-                        className="rounded-full hover:bg-black/10"
-                      >
-                        <X size={12} />
-                      </span>
-                    </span>
-                  ))
-                )}
-              </span>
-              <ChevronDown size={16} className="shrink-0 text-slate-400" />
-            </button>
-
-            {dropdownOpen ? (
-              <div className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-900">
-                {presentLists.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-slate-500">No present lists found for this product.</p>
-                ) : (
-                  presentLists.map((list) => {
-                    const checked = selectedIds.includes(list.id);
-                    return (
-                      <button
-                        key={list.id}
-                        type="button"
-                        onClick={() => toggleList(list.id)}
-                        className={cn(
-                          "flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800",
-                          checked && "bg-slate-50 dark:bg-slate-800/80"
-                        )}
-                      >
-                        <input type="checkbox" readOnly checked={checked} className="mt-0.5" />
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={cn(
-                              "mr-2 rounded-full px-2 py-0.5 text-xs font-medium",
-                              list.listType === "PL"
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                                : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                            )}
-                          >
-                            {list.listType}
-                          </span>
-                          {formatListLabel(list)}
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            ) : null}
-          </div>
+          <SearchableMultiSelect
+            selectedIds={selectedIds}
+            onChange={onSelectedIdsChange}
+            options={options}
+            placeholder="Select PL/DNPL lists..."
+            searchPlaceholder="Search PL/DNPL lists..."
+            emptyMessage="No present lists found for this product."
+          />
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
             checked={copyToOtherCampaigns}
-            onChange={(event) => onCopyToOtherCampaignsChange(event.target.checked)}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              onCopyToOtherCampaignsChange(checked);
+              if (checked) {
+                onCopyClick();
+              }
+            }}
           />
           Copy &apos;Present &amp; Do Not Present Lists&apos; settings to other campaigns
         </label>

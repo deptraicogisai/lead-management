@@ -9,6 +9,7 @@ import { clearMappingTestLeadLogs, listMappingTestLeadLogs } from "@/lib/mapping
 import { buildTestLeadIntakeRuleGroups, buildTestLeadMultiSelectFilters } from "@/lib/mapping-test-lead-intake";
 import { parseMockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { toMappingIntakeSettings } from "@/lib/mapping-intake-settings";
+import { describePlDnplRuleLines } from "@/lib/pl-dnpl-evaluation";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import { ensureSellerVerticalMappingFieldsSeededById } from "@/lib/seller-vertical-mapping";
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
@@ -41,7 +42,12 @@ async function loadMappingContext(sellerId: string, mappingId: string) {
   const verticalRefId = mapping.verticalRef?.toString() ?? "";
   const vertical = verticalRefId ? await VerticalModel.findById(verticalRefId).lean() : null;
   const intakeSettings = toMappingIntakeSettings(mapping.toObject(), mappingFields);
-  const intakeRules = buildTestLeadIntakeRuleGroups(intakeSettings);
+  const plDnplListIds = Array.isArray(mapping.plDnplListIds) ? mapping.plDnplListIds : [];
+  const plDnplRules = await describePlDnplRuleLines({
+    buyerPlDnplListIds: plDnplListIds,
+    campaignPlDnplListIds: [],
+  });
+  const intakeRules = buildTestLeadIntakeRuleGroups(intakeSettings, plDnplRules);
   const multiSelectFilters = buildTestLeadMultiSelectFilters(intakeSettings);
 
   const seller = Types.ObjectId.isValid(sellerId) ? await SellerModel.findById(sellerId).lean() : null;

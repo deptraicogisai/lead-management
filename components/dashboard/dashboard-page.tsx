@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CircleHelp, Pencil } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { DashboardActivityBar } from "@/components/dashboard/dashboard-activity-bar";
 import { DashboardKpiCardView } from "@/components/dashboard/dashboard-kpi-card";
 import { DashboardLineChart } from "@/components/dashboard/dashboard-line-chart";
@@ -69,10 +69,6 @@ export function DashboardPageContent() {
             aria-label="Dashboard help"
           >
             <CircleHelp size={14} />
-          </button>
-          <button type="button" className={cn(secondaryButtonClassName, "px-2.5 py-1.5 text-xs sm:text-sm")}>
-            <Pencil size={14} />
-            Edit
           </button>
         </div>
         <div className="text-sm text-slate-600 dark:text-slate-300">

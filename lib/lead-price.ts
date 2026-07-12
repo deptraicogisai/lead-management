@@ -1,7 +1,11 @@
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import type { ParsedBuyerResponse } from "@/lib/integration-runtime";
+import type { MappingApiType } from "@/lib/mapping-api-type";
 
 export type CampaignPriceMode = "Redirect" | "Silent";
+
+/** Publisher-facing reject reason when no valid buyer Accept remains. */
+export const PUBLISHER_BUYER_REJECT_REASON = "Buyer Reject";
 
 function normalizePrice(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -47,42 +51,85 @@ export function resolveAcceptedBuyerPrice(
   return campaignPrice;
 }
 
-type DeliveryPriceSource = {
+export type DeliveryPriceSource = {
   pingTreeType: PingTreeCampaignType;
   buyerStatus: string;
   price: number | null;
   campaignMinPrice?: number;
 };
 
+/**
+ * Silent campaigns with minPrice = 0 still store buyer Accept for reporting,
+ * but must never count toward Publisher Accept / price.
+ */
+export function isSilentZeroMinPriceAccept(delivery: DeliveryPriceSource): boolean {
+  return (
+    delivery.pingTreeType === "Silent" &&
+    delivery.buyerStatus === "Accept" &&
+    (delivery.campaignMinPrice ?? 0) === 0
+  );
+}
+
+/** Accept that can make the Publisher Sold and contribute to publisher price. */
+export function isPublisherCountableAccept(delivery: DeliveryPriceSource): boolean {
+  return delivery.buyerStatus === "Accept" && !isSilentZeroMinPriceAccept(delivery);
+}
+
+function silentAcceptRawPrice(delivery: DeliveryPriceSource): number | null {
+  return normalizePrice(delivery.campaignMinPrice) ?? normalizePrice(delivery.price);
+}
+
+/**
+ * Raw buyer-side amount(s) before RevShare — used for the **publisher API**
+ * response / seller-lead soldPrice only.
+ * - Redirect API: Main Processing (Redirect) Accept price only.
+ *   Silent Accepts remain Sold in buyer report with their own delivery price;
+ *   they do not change publisher response price.
+ * - Silent API: sum of campaign min prices for every countable Silent Accept.
+ */
 export function resolvePublisherBuyerPrice(
-  _deliveries: DeliveryPriceSource[],
-  accepted?: DeliveryPriceSource
+  deliveries: DeliveryPriceSource[],
+  accepted: DeliveryPriceSource | undefined,
+  apiType: MappingApiType = "Redirect"
 ): number | null {
-  if (!accepted || accepted.buyerStatus !== "Accept") {
-    return null;
+  if (apiType === "Silent") {
+    const accepts = deliveries.filter(
+      (delivery) => delivery.pingTreeType === "Silent" && isPublisherCountableAccept(delivery)
+    );
+    if (accepts.length === 0) {
+      return null;
+    }
+
+    let total = 0;
+    for (const delivery of accepts) {
+      total += silentAcceptRawPrice(delivery) ?? 0;
+    }
+    return normalizePrice(total);
   }
 
-  if (accepted.pingTreeType === "Silent") {
-    // Silent campaigns always bill at campaign min price, not buyer response price.
-    return normalizePrice(accepted.campaignMinPrice) ?? accepted.price ?? null;
+  if (!accepted || !isPublisherCountableAccept(accepted) || accepted.pingTreeType !== "Redirect") {
+    return null;
   }
 
   return accepted.price ?? null;
 }
 
 export function shouldExposePublisherResponsePrice(
-  _deliveries: Array<Pick<DeliveryPriceSource, "pingTreeType">>,
-  accepted?: Pick<DeliveryPriceSource, "pingTreeType" | "campaignMinPrice">
+  deliveries: DeliveryPriceSource[],
+  accepted: DeliveryPriceSource | undefined,
+  apiType: MappingApiType = "Redirect"
 ): boolean {
-  if (!accepted) {
-    return false;
+  if (apiType === "Silent") {
+    return deliveries.some(
+      (delivery) => delivery.pingTreeType === "Silent" && isPublisherCountableAccept(delivery)
+    );
   }
 
-  if (accepted.pingTreeType === "Silent") {
-    return (accepted.campaignMinPrice ?? 0) !== 0;
-  }
-
-  return true;
+  return Boolean(
+    accepted &&
+      accepted.pingTreeType === "Redirect" &&
+      isPublisherCountableAccept(accepted)
+  );
 }
 
 export function validateBuyerPriceAgainstCampaign(params: {

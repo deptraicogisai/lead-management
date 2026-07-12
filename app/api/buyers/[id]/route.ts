@@ -168,7 +168,9 @@ export async function PATCH(req: Request, context: Params) {
         id,
         {
           plDnplListIds: sanitizePlDnplListIds(body.plDnplListIds),
-          copyPlDnplToOtherBuyers: Boolean(body.copyPlDnplToOtherBuyers),
+          ...(body.copyPlDnplToOtherBuyers !== undefined
+            ? { copyPlDnplToOtherBuyers: Boolean(body.copyPlDnplToOtherBuyers) }
+            : {}),
         },
         { new: true }
       ).lean();

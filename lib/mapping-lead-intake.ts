@@ -18,6 +18,7 @@ import {
   toMappingIntakeSettings,
   type MappingIntakeSettingsRecord,
 } from "@/lib/mapping-intake-settings";
+import { describePlDnplRuleLines, evaluatePlDnplForCampaign } from "@/lib/pl-dnpl-evaluation";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { distributeLeadAfterIntake, listPendingBuyerPostCampaigns } from "@/lib/lead-distribution";
 import { normalizeMappingApiType } from "@/lib/mapping-api-type";
@@ -69,6 +70,7 @@ export type MappingLeadValidationBreakdown = {
   duplicates: string[];
   filters: string[];
   schedule: string[];
+  plDnpl: string[];
 };
 
 export type MappingLeadValidationResult = {
@@ -76,6 +78,7 @@ export type MappingLeadValidationResult = {
   allReasons: string[];
   passed: boolean;
   intakeSettings: MappingIntakeSettingsRecord;
+  plDnplListIds: string[];
 };
 
 function toIntakeFields(apiFields: ReturnType<typeof getEffectiveMappingFields>): MappingFieldDoc[] {
@@ -180,11 +183,24 @@ export async function validateMappingLeadIntake(params: {
     countLeads,
   });
 
+  const mappingPlDnplListIds = Array.isArray(
+    (params.mappingDoc as { plDnplListIds?: string[] | null }).plDnplListIds
+  )
+    ? ((params.mappingDoc as { plDnplListIds?: string[] }).plDnplListIds ?? [])
+    : [];
+
+  const plDnplResult = await evaluatePlDnplForCampaign({
+    buyerPlDnplListIds: mappingPlDnplListIds,
+    campaignPlDnplListIds: [],
+    payload: params.payload,
+  });
+
   const breakdown: MappingLeadValidationBreakdown = {
     fields: fieldReasons,
     duplicates: intakeReasons.duplicateReasons,
     filters: intakeReasons.filterReasons,
     schedule: intakeReasons.scheduleReasons,
+    plDnpl: plDnplResult.reasons,
   };
 
   const allReasons = [
@@ -192,6 +208,7 @@ export async function validateMappingLeadIntake(params: {
     ...breakdown.duplicates,
     ...breakdown.filters,
     ...breakdown.schedule,
+    ...breakdown.plDnpl,
   ];
 
   return {
@@ -199,6 +216,7 @@ export async function validateMappingLeadIntake(params: {
     allReasons,
     passed: allReasons.length === 0,
     intakeSettings,
+    plDnplListIds: mappingPlDnplListIds,
   };
 }
 
@@ -238,7 +256,13 @@ export async function runMappingTestLeadSubmit(params: {
     postedAt,
   });
 
-  const intakeRules = buildTestLeadIntakeRuleGroups(validationResult.intakeSettings);
+  const intakeRules = buildTestLeadIntakeRuleGroups(
+    validationResult.intakeSettings,
+    await describePlDnplRuleLines({
+      buyerPlDnplListIds: validationResult.plDnplListIds,
+      campaignPlDnplListIds: [],
+    })
+  );
   const checks = buildTestLeadValidationChecks(validationResult.breakdown, intakeRules);
 
   let leadSaved = false;
@@ -284,7 +308,12 @@ export async function runMappingTestLeadSubmit(params: {
         const pendingCampaigns = await listPendingBuyerPostCampaigns(
           params.verticalRef.toString(),
           true,
-          publisherApiType
+          publisherApiType,
+          {
+            sellerRefId: params.sellerRef.toString(),
+            mappingRefId: params.mappingRef.toString(),
+            allocationScope: "test",
+          }
         );
         await params.buyerPostProgress.onPending(
           buildInitialBuyerPostQueue(pendingCampaigns, postedAt.toISOString())

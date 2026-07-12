@@ -115,7 +115,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [isLoadingPublishers, setIsLoadingPublishers] = useState(true);
   const [isSavingSources, setIsSavingSources] = useState(false);
   const [selectedPlDnplIds, setSelectedPlDnplIds] = useState<string[]>(buyer.plDnplListIds);
-  const [copyPlDnplToOtherBuyers, setCopyPlDnplToOtherBuyers] = useState(buyer.copyPlDnplToOtherBuyers);
   const [presentLists, setPresentLists] = useState<PresentListRecord[]>([]);
   const [isLoadingPresentLists, setIsLoadingPresentLists] = useState(false);
   const [isSavingPlDnpl, setIsSavingPlDnpl] = useState(false);
@@ -149,7 +148,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     setSelectedIntegrationIds(buyer.integrationIds);
     setBlockedPublisherIds(buyer.blockedPublisherIds);
     setSelectedPlDnplIds(buyer.plDnplListIds);
-    setCopyPlDnplToOtherBuyers(buyer.copyPlDnplToOtherBuyers);
   }, [buyer]);
 
   useEffect(() => {
@@ -373,7 +371,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plDnplListIds: selectedPlDnplIds,
-          copyPlDnplToOtherBuyers,
         }),
       });
 
@@ -690,9 +687,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
             <BuyerPlDnplSettings
               presentLists={presentLists}
               selectedIds={selectedPlDnplIds}
-              copyToOtherBuyers={copyPlDnplToOtherBuyers}
               onSelectedIdsChange={setSelectedPlDnplIds}
-              onCopyToOtherBuyersChange={setCopyPlDnplToOtherBuyers}
             />
           )}
 

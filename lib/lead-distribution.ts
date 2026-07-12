@@ -36,14 +36,16 @@ import {
 } from "@/lib/mapping-api-type";
 import { buildCampaignTemplateContext } from "@/lib/campaign-template";
 import {
+  PUBLISHER_BUYER_REJECT_REASON,
+  isPublisherCountableAccept,
+  resolvePublisherBuyerPrice,
+  shouldExposePublisherResponsePrice,
+} from "@/lib/lead-price";
+import {
   defaultMappingRevShareSettings,
   resolvePublisherPriceFromRevShare,
   type MappingRevShareSettingsRecord,
 } from "@/lib/mapping-rev-share-settings";
-import {
-  resolvePublisherBuyerPrice,
-  shouldExposePublisherResponsePrice,
-} from "@/lib/lead-price";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
 import { mergeMockBuyerPostOptions, normalizeCampaignTestMocks, type CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
@@ -72,6 +74,8 @@ export type CampaignDeliveryLog = {
   buyerStatus: BuyerLeadStatus;
   validationErrors: string[];
   price: number | null;
+  /** Publisher share for this buyer delivery after RevShare (buyer-report Pub). */
+  publisherPayout?: number | null;
   redirectUrl: string;
   rejectSign: string;
   rejectReason: string;
@@ -134,12 +138,33 @@ function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
   return deliveries.some((entry) => entry.pingTreeType === "Redirect");
 }
 
-function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: boolean): PublisherLeadStatus {
-  if (deliveries.some((entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept")) {
-    return "Sold";
-  }
-
-  if (deliveries.some((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept")) {
+/**
+ * Publisher Sold/Reject rules (HTTP response to publisher):
+ * - Redirect API: response status/price/redirect_url follow Main Processing
+ *   (Redirect) results only. Silent campaigns still post; Accept is stored as
+ *   Sold on the buyer delivery and appears in buyer report, but does not change
+ *   the publisher API response.
+ * - Silent API: Sold if at least one Silent Accept with minPrice !== 0.
+ *   Silent Accept with minPrice = 0 is stored for reports but Publisher gets Reject.
+ */
+function toPublisherStatus(
+  deliveries: CampaignDeliveryLog[],
+  hadPostError: boolean,
+  apiType: MappingApiType
+): PublisherLeadStatus {
+  if (apiType === "Redirect") {
+    if (
+      deliveries.some(
+        (entry) => entry.pingTreeType === "Redirect" && isPublisherCountableAccept(entry)
+      )
+    ) {
+      return "Sold";
+    }
+  } else if (
+    deliveries.some(
+      (entry) => entry.pingTreeType === "Silent" && isPublisherCountableAccept(entry)
+    )
+  ) {
     return "Sold";
   }
 
@@ -150,19 +175,28 @@ function toPublisherStatus(deliveries: CampaignDeliveryLog[], hadPostError: bool
   return "Reject";
 }
 
-function findAcceptedDelivery(deliveries: CampaignDeliveryLog[]) {
-  const redirectAccept = deliveries.find(
-    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus === "Accept"
-  );
-  if (redirectAccept) {
-    return redirectAccept;
+function findAcceptedDelivery(deliveries: CampaignDeliveryLog[], apiType: MappingApiType) {
+  if (apiType === "Redirect") {
+    return (
+      deliveries.find(
+        (entry) => entry.pingTreeType === "Redirect" && isPublisherCountableAccept(entry)
+      ) ?? null
+    );
   }
 
-  return deliveries.find((entry) => entry.pingTreeType === "Silent" && entry.buyerStatus === "Accept");
+  return (
+    deliveries.find(
+      (entry) => entry.pingTreeType === "Silent" && isPublisherCountableAccept(entry)
+    ) ?? null
+  );
 }
 
-function resolvePublisherPostError(deliveries: CampaignDeliveryLog[]) {
-  if (hasRedirectDeliveries(deliveries)) {
+function resolvePublisherPostError(deliveries: CampaignDeliveryLog[], apiType: MappingApiType) {
+  if (apiType === "Redirect") {
+    // Redirect API publisher errors follow Redirect attempts only.
+    if (!hasRedirectDeliveries(deliveries)) {
+      return false;
+    }
     return deliveries.some(
       (entry) =>
         entry.pingTreeType === "Redirect" &&
@@ -173,43 +207,48 @@ function resolvePublisherPostError(deliveries: CampaignDeliveryLog[]) {
   return deliveries.some((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
 }
 
-function buildPublisherRejectMessage(deliveries: CampaignDeliveryLog[]) {
-  const redirectAttempt = deliveries.find(
-    (entry) => entry.pingTreeType === "Redirect" && entry.buyerStatus !== "Skipped"
+function hasAttemptedBuyerResponse(deliveries: CampaignDeliveryLog[]) {
+  return deliveries.some(
+    (entry) =>
+      entry.buyerStatus === "Accept" ||
+      entry.buyerStatus === "Reject" ||
+      entry.buyerStatus === "Price Reject" ||
+      entry.buyerStatus === "Price Conflict" ||
+      entry.buyerStatus === "Error" ||
+      entry.buyerStatus === "Timeout"
   );
-  const silentAttempt = deliveries.find(
-    (entry) => entry.pingTreeType === "Silent" && entry.buyerStatus !== "Skipped"
+}
+
+function buildPublisherRejectMessage(
+  deliveries: CampaignDeliveryLog[],
+  apiType: MappingApiType
+): string {
+  // Redirect API reject reasons follow Main Processing attempts only.
+  // Silent results are buyer-report only and must not drive publisher messaging.
+  const scoped =
+    apiType === "Redirect"
+      ? deliveries.filter((entry) => entry.pingTreeType === "Redirect")
+      : deliveries.filter((entry) => entry.pingTreeType === "Silent");
+
+  // Spec: when no valid Accept remains (all Reject / Price Reject / only
+  // Silent minPrice=0 Accepts), Publisher reason is always "Buyer Reject".
+  if (hasAttemptedBuyerResponse(scoped)) {
+    return PUBLISHER_BUYER_REJECT_REASON;
+  }
+
+  const validationSkip = scoped.find(
+    (entry) => entry.buyerStatus === "Skipped" && entry.validationErrors.length > 0
   );
-  const primary =
-    redirectAttempt ??
-    silentAttempt ??
-    deliveries.find((entry) => entry.buyerStatus !== "Skipped");
-
-  // No lead actually reached a buyer: campaign is not in the ping tree, every
-  // campaign is disabled, the buyer is disabled, or the integration is
-  // disabled/missing. Surface a filter/duplicate reason when one exists,
-  // otherwise report "Buyer not found." so the publisher always gets a
-  // consistent reject reason for these gate conditions.
-  if (!primary) {
-    const validationSkip = deliveries.find(
-      (entry) => entry.buyerStatus === "Skipped" && entry.validationErrors.length > 0
-    );
-    return validationSkip
-      ? validationSkip.validationErrors.join(" | ")
-      : SILENT_API_NO_BUYER_MESSAGE;
+  if (validationSkip) {
+    return validationSkip.validationErrors.join(" | ");
   }
 
-  if (primary.buyerStatus === "Price Reject" || primary.buyerStatus === "Price Conflict") {
-    return primary.rejectReason || "Buyer price did not meet campaign requirements.";
-  }
-
-  if (primary.buyerStatus === "Reject") {
-    return primary.rejectReason
-      ? `Lead was not sold: ${primary.rejectReason}`
-      : "Lead was not sold to any buyer.";
-  }
-
-  return "Lead was not sold to any buyer.";
+  const anyValidationSkip = deliveries.find(
+    (entry) => entry.buyerStatus === "Skipped" && entry.validationErrors.length > 0
+  );
+  return anyValidationSkip
+    ? anyValidationSkip.validationErrors.join(" | ")
+    : SILENT_API_NO_BUYER_MESSAGE;
 }
 
 async function loadVerticalFields(verticalRefId: string) {
@@ -394,13 +433,16 @@ async function resolveEligiblePingTreeCampaignIds(params: {
     return [] as string[];
   }
 
-  const activeCampaigns = await CampaignModel.find({
+  const activeCampaignFilter: Record<string, unknown> = {
     _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
     status: "Active",
     campaignType: params.pingTreeType,
-  })
-    .select({ _id: 1 })
-    .lean();
+  };
+  if (Types.ObjectId.isValid(params.verticalRefId)) {
+    activeCampaignFilter.verticalRef = new Types.ObjectId(params.verticalRefId);
+  }
+
+  const activeCampaigns = await CampaignModel.find(activeCampaignFilter).select({ _id: 1 }).lean();
 
   const activeCampaignIdSet = new Set(
     activeCampaigns.map((campaign) => campaign._id?.toString() ?? "").filter(Boolean)
@@ -488,6 +530,7 @@ async function processCampaignAttempt(params: {
   mockBuyerPost: boolean;
   mockBuyerPostOptions?: MockBuyerPostOptions;
   campaignTestMocks?: Record<string, CampaignTestMockResponse>;
+  revShareSettings?: MappingRevShareSettingsRecord;
 }) {
   let traceSteps: BuyerPostTraceStep[] = [];
 
@@ -937,6 +980,14 @@ async function processCampaignAttempt(params: {
     request: delivery.buyerRequest,
   });
 
+  const publisherPayout =
+    delivery.buyerStatus === "Accept"
+      ? resolvePublisherPriceFromRevShare(
+          delivery.price,
+          params.revShareSettings ?? defaultMappingRevShareSettings()
+        )
+      : null;
+
   await LeadDeliveryModel.create({
     sellerLeadRef: new Types.ObjectId(params.sellerLeadId),
     sellerRef: new Types.ObjectId(params.sellerRefId),
@@ -948,6 +999,7 @@ async function processCampaignAttempt(params: {
     campaignOrder: params.campaignOrder,
     buyerStatus: delivery.buyerStatus,
     price: delivery.price,
+    publisherPayout,
     redirectUrl: delivery.redirectUrl,
     rejectSign: delivery.rejectSign,
     rejectReason: delivery.rejectReason,
@@ -973,6 +1025,7 @@ async function processCampaignAttempt(params: {
     buyerStatus: delivery.buyerStatus,
     validationErrors: [],
     price: delivery.price,
+    publisherPayout,
     redirectUrl: delivery.redirectUrl,
     rejectSign: delivery.rejectSign,
     rejectReason: delivery.rejectReason,
@@ -1009,6 +1062,7 @@ async function processPingTree(params: {
   stopOnAccept: boolean;
   progress?: LeadDistributionProgressHandlers;
   selectedConfig?: SelectedPingTreeConfig | null;
+  revShareSettings?: MappingRevShareSettingsRecord;
 }) {
   const filteredCampaignIds = await resolveEligiblePingTreeCampaignIds({
     pingTreeType: params.pingTreeType,
@@ -1055,6 +1109,7 @@ async function processPingTree(params: {
           mockBuyerPost: params.mockBuyerPost,
           mockBuyerPostOptions: params.mockBuyerPostOptions,
           campaignTestMocks,
+          revShareSettings: params.revShareSettings,
         })
       )
     );
@@ -1098,6 +1153,7 @@ async function processPingTree(params: {
       mockBuyerPost: params.mockBuyerPost,
       mockBuyerPostOptions: params.mockBuyerPostOptions,
       campaignTestMocks,
+      revShareSettings: params.revShareSettings,
     });
 
     if (!result) continue;
@@ -1295,16 +1351,34 @@ export type { PendingBuyerPostCampaign };
 export async function listPendingBuyerPostCampaigns(
   verticalRefId: string,
   mockBuyerPost = true,
-  publisherApiType: MappingApiType = "Redirect"
+  publisherApiType: MappingApiType = "Redirect",
+  options?: {
+    sellerRefId?: string;
+    mappingRefId?: string | null;
+    allocationScope?: "live" | "test";
+  }
 ): Promise<PendingBuyerPostCampaign[]> {
   await ensureDefaultPingTrees();
   const pending: PendingBuyerPostCampaign[] = [];
+  const allocationScope = options?.allocationScope ?? (mockBuyerPost ? "test" : "live");
 
   for (const pingTreeType of resolvePublisherPingTreeTypes(publisherApiType)) {
+    // Match distributeLeadAfterIntake: pick the weighted PingTreeConfig for this
+    // tab (Main processing vs Silent) independently, then list that tree only.
+    const selectedConfig = await selectPingTreeConfig({
+      verticalRefId,
+      processingType: mapPingTreeTypeToProcessingType(pingTreeType),
+      count: false,
+      allocationScope,
+      sellerRefId: options?.sellerRefId,
+      mappingRefId: options?.mappingRefId ?? null,
+    });
+
     const orderedCampaignIds = await resolveEligiblePingTreeCampaignIds({
       pingTreeType,
       verticalRefId,
       mockBuyerPost,
+      selectedConfig,
     });
 
     if (orderedCampaignIds.length === 0) continue;
@@ -1313,6 +1387,9 @@ export async function listPendingBuyerPostCampaigns(
       _id: { $in: orderedCampaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
       status: "Active",
       campaignType: pingTreeType,
+      ...(Types.ObjectId.isValid(verticalRefId)
+        ? { verticalRef: new Types.ObjectId(verticalRefId) }
+        : {}),
     })
       .select({ name: 1, buyerRef: 1, status: 1 })
       .lean();
@@ -1388,6 +1465,9 @@ export async function distributeLeadAfterIntake(params: {
 
   const pingTreeTypes = resolvePublisherPingTreeTypes(publisherApiType);
 
+  // Redirect API: Main processing (Redirect campaigns) + Silent tab run in
+  // parallel and independently. Accept on Redirect does not stop Silent posts.
+  // Silent API: Silent tab only.
   // Pick the weighted PingTreeConfig for each bucket exactly once per lead.
   // Always advance counters — peeking a frozen live bucket (e.g. Main currently
   // "owes" the next slot) makes every Test Lead pick the same tree (100% Main).
@@ -1448,26 +1528,32 @@ export async function distributeLeadAfterIntake(params: {
         stopOnAccept: pingTreeType === "Redirect",
         progress: params.progress,
         selectedConfig: selectedConfigByType.get(pingTreeType) ?? null,
+        revShareSettings: params.revShareSettings ?? defaultMappingRevShareSettings(),
       })
     )
   );
 
   const coreDeliveries = deliveryResults.flat();
 
-  const accepted = findAcceptedDelivery(coreDeliveries);
-  const hadPostError = resolvePublisherPostError(coreDeliveries);
-  const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError);
+  const accepted = findAcceptedDelivery(coreDeliveries, publisherApiType);
+  const hadPostError = resolvePublisherPostError(coreDeliveries, publisherApiType);
+  const publisherStatus = toPublisherStatus(coreDeliveries, hadPostError, publisherApiType);
 
-  const redirectUrl = resolveBuyerRedirectUrl(
-    accepted?.redirectUrl ?? "",
-    accepted?.buyerStatus === "Accept"
-  );
-  const buyerPrice = resolvePublisherBuyerPrice(coreDeliveries, accepted);
+  const redirectUrl =
+    publisherApiType === "Redirect" && accepted
+      ? resolveBuyerRedirectUrl(accepted.redirectUrl ?? "", true)
+      : "";
+  const buyerPrice = resolvePublisherBuyerPrice(coreDeliveries, accepted ?? undefined, publisherApiType);
   const revShareSettings = params.revShareSettings ?? defaultMappingRevShareSettings();
-  const soldPrice = resolvePublisherPriceFromRevShare(buyerPrice, revShareSettings);
-  const publisherResponsePrice = shouldExposePublisherResponsePrice(coreDeliveries, accepted)
-    ? soldPrice
-    : null;
+  const soldPrice =
+    publisherStatus === "Sold"
+      ? resolvePublisherPriceFromRevShare(buyerPrice, revShareSettings)
+      : null;
+  const publisherResponsePrice =
+    publisherStatus === "Sold" &&
+    shouldExposePublisherResponsePrice(coreDeliveries, accepted ?? undefined, publisherApiType)
+      ? soldPrice
+      : null;
 
   const pingTreeAllocations = Array.from(selectedConfigByType.entries())
     .filter((entry): entry is [PingTreeCampaignType, SelectedPingTreeConfig] => entry[1] !== null)
@@ -1520,13 +1606,14 @@ export async function distributeLeadAfterIntake(params: {
         "No buyer request was built. Add the campaign to the Ping Tree, configure Integration on the campaign, and ensure the buyer is Active."
       : "";
 
-  const firstPostError = hasRedirectDeliveries(coreDeliveries)
-    ? coreDeliveries.find(
-        (entry) =>
-          entry.pingTreeType === "Redirect" &&
-          (entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout")
-      )
-    : coreDeliveries.find((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
+  const firstPostError =
+    publisherApiType === "Redirect"
+      ? coreDeliveries.find(
+          (entry) =>
+            entry.pingTreeType === "Redirect" &&
+            (entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout")
+        )
+      : coreDeliveries.find((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
 
   return {
     publisherStatus,
@@ -1543,6 +1630,6 @@ export async function distributeLeadAfterIntake(params: {
           ? firstPostError?.errorReason?.trim() || "Buyer post failed."
           : publisherStatus === "Test"
             ? "Test lead was not posted to buyers."
-            : buildPublisherRejectMessage(coreDeliveries),
+            : buildPublisherRejectMessage(coreDeliveries, publisherApiType),
   };
 }

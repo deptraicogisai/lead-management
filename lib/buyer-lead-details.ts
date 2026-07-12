@@ -166,12 +166,20 @@ export function resolveBuyerLeadMoneyMetrics(input: {
   buyerStatus: string;
   price: number | null;
   campaignMinPrice: number | null;
+  /** Per-delivery publisher payout after RevShare (preferred). */
+  publisherPayout?: number | null;
+  /** @deprecated Fallback for older rows that only stored seller-lead soldPrice. */
   soldPrice?: number | null;
 }) {
   const isAccept = input.buyerStatus === "Accept";
   const ttl = isAccept && typeof input.price === "number" && Number.isFinite(input.price) ? input.price : 0;
-  const pub =
-    isAccept && typeof input.soldPrice === "number" && Number.isFinite(input.soldPrice) ? input.soldPrice : 0;
+  const payout =
+    typeof input.publisherPayout === "number" && Number.isFinite(input.publisherPayout)
+      ? input.publisherPayout
+      : typeof input.soldPrice === "number" && Number.isFinite(input.soldPrice)
+        ? input.soldPrice
+        : null;
+  const pub = isAccept && payout !== null ? payout : 0;
   const campaignMinPrice =
     typeof input.campaignMinPrice === "number" && Number.isFinite(input.campaignMinPrice)
       ? input.campaignMinPrice
@@ -220,6 +228,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
   price: number | null;
   pingTreeType: "Redirect" | "Silent";
   redirectConfirmedAt?: Date | string | null;
+  publisherPayout?: number | null;
   soldPrice?: number | null;
   productName: string;
   productIndex: number;
@@ -260,6 +269,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
     buyerStatus: input.buyerStatus,
     price: input.price,
     campaignMinPrice: input.campaignMinPrice,
+    publisherPayout: input.publisherPayout,
     soldPrice: input.soldPrice,
   });
 

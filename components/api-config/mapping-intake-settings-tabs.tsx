@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar, Copy, Filter, Pencil, Trash2 } from "lucide-react";
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
+import { CopyPublisherFiltersModal } from "@/components/sellers/copy-publisher-filters-modal";
 import { CopyPublisherScheduleModal } from "@/components/sellers/copy-publisher-schedule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
@@ -25,7 +26,8 @@ import {
   patchMultiSelectFilterPairEnabled,
   validateGeneralFilters,
   type CampaignGeneralFilter,
-  type CampaignScheduleRule } from "@/lib/campaign";
+  type CampaignScheduleRule,
+} from "@/lib/campaign";
 import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings";
 import type { VerticalFieldOption } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
@@ -61,6 +63,8 @@ export function MappingIntakeSettingsTabs({
   const [scheduleRuleModalOpen, setScheduleRuleModalOpen] = useState(false);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
   const [copyScheduleModalOpen, setCopyScheduleModalOpen] = useState(false);
+  const [copyFiltersModalOpen, setCopyFiltersModalOpen] = useState(false);
+  const [copyFiltersToOtherPublishers, setCopyFiltersToOtherPublishers] = useState(false);
 
   const settingsUrl = `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/intake-settings`;
 
@@ -284,14 +288,28 @@ export function MappingIntakeSettingsTabs({
         <DualSaveBar
           dual={shouldUseDualSaveBar(groupGeneralFiltersForDisplay(settings.generalFilters).length)}
           renderActions={() => (
-            <PrimaryButton
-              type="button"
-              disabled={isSaving}
-              onClick={handleSaveFilters}
-             
-            >
-              {isSaving ? "Saving..." : "Save Filters"}
-            </PrimaryButton>
+            <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <span />
+              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={copyFiltersToOtherPublishers}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setCopyFiltersToOtherPublishers(checked);
+                    if (checked) {
+                      setCopyFiltersModalOpen(true);
+                    }
+                  }}
+                />
+                Copy &quot;Filter&quot; settings to other publishers
+              </label>
+              <div className="justify-self-end">
+                <PrimaryButton type="button" disabled={isSaving} onClick={handleSaveFilters}>
+                  {isSaving ? "Saving..." : "Save Filters"}
+                </PrimaryButton>
+              </div>
+            </div>
           )}
         >
         <div className="space-y-4">
@@ -452,6 +470,21 @@ export function MappingIntakeSettingsTabs({
         sourceSellerId={sellerId}
         mappingId={mappingId}
         onClose={() => setCopyScheduleModalOpen(false)}
+      />
+
+      <CopyPublisherFiltersModal
+        open={copyFiltersModalOpen}
+        sourceSellerId={sellerId}
+        mappingId={mappingId}
+        generalFilters={settings?.generalFilters ?? []}
+        onClose={() => {
+          setCopyFiltersModalOpen(false);
+          setCopyFiltersToOtherPublishers(false);
+        }}
+        onApplied={() => {
+          setCopyFiltersToOtherPublishers(true);
+          setCopyFiltersModalOpen(false);
+        }}
       />
 
     </div>

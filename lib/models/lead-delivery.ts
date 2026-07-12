@@ -16,6 +16,8 @@ const leadDeliverySchema = new Schema(
     buyerStatus: { type: String, enum: BUYER_LEAD_STATUSES, required: true, index: true },
     validationErrors: { type: [String], default: [] },
     price: { type: Number, required: false, default: null },
+    /** Publisher share for this delivery after RevShare (buyer-report Pub). */
+    publisherPayout: { type: Number, required: false, default: null },
     redirectUrl: { type: String, required: false, trim: true, default: "" },
     rejectSign: { type: String, required: false, trim: true, default: "" },
     rejectReason: { type: String, required: false, trim: true, default: "" },

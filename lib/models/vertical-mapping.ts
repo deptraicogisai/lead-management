@@ -111,6 +111,7 @@ const verticalMappingSchema = new Schema(
     revShare: { type: mappingRevShareSchema, default: () => ({}) },
     generalFilters: { type: [mappingGeneralFilterSchema], default: [] },
     scheduleRules: { type: [mappingScheduleRuleSchema], default: [] },
+    plDnplListIds: { type: [String], default: [] },
   },
   { timestamps: true }
 );

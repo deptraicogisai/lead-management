@@ -381,6 +381,28 @@ function readRedirectUrlFromBuyerResponse(parsedResponse: unknown) {
   ).trim();
 }
 
+function readSoldPriceFromBuyerResponse(parsedResponse: unknown): number | null {
+  if (!parsedResponse || typeof parsedResponse !== "object" || Array.isArray(parsedResponse)) {
+    return null;
+  }
+
+  const responseRecord = parsedResponse as Record<string, unknown>;
+  const raw =
+    responseRecord.price ??
+    responseRecord.soldPrice ??
+    responseRecord.sold_price ??
+    responseRecord.buyerPrice ??
+    responseRecord.buyer_price;
+
+  if (raw === null || raw === undefined || raw === "") {
+    return null;
+  }
+
+  const parsedPrice =
+    typeof raw === "number" ? raw : Number(stringifyTemplateValue(raw).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsedPrice) ? parsedPrice : null;
+}
+
 export function parseIntegrationResponse(
   responseMapping: IntegrationBuilderResponseMapping,
   rawResponseText: string,
@@ -515,6 +537,13 @@ export function parseIntegrationResponse(
 
   if (!result.redirectUrl.trim()) {
     result.redirectUrl = readRedirectUrlFromBuyerResponse(parsedResponse);
+  }
+
+  // Soft-read price when Sold::Price is unmapped/empty. Default Error::Reason makes
+  // hasMapping true, so the no-mapping branch above never runs — without this,
+  // mock/buyer `price` is ignored and Price Reject never fires.
+  if (result.soldPrice === null) {
+    result.soldPrice = readSoldPriceFromBuyerResponse(parsedResponse);
   }
 
   return normalizeParsedBuyerResponseAcceptIndicators(result);

@@ -2,18 +2,27 @@ import type { MappingIntakeSettingsRecord } from "@/lib/mapping-intake-settings"
 import { buildDocumentationRequirementRows } from "@/lib/api-documentation-requirements";
 
 export type TestLeadIntakeRuleGroup = {
-  category: "Duplicates" | "Filters" | "Schedule";
+  category: "Duplicates" | "Filters" | "Schedule" | "PL/DNPL";
   rules: string[];
 };
 
-export function buildTestLeadIntakeRuleGroups(settings: MappingIntakeSettingsRecord): TestLeadIntakeRuleGroup[] {
+export function buildTestLeadIntakeRuleGroups(
+  settings: MappingIntakeSettingsRecord,
+  plDnplRules: string[] = []
+): TestLeadIntakeRuleGroup[] {
   const rows = buildDocumentationRequirementRows(settings, []);
-  const categories: TestLeadIntakeRuleGroup["category"][] = ["Duplicates", "Filters", "Schedule"];
+  const categories: Array<"Duplicates" | "Filters" | "Schedule"> = ["Duplicates", "Filters", "Schedule"];
 
-  return categories.map((category) => ({
-    category,
-    rules: rows.find((row) => row.category === category)?.requirements ?? [],
-  }));
+  return [
+    ...categories.map((category) => ({
+      category,
+      rules: rows.find((row) => row.category === category)?.requirements ?? [],
+    })),
+    {
+      category: "PL/DNPL" as const,
+      rules: plDnplRules,
+    },
+  ];
 }
 
 export function buildTestLeadMultiSelectFilters(settings: MappingIntakeSettingsRecord): Record<string, string[]> {
@@ -34,7 +43,7 @@ export function buildTestLeadMultiSelectFilters(settings: MappingIntakeSettingsR
 }
 
 export type TestLeadValidationCheck = {
-  category: "Fields" | "Duplicates" | "Filters" | "Schedule";
+  category: "Fields" | "Duplicates" | "Filters" | "Schedule" | "PL/DNPL";
   passed: boolean;
   messages: string[];
 };
@@ -45,12 +54,15 @@ export function buildTestLeadValidationChecks(
     duplicates: string[];
     filters: string[];
     schedule: string[];
+    plDnpl?: string[];
   },
   intakeRuleGroups: TestLeadIntakeRuleGroup[]
 ): TestLeadValidationCheck[] {
   const configuredCategories = new Set(
     intakeRuleGroups.filter((group) => group.rules.length > 0).map((group) => group.category)
   );
+
+  const plDnplReasons = breakdown.plDnpl ?? [];
 
   const checks: TestLeadValidationCheck[] = [
     {
@@ -72,6 +84,11 @@ export function buildTestLeadValidationChecks(
       category: "Schedule",
       passed: breakdown.schedule.length === 0,
       messages: breakdown.schedule,
+    },
+    {
+      category: "PL/DNPL",
+      passed: plDnplReasons.length === 0,
+      messages: plDnplReasons,
     },
   ];
 

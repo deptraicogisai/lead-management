@@ -82,12 +82,18 @@ export async function GET(_: Request, context: Params) {
     }
 
     const lookup = await buildCampaignLookupContext();
-    const campaigns = await CampaignModel.find({
+    const verticalRefId = config.verticalRef?.toString() ?? "";
+    const campaignQuery: Record<string, unknown> = {
       campaignType: configCampaignType(config.processingType),
       ...excludeDeletedStatusFilter(),
-    })
-      .sort({ displayId: -1 })
-      .lean();
+    };
+    // Each ping tree belongs to one product — only show that product's campaigns
+    // so Main processing / Silent tabs stay independent and do not mix verticals.
+    if (verticalRefId && Types.ObjectId.isValid(verticalRefId)) {
+      campaignQuery.verticalRef = new Types.ObjectId(verticalRefId);
+    }
+
+    const campaigns = await CampaignModel.find(campaignQuery).sort({ displayId: -1 }).lean();
     const records = campaigns.map((campaign) => toCampaignRecord(campaign, lookup));
 
     const activeIds = new Set(config.activeCampaignIds ?? []);

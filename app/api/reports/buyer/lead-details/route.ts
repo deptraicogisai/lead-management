@@ -354,6 +354,7 @@ export async function GET(req: Request) {
         price: typeof doc.price === "number" ? doc.price : null,
         pingTreeType,
         redirectConfirmedAt: sellerLead?.redirectConfirmedAt,
+        publisherPayout: typeof doc.publisherPayout === "number" ? doc.publisherPayout : null,
         soldPrice: sellerLead?.soldPrice,
         productName: verticalNameById.get(verticalId) ?? "",
         productIndex: verticalIndexById.get(verticalId) ?? 0,

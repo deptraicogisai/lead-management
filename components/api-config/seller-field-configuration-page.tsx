@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { Calendar, Copy, Filter, FlaskConical, List, Pencil, Percent, Plus, Trash2 } from "lucide-react";
+import { Calendar, Copy, Filter, FlaskConical, List, ListFilter, Pencil, Percent, Plus, Trash2 } from "lucide-react";
 import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
+import { MappingPlDnplSettingsTab } from "@/components/api-config/mapping-pl-dnpl-settings-tab";
 import { MappingRevShareSettingsTab } from "@/components/api-config/mapping-rev-share-settings-tab";
 import { MappingTestLeadTab } from "@/components/api-config/mapping-test-lead-tab";
 import { useParams, useSearchParams } from "next/navigation";
@@ -113,13 +114,21 @@ function buildFieldPayload(field: ApiField) {
   };
 }
 
-type FieldConfigurationTab = "fields" | "duplicates" | "filters" | "schedule" | "rev-share" | "test-lead";
+type FieldConfigurationTab =
+  | "fields"
+  | "duplicates"
+  | "filters"
+  | "schedule"
+  | "pl-dnpl"
+  | "rev-share"
+  | "test-lead";
 
 const fieldConfigTabs = [
   { id: "fields" as const, label: "Fields", icon: List },
   { id: "duplicates" as const, label: "Duplicates", icon: Copy },
   { id: "filters" as const, label: "Filters", icon: Filter },
   { id: "schedule" as const, label: "Schedule", icon: Calendar },
+  { id: "pl-dnpl" as const, label: "PL/DNPL", icon: ListFilter },
   { id: "rev-share" as const, label: "Rev-Share Model", icon: Percent },
   { id: "test-lead" as const, label: "Test Lead", icon: FlaskConical },
 ];
@@ -875,6 +884,8 @@ export function SellerFieldConfigurationPage() {
           />
         </ListTableContainer>
         </>
+        ) : sellerId && mappingId && activeTab === "pl-dnpl" ? (
+          <MappingPlDnplSettingsTab sellerId={sellerId} mappingId={mappingId} />
         ) : sellerId && mappingId && activeTab === "rev-share" ? (
           <MappingRevShareSettingsTab sellerId={sellerId} mappingId={mappingId} />
         ) : sellerId && mappingId && (activeTab === "duplicates" || activeTab === "filters" || activeTab === "schedule") ? (
