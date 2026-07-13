@@ -12,6 +12,8 @@ const leadDeliverySchema = new Schema(
     buyerRef: { type: Schema.Types.ObjectId, ref: "Buyer", required: true, index: true },
     integrationRef: { type: Schema.Types.ObjectId, ref: "IntegrationBuilder", required: false },
     pingTreeType: { type: String, enum: ["Redirect", "Silent"], required: true, index: true },
+    /** Ping Tree Settings tab: Main processing | Exit Page | Exit Offer List | Silent */
+    processingType: { type: String, required: false, trim: true, index: true },
     campaignOrder: { type: Number, required: true, default: 0 },
     buyerStatus: { type: String, enum: BUYER_LEAD_STATUSES, required: true, index: true },
     validationErrors: { type: [String], default: [] },

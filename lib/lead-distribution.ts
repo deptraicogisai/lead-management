@@ -524,6 +524,7 @@ async function processCampaignAttempt(params: {
   campaignId: string;
   campaignOrder: number;
   pingTreeType: PingTreeCampaignType;
+  processingType?: string;
   sellerLeadId: string;
   sellerRefId: string;
   verticalRefId: string;
@@ -536,6 +537,8 @@ async function processCampaignAttempt(params: {
   revShareSettings?: MappingRevShareSettingsRecord;
   publisherApiType?: MappingApiType;
 }) {
+  const processingType =
+    params.processingType?.trim() || mapPingTreeTypeToProcessingType(params.pingTreeType);
   let traceSteps: BuyerPostTraceStep[] = [];
 
   const campaign = await CampaignModel.findById(params.campaignId).lean();
@@ -757,6 +760,7 @@ async function processCampaignAttempt(params: {
       campaignRef: new Types.ObjectId(params.campaignId),
       buyerRef: new Types.ObjectId(buyerId),
       pingTreeType: params.pingTreeType,
+      processingType,
       campaignOrder: params.campaignOrder,
       buyerStatus: "Skipped",
       validationErrors: validation.reasons,
@@ -811,6 +815,7 @@ async function processCampaignAttempt(params: {
       campaignRef: new Types.ObjectId(params.campaignId),
       buyerRef: new Types.ObjectId(buyerId),
       pingTreeType: params.pingTreeType,
+      processingType,
       campaignOrder: params.campaignOrder,
       buyerStatus: "Skipped",
       errorReason,
@@ -1003,6 +1008,7 @@ async function processCampaignAttempt(params: {
     buyerRef: new Types.ObjectId(buyerId),
     integrationRef: new Types.ObjectId(integrationId),
     pingTreeType: params.pingTreeType,
+    processingType,
     campaignOrder: params.campaignOrder,
     buyerStatus: delivery.buyerStatus,
     price: delivery.price,
@@ -1072,6 +1078,8 @@ async function processPingTree(params: {
   revShareSettings?: MappingRevShareSettingsRecord;
   publisherApiType?: MappingApiType;
 }) {
+  const processingType =
+    params.selectedConfig?.processingType || mapPingTreeTypeToProcessingType(params.pingTreeType);
   const filteredCampaignIds = await resolveEligiblePingTreeCampaignIds({
     pingTreeType: params.pingTreeType,
     verticalRefId: params.verticalRefId,
@@ -1108,6 +1116,7 @@ async function processPingTree(params: {
           campaignId,
           campaignOrder: index + 1,
           pingTreeType: params.pingTreeType,
+          processingType,
           sellerLeadId: params.sellerLeadId,
           sellerRefId: params.sellerRefId,
           verticalRefId: params.verticalRefId,
@@ -1153,6 +1162,7 @@ async function processPingTree(params: {
       campaignId,
       campaignOrder: index + 1,
       pingTreeType: params.pingTreeType,
+      processingType,
       sellerLeadId: params.sellerLeadId,
       sellerRefId: params.sellerRefId,
       verticalRefId: params.verticalRefId,
@@ -1570,6 +1580,7 @@ export async function distributeLeadAfterIntake(params: {
     .filter((entry): entry is [PingTreeCampaignType, SelectedPingTreeConfig] => entry[1] !== null)
     .map(([pingTreeType, config]) => ({
       pingTreeType,
+      processingType: config.processingType,
       configId: config.id,
       configName: config.name,
       displayId: config.displayId,

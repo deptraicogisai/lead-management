@@ -10,6 +10,7 @@ import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
+import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { FieldLabel, PrimaryButton, primaryButtonClassName, Checkbox } from "@/components/ui/form-controls";
@@ -404,9 +405,15 @@ export function MappingIntakeSettingsTabs({
             </PrimaryButton>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+          <ScrollableTableShell
+            rowCount={settings.scheduleRules.length}
+            thead={
+              <thead
+                className={cn(
+                  TABLE_STICKY_HEADER_CLASS,
+                  "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300"
+                )}
+              >
                 <tr>
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Iteration</th>
@@ -419,67 +426,68 @@ export function MappingIntakeSettingsTabs({
                   <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {settings.scheduleRules.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                      No schedule rules yet.
+            }
+          >
+            <tbody>
+              {settings.scheduleRules.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                    No schedule rules yet.
+                  </td>
+                </tr>
+              ) : (
+                settings.scheduleRules.map((rule) => (
+                  <tr key={rule.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-3">{rule.action}</td>
+                    <td className="px-4 py-3">{rule.scheduleMethod}</td>
+                    <td className="px-4 py-3">{rule.days.join(", ")}</td>
+                    <td className="px-4 py-3">
+                      {rule.startHour}:{rule.startMinute}
+                    </td>
+                    <td className="px-4 py-3">
+                      {rule.endHour}:{rule.endMinute}
+                    </td>
+                    <td className="px-4 py-3">{rule.dailySoldLeadsLimit ?? "-"}</td>
+                    <td className="px-4 py-3">{rule.dailyPostLeadsLimit ?? "-"}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={rule.active ? "Active" : "Inactive"} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <IconActionButton
+                          icon={Pencil}
+                          onClick={() => {
+                            setEditingScheduleRule(rule);
+                            setScheduleRuleModalOpen(true);
+                          }}
+                          className="rounded-lg px-2 py-1 text-xs"
+                          aria-label="Edit schedule rule"
+                        >
+                          Edit
+                        </IconActionButton>
+                        <IconActionButton
+                          icon={Trash2}
+                          variant="danger"
+                          onClick={() => {
+                            const nextRules = settings.scheduleRules.filter((item) => item.id !== rule.id);
+                            void saveSection(
+                              "schedule",
+                              { scheduleRules: nextRules, timezone: settings.timezone },
+                              "Schedule rule deleted successfully."
+                            );
+                          }}
+                          className="rounded-lg px-2 py-1 text-xs"
+                          aria-label="Delete schedule rule"
+                        >
+                          Delete
+                        </IconActionButton>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  settings.scheduleRules.map((rule) => (
-                    <tr key={rule.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-3">{rule.action}</td>
-                      <td className="px-4 py-3">{rule.scheduleMethod}</td>
-                      <td className="px-4 py-3">{rule.days.join(", ")}</td>
-                      <td className="px-4 py-3">
-                        {rule.startHour}:{rule.startMinute}
-                      </td>
-                      <td className="px-4 py-3">
-                        {rule.endHour}:{rule.endMinute}
-                      </td>
-                      <td className="px-4 py-3">{rule.dailySoldLeadsLimit ?? "-"}</td>
-                      <td className="px-4 py-3">{rule.dailyPostLeadsLimit ?? "-"}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={rule.active ? "Active" : "Inactive"} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <IconActionButton
-                            icon={Pencil}
-                            onClick={() => {
-                              setEditingScheduleRule(rule);
-                              setScheduleRuleModalOpen(true);
-                            }}
-                            className="rounded-lg px-2 py-1 text-xs"
-                            aria-label="Edit schedule rule"
-                          >
-                            Edit
-                          </IconActionButton>
-                          <IconActionButton
-                            icon={Trash2}
-                            variant="danger"
-                            onClick={() => {
-                              const nextRules = settings.scheduleRules.filter((item) => item.id !== rule.id);
-                              void saveSection(
-                                "schedule",
-                                { scheduleRules: nextRules, timezone: settings.timezone },
-                                "Schedule rule deleted successfully."
-                              );
-                            }}
-                            className="rounded-lg px-2 py-1 text-xs"
-                            aria-label="Delete schedule rule"
-                          >
-                            Delete
-                          </IconActionButton>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </ScrollableTableShell>
 
           {settings.scheduleRules.length > 0 ? (
             <>

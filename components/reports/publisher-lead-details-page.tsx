@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, Download, Eye } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -15,7 +16,6 @@ import {
   SearchFilterPanel,
   SearchFilterSelect,
 } from "@/components/ui/search-filter-layout";
-import { Modal } from "@/components/ui/modal";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
@@ -36,7 +36,6 @@ import {
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getStatusBadgePresentation } from "@/lib/status-badge";
-import { IdBadge } from "@/components/ui/id-badge";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 
@@ -113,7 +112,6 @@ export function PublisherLeadDetailsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [viewLead, setViewLead] = useState<PublisherLeadDetailsRow | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
@@ -321,14 +319,15 @@ export function PublisherLeadDetailsPage() {
         label: "ID",
         sortValue: (row) => row.displayCode,
         render: (row) => (
-          <button
-            type="button"
-            onClick={() => setViewLead(row)}
+          <Link
+            href={`/leads/${encodeURIComponent(row.id)}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
           >
             <Eye size={13} className="shrink-0 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400" />
             <span>{row.displayCode}</span>
-          </button>
+          </Link>
         ),
       },
       {
@@ -483,11 +482,6 @@ export function PublisherLeadDetailsPage() {
                 />
               </SearchFilterGrid>
 
-              <p className="mt-4 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
-                To add lead parameters to the report, go to System Management → Products, select the product, and
-                configure its fields under Report Customization.
-              </p>
-
               <SearchFilterActions onSearch={handleSearch} onClear={handleClearAll} />
             </SearchFilterPanel>
 
@@ -566,116 +560,6 @@ export function PublisherLeadDetailsPage() {
               </ListTableContainer>
             </div>
       </div>
-
-      <Modal
-        open={Boolean(viewLead)}
-        title={viewLead ? `Lead ${viewLead.displayCode}` : "Lead Details"}
-        onClose={() => setViewLead(null)}
-        panelClassName="max-w-3xl"
-      >
-        {viewLead ? (
-          <div className="space-y-4 text-sm text-slate-700 dark:text-slate-100">
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Lead ID</dt>
-                <dd className="mt-1 font-mono text-xs">{viewLead.id}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Display Code</dt>
-                <dd className="mt-1">{viewLead.displayCode}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Posted At</dt>
-                <dd className="mt-1">{formatPublisherLeadTime(viewLead.postedAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Created At</dt>
-                <dd className="mt-1">{formatPublisherLeadTime(viewLead.createdAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</dt>
-                <dd className="mt-1">
-                  <StatusBadge status={viewLead.statusLabel} />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Publisher</dt>
-                <dd className="mt-1">{viewLead.publisherLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Redirect</dt>
-                <dd className="mt-1">
-                  <RedirectCell
-                    label={viewLead.redirectLabel}
-                    redirectConfirmed={viewLead.redirectConfirmed}
-                    isRedirectCampaign={viewLead.isRedirectCampaign}
-                  />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Pub</dt>
-                <dd className="mt-1 tabular-nums">{viewLead.publisherPayout}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">ADM</dt>
-                <dd className="mt-1 tabular-nums">{viewLead.adm}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">TTL</dt>
-                <dd className="mt-1 tabular-nums">{viewLead.ttl}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Product</dt>
-                <dd className="mt-1">{viewLead.productLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Ping Tree</dt>
-                <dd className="mt-1">
-                  {viewLead.pingTreeAllocations.length > 0 ? (
-                    <div className="flex flex-col gap-1">
-                      {viewLead.pingTreeAllocations.map((allocation) => (
-                        <span key={allocation.configId} className="inline-flex items-center gap-2">
-                          {allocation.displayId != null ? <IdBadge id={allocation.displayId} /> : null}
-                          <span>{allocation.configName || "—"}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Channel</dt>
-                <dd className="mt-1">{viewLead.channelLabel}</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">User Agent</dt>
-                <dd className="mt-1 break-all">{viewLead.userAgent}</dd>
-              </div>
-              {viewLead.validationErrors.length ? (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Validation Errors</dt>
-                  <dd className="mt-1">
-                    <ul className="list-disc space-y-1 pl-5 text-red-600 dark:text-red-400">
-                      {viewLead.validationErrors.map((error) => (
-                        <li key={error}>{error}</li>
-                      ))}
-                    </ul>
-                  </dd>
-                </div>
-              ) : null}
-            </dl>
-
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Lead Payload</p>
-              <pre className="max-h-[40vh] overflow-auto rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-700 dark:bg-slate-800 dark:text-slate-100">
-                {JSON.stringify(viewLead.rawPayload, null, 2)}
-              </pre>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
     </PageSection>
   );
 }

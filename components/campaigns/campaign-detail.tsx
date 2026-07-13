@@ -35,6 +35,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
+import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import {
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
@@ -770,9 +771,15 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            <ScrollableTableShell
+              rowCount={campaign.scheduleRules.length}
+              thead={
+                <thead
+                  className={cn(
+                    TABLE_STICKY_HEADER_CLASS,
+                    "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300"
+                  )}
+                >
                   <tr>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Iteration</th>
@@ -787,56 +794,57 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                     <th className="px-4 py-3">Action</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {campaign.scheduleRules.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="px-4 py-8 text-center text-slate-500">No schedule rules yet.</td>
+              }
+            >
+              <tbody>
+                {campaign.scheduleRules.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-8 text-center text-slate-500">No schedule rules yet.</td>
+                  </tr>
+                ) : (
+                  campaign.scheduleRules.map((rule) => (
+                    <tr key={rule.id || `${rule.action}-${rule.startHour}`} className="border-t border-slate-200 dark:border-slate-700">
+                      <td className="px-4 py-3">{rule.action}</td>
+                      <td className="px-4 py-3">{rule.scheduleMethod}</td>
+                      <td className="px-4 py-3">{rule.days.length === SCHEDULE_DAY_OPTIONS.length ? "All days" : rule.days.join(", ")}</td>
+                      <td className="px-4 py-3">{rule.startHour}:{rule.startMinute}</td>
+                      <td className="px-4 py-3">{rule.endHour}:{rule.endMinute}</td>
+                      <td className="px-4 py-3">{rule.dailySoldLeadsLimit ?? "∞"}</td>
+                      <td className="px-4 py-3">{rule.dailyPostLeadsLimit ?? "∞"}</td>
+                      <td className="px-4 py-3 text-slate-400">-</td>
+                      <td className="px-4 py-3 text-slate-400">-</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={rule.active ? "Active" : "Inactive"} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <IconActionButton
+                            icon={Pencil}
+                            onClick={() => openEditScheduleRuleModal(rule)}
+                            className="rounded-lg px-2 py-1 text-xs"
+                            aria-label="Edit schedule rule"
+                          >
+                            Edit
+                          </IconActionButton>
+                          <IconActionButton
+                            icon={Trash2}
+                            variant="danger"
+                            onClick={() => {
+                              const nextRules = campaign.scheduleRules.filter((item) => item.id !== rule.id);
+                              void saveSection("schedule", { scheduleRules: nextRules }, "Schedule rule deleted successfully.");
+                            }}
+                            className="rounded-lg px-2 py-1 text-xs"
+                            aria-label="Delete schedule rule"
+                          >
+                            Delete
+                          </IconActionButton>
+                        </div>
+                      </td>
                     </tr>
-                  ) : (
-                    campaign.scheduleRules.map((rule) => (
-                      <tr key={rule.id || `${rule.action}-${rule.startHour}`} className="border-t border-slate-200 dark:border-slate-700">
-                        <td className="px-4 py-3">{rule.action}</td>
-                        <td className="px-4 py-3">{rule.scheduleMethod}</td>
-                        <td className="px-4 py-3">{rule.days.length === SCHEDULE_DAY_OPTIONS.length ? "All days" : rule.days.join(", ")}</td>
-                        <td className="px-4 py-3">{rule.startHour}:{rule.startMinute}</td>
-                        <td className="px-4 py-3">{rule.endHour}:{rule.endMinute}</td>
-                        <td className="px-4 py-3">{rule.dailySoldLeadsLimit ?? "∞"}</td>
-                        <td className="px-4 py-3">{rule.dailyPostLeadsLimit ?? "∞"}</td>
-                        <td className="px-4 py-3 text-slate-400">-</td>
-                        <td className="px-4 py-3 text-slate-400">-</td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={rule.active ? "Active" : "Inactive"} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <IconActionButton
-                              icon={Pencil}
-                              onClick={() => openEditScheduleRuleModal(rule)}
-                              className="rounded-lg px-2 py-1 text-xs"
-                              aria-label="Edit schedule rule"
-                            >
-                              Edit
-                            </IconActionButton>
-                            <IconActionButton
-                              icon={Trash2}
-                              variant="danger"
-                              onClick={() => {
-                                const nextRules = campaign.scheduleRules.filter((item) => item.id !== rule.id);
-                                void saveSection("schedule", { scheduleRules: nextRules }, "Schedule rule deleted successfully.");
-                              }}
-                              className="rounded-lg px-2 py-1 text-xs"
-                              aria-label="Delete schedule rule"
-                            >
-                              Delete
-                            </IconActionButton>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </ScrollableTableShell>
 
             {campaign.scheduleRules.length > 0 ? (
               <>

@@ -87,11 +87,11 @@ export function evaluatePlDnplListRule(params: {
   const isInList = params.activeValues.includes(params.leadNormalizedValue);
 
   if (params.listType === "PL" && !isInList) {
-    return `${params.listName}: value "${displayValue}" for field "${params.applyToField}" is not on the PL list.`;
+    return `${params.listName}: value "${displayValue}" for field "${params.applyToField}" is not allowed.`;
   }
 
   if (params.listType === "DNPL" && isInList) {
-    return `${params.listName}: value "${displayValue}" for field "${params.applyToField}" is on the DNPL list.`;
+    return `${params.listName}: value "${displayValue}" for field "${params.applyToField}" is not allowed.`;
   }
 
   return null;

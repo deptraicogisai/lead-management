@@ -6,6 +6,12 @@ type RedirectResolution =
   | { ok: true; targetUrl: string }
   | { ok: false; status: number; message: string };
 
+export type RedirectClickMeta = {
+  clientIp?: string;
+  referrer?: string;
+  userAgent?: string;
+};
+
 function normalizeRedirectLeadObjectId(leadId: string) {
   const trimmed = leadId.trim();
   if (!trimmed) return null;
@@ -22,7 +28,31 @@ function normalizeRedirectLeadObjectId(leadId: string) {
   return null;
 }
 
-export async function resolvePublisherRedirect(leadId: string): Promise<RedirectResolution> {
+export function readRedirectClientIp(req: Request) {
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (forwarded) return forwarded;
+
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const cfIp = req.headers.get("cf-connecting-ip")?.trim();
+  if (cfIp) return cfIp;
+
+  return "";
+}
+
+export function readRedirectClickMeta(req: Request): RedirectClickMeta {
+  return {
+    clientIp: readRedirectClientIp(req),
+    referrer: req.headers.get("referer")?.trim() || req.headers.get("referrer")?.trim() || "",
+    userAgent: req.headers.get("user-agent")?.trim() || "",
+  };
+}
+
+export async function resolvePublisherRedirect(
+  leadId: string,
+  clickMeta?: RedirectClickMeta
+): Promise<RedirectResolution> {
   const objectId = normalizeRedirectLeadObjectId(leadId);
   if (!objectId) {
     return { ok: false, status: 400, message: "Invalid lead id." };
@@ -32,7 +62,14 @@ export async function resolvePublisherRedirect(leadId: string): Promise<Redirect
   await ensureSellerLeadReferencesMigrated();
 
   const lead = await SellerLeadModel.findById(objectId)
-    .select({ publisherStatus: 1, redirectUrl: 1, redirectConfirmedAt: 1 })
+    .select({
+      publisherStatus: 1,
+      redirectUrl: 1,
+      redirectConfirmedAt: 1,
+      redirectClientIp: 1,
+      redirectReferrer: 1,
+      redirectClickUserAgent: 1,
+    })
     .lean();
 
   if (!lead) {
@@ -49,10 +86,17 @@ export async function resolvePublisherRedirect(leadId: string): Promise<Redirect
   }
 
   if (!lead.redirectConfirmedAt) {
-    await SellerLeadModel.updateOne(
-      { _id: objectId },
-      { $set: { redirectConfirmedAt: new Date() } }
-    );
+    const update: Record<string, unknown> = {
+      redirectConfirmedAt: new Date(),
+    };
+    const clientIp = clickMeta?.clientIp?.trim();
+    const referrer = clickMeta?.referrer?.trim();
+    const userAgent = clickMeta?.userAgent?.trim();
+    if (clientIp) update.redirectClientIp = clientIp;
+    if (referrer) update.redirectReferrer = referrer;
+    if (userAgent) update.redirectClickUserAgent = userAgent;
+
+    await SellerLeadModel.updateOne({ _id: objectId }, { $set: update });
   }
 
   return { ok: true, targetUrl: buyerRedirectUrl };

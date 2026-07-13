@@ -244,17 +244,19 @@ export function MappingRevShareSettingsTab({ sellerId, mappingId }: MappingRevSh
             </label>
 
             {settings.copyToOtherPublishers ? (
-              <SearchableMultiSelect
-                id="rev-share-copy-publishers"
-                selectedIds={settings.copyPublisherIds}
-                onChange={(copyPublisherIds) => setSettings((current) => ({ ...current, copyPublisherIds }))}
-                options={publisherSelectOptions}
-                labelOptions={publisherSelectOptions}
-                isLoading={isLoadingPublishers}
-                placeholder="Select publishers..."
-                searchPlaceholder="Search publishers..."
-                emptyMessage="No publishers available."
-              />
+              <div className="w-full max-w-2xl min-w-0">
+                <SearchableMultiSelect
+                  id="rev-share-copy-publishers"
+                  selectedIds={settings.copyPublisherIds}
+                  onChange={(copyPublisherIds) => setSettings((current) => ({ ...current, copyPublisherIds }))}
+                  options={publisherSelectOptions}
+                  labelOptions={publisherSelectOptions}
+                  isLoading={isLoadingPublishers}
+                  placeholder="Select publishers..."
+                  searchPlaceholder="Search publishers..."
+                  emptyMessage="No publishers available."
+                />
+              </div>
             ) : null}
           </div>
         </>

@@ -7,6 +7,7 @@ import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Modal } from "@/components/ui/modal";
+import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-control";
 import type { StatusBadgeVariant } from "@/lib/status-badge";
@@ -327,13 +328,17 @@ function TestLeadLogHistory({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Test Lead Logs</h3>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Test Lead Logs</h3>
+      <ScrollableTableShell
+        rowCount={logs.length}
+        thead={
+          <thead
+            className={cn(
+              TABLE_STICKY_HEADER_CLASS,
+              "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400"
+            )}
+          >
             <tr>
               <th className="px-4 py-3 font-semibold">ID</th>
               <th className="px-4 py-3 font-semibold">Submitted</th>
@@ -343,50 +348,51 @@ function TestLeadLogHistory({
               <th className="px-4 py-3 font-semibold">Time (s)</th>
             </tr>
           </thead>
-          <tbody>
-            {logs.map((log, index) => {
-              const timestamp = formatLogTimestamp(log.submittedAt);
-              const displayId = resolveLogDisplayId(log, index, logs.length);
+        }
+      >
+        <tbody>
+          {logs.map((log, index) => {
+            const timestamp = formatLogTimestamp(log.submittedAt);
+            const displayId = resolveLogDisplayId(log, index, logs.length);
 
-              return (
-                <tr
-                  key={log.id}
-                  className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
-                >
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenLog(log.id)}
-                      className="group inline-flex"
-                      aria-label={`Open test lead log ${displayId}`}
-                    >
-                      <IdBadge id={displayId} interactive />
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {timestamp.date} {timestamp.time}
-                  </td>
-                  <td className="max-w-[220px] px-4 py-3">
-                    <span
-                      className="block truncate font-mono text-xs text-slate-600 dark:text-slate-300"
-                      title={log.buyerRequest?.url || undefined}
-                    >
-                      {log.buyerRequest?.url?.trim() || "-"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <BuyerStatusBadge buyerStatus={log.buyerStatus} />
-                  </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {log.message || "-"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{log.processingTimeSeconds}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+            return (
+              <tr
+                key={log.id}
+                className="border-t border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+              >
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onOpenLog(log.id)}
+                    className="group inline-flex"
+                    aria-label={`Open test lead log ${displayId}`}
+                  >
+                    <IdBadge id={displayId} interactive />
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                  {timestamp.date} {timestamp.time}
+                </td>
+                <td className="max-w-[220px] px-4 py-3">
+                  <span
+                    className="block truncate font-mono text-xs text-slate-600 dark:text-slate-300"
+                    title={log.buyerRequest?.url || undefined}
+                  >
+                    {log.buyerRequest?.url?.trim() || "-"}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <BuyerStatusBadge buyerStatus={log.buyerStatus} />
+                </td>
+                <td className="max-w-xs truncate px-4 py-3 text-slate-600 dark:text-slate-300">
+                  {log.message || "-"}
+                </td>
+                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{log.processingTimeSeconds}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </ScrollableTableShell>
     </div>
   );
 }

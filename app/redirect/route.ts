@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseRedirectLeadId } from "@/lib/publisher-redirect";
-import { resolvePublisherRedirect } from "@/lib/publisher-redirect-server";
+import { readRedirectClickMeta, resolvePublisherRedirect } from "@/lib/publisher-redirect-server";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ message: "Missing lead id." }, { status: 400 });
   }
 
-  const result = await resolvePublisherRedirect(leadId);
+  const result = await resolvePublisherRedirect(leadId, readRedirectClickMeta(req));
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: result.status });
   }

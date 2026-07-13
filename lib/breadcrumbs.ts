@@ -253,6 +253,19 @@ function buildReportBreadcrumbs(pathname: string) {
   return { items: withDashboard(items), pageTitle: reportNav.item.label };
 }
 
+function buildLeadDetailBreadcrumbs(pathname: string, overrideLabel?: string | null) {
+  if (!/^\/leads\/[^/]+$/.test(pathname)) return null;
+
+  const detailLabel = overrideLabel?.trim() || "Lead Detail";
+  return {
+    items: withDashboard([
+      { label: "Leads", href: "/reports/publisher/lead-details" },
+      { label: detailLabel },
+    ]),
+    pageTitle: detailLabel,
+  };
+}
+
 function buildApiConfigBreadcrumbs(pathname: string, searchParams?: Pick<URLSearchParams, "get"> | null) {
   if (!pathname.startsWith("/api-config")) return null;
 
@@ -346,6 +359,11 @@ export function buildBreadcrumbs(pathname: string, options: BuildBreadcrumbsOpti
   const reports = buildReportBreadcrumbs(pathname);
   if (reports) {
     return reports;
+  }
+
+  const leadDetail = buildLeadDetailBreadcrumbs(pathname, overrideLabel);
+  if (leadDetail) {
+    return leadDetail;
   }
 
   const staticRoute = STATIC_ROUTES[pathname];

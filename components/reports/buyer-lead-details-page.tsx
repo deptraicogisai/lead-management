@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, Download, Eye } from "lucide-react";
+import { ChevronDown, Download, Eye, ScrollText } from "lucide-react";
 import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -342,14 +343,25 @@ export function BuyerLeadDetailsPage() {
         label: "Lead ID",
         sortValue: (row) => row.displayLeadCode,
         render: (row) => (
-          <button
-            type="button"
-            onClick={() => setViewRow(row)}
-            className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
-          >
-            <Eye size={13} className="shrink-0 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400" />
-            <span>{row.displayLeadCode}</span>
-          </button>
+          <div className="inline-flex items-center gap-1.5">
+            <Link
+              href={`/leads/${encodeURIComponent(row.leadId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+            >
+              <Eye size={13} className="shrink-0 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400" />
+              <span>{row.displayLeadCode}</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setViewRow(row)}
+              title="Buyer HTTP log"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+            >
+              <ScrollText size={13} />
+            </button>
+          </div>
         ),
       },
       {

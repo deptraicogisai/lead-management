@@ -33,6 +33,20 @@ type SearchableMultiSelectProps = {
   className?: string;
 };
 
+type MenuPosition = {
+  top?: number;
+  bottom?: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+const MENU_GAP = 4;
+const MENU_MIN_WIDTH = 448;
+const VIEWPORT_PADDING = 8;
+const SEARCH_HEADER_HEIGHT = 52;
+const ESTIMATED_ITEM_HEIGHT = 44;
+
 export function SearchableMultiSelect({
   id,
   selectedIds,
@@ -48,7 +62,7 @@ export function SearchableMultiSelect({
 }: SearchableMultiSelectProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -101,10 +115,28 @@ export function SearchableMultiSelect({
       if (!trigger) return;
 
       const rect = trigger.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const spaceBelow = viewportHeight - rect.bottom - VIEWPORT_PADDING;
+      const spaceAbove = rect.top - VIEWPORT_PADDING;
+      const preferredListHeight =
+        Math.min(filteredOptions.length, FILTER_DROPDOWN_MAX_VISIBLE_ITEMS) * ESTIMATED_ITEM_HEIGHT +
+        SEARCH_HEADER_HEIGHT;
+      const openUpward = spaceBelow < preferredListHeight && spaceAbove > spaceBelow;
+      const availableSpace = openUpward ? spaceAbove : spaceBelow;
+      const maxHeight = Math.max(160, Math.min(preferredListHeight, availableSpace - MENU_GAP));
+      const width = Math.min(Math.max(rect.width, MENU_MIN_WIDTH), viewportWidth - VIEWPORT_PADDING * 2);
+      const left = Math.min(
+        Math.max(VIEWPORT_PADDING, rect.left),
+        viewportWidth - width - VIEWPORT_PADDING
+      );
+
       setMenuPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
+        top: openUpward ? undefined : rect.bottom + MENU_GAP,
+        bottom: openUpward ? viewportHeight - rect.top + MENU_GAP : undefined,
+        left,
+        width,
+        maxHeight,
       });
     };
 
@@ -116,7 +148,7 @@ export function SearchableMultiSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [dropdownOpen]);
+  }, [dropdownOpen, filteredOptions.length]);
 
   const toggleOption = (optionId: string, checked: boolean) => {
     if (checked) {
@@ -153,7 +185,7 @@ export function SearchableMultiSelect({
             selectedOptions.map((option) => (
               <span
                 key={option.id}
-                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                className="inline-flex max-w-[calc((100%-1.125rem)/4)] items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
               >
                 <span className="truncate">
                   {option.displayId !== undefined ? `[${option.displayId}] ${option.label}` : option.label}
@@ -194,12 +226,14 @@ export function SearchableMultiSelect({
               style={{
                 position: "fixed",
                 top: menuPosition.top,
+                bottom: menuPosition.bottom,
                 left: menuPosition.left,
                 width: menuPosition.width,
+                maxHeight: menuPosition.maxHeight,
               }}
-              className="z-[100] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
+              className="z-[300] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
             >
-              <div className="border-b border-slate-200 p-2 dark:border-slate-700">
+              <div className="shrink-0 border-b border-slate-200 p-2 dark:border-slate-700">
                 <input
                   type="text"
                   value={search}
@@ -211,7 +245,7 @@ export function SearchableMultiSelect({
 
               <div
                 className={cn(
-                  "py-1",
+                  "min-h-0 flex-1 overflow-y-auto py-1 overscroll-contain",
                   filteredOptions.length > FILTER_DROPDOWN_MAX_VISIBLE_ITEMS && FILTER_DROPDOWN_SCROLL_CLASS
                 )}
               >

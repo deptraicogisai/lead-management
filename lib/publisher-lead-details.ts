@@ -48,6 +48,7 @@ export type PublisherLeadDetailsRow = {
 
 export type PublisherLeadPingTreeAllocation = {
   pingTreeType: string;
+  processingType?: string;
   configId: string;
   configName: string;
   displayId: number | null;
@@ -394,6 +395,7 @@ export function normalizePublisherLeadPingTreeAllocations(
     if (typeof item !== "object" || item === null) continue;
     const raw = item as {
       pingTreeType?: unknown;
+      processingType?: unknown;
       configId?: unknown;
       configName?: unknown;
       displayId?: unknown;
@@ -403,6 +405,7 @@ export function normalizePublisherLeadPingTreeAllocations(
 
     allocations.push({
       pingTreeType: typeof raw.pingTreeType === "string" ? raw.pingTreeType : "",
+      processingType: typeof raw.processingType === "string" ? raw.processingType.trim() : "",
       configId,
       configName: typeof raw.configName === "string" ? raw.configName.trim() : "",
       displayId: typeof raw.displayId === "number" ? raw.displayId : null,

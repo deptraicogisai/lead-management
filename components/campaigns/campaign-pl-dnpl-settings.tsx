@@ -190,7 +190,7 @@ export function CampaignPlDnplSettings({
             <Link2 size={14} className="text-sky-500" />
           </label>
 
-          <div className="min-w-0 flex-1">
+          <div className="w-full max-w-2xl min-w-0">
             <SearchableMultiSelect
               selectedIds={selectedIds}
               onChange={onSelectedIdsChange}

@@ -12,6 +12,10 @@ import {
   useState,
 } from "react";
 import { SortableColumnHeader } from "@/components/ui/sortable-column-header";
+import {
+  ScrollableTableShell,
+  TABLE_STICKY_HEADER_CLASS,
+} from "@/components/ui/scrollable-table-shell";
 import { reorderIds } from "@/lib/reorder-fields";
 import { sortTableRows, type SortDirection, type TableSortState } from "@/lib/table-sort";
 import { cn } from "@/lib/utils";
@@ -294,18 +298,14 @@ export function DataTable<T extends { id: string }>({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <p className="border-b border-slate-200 px-3 py-2 text-xs text-slate-500 sm:hidden dark:border-slate-700 dark:text-slate-400">
-          Swipe horizontally to see more columns
-        </p>
-        <div
-          ref={scrollContainerRef}
-          className="table-scroll-container relative max-h-[min(420px,60vh)] overflow-auto overscroll-x-contain"
-        >
-          {isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
-
-          <table className="min-w-max w-full border-separate border-spacing-0 text-sm tabular-nums">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
+      <ScrollableTableShell
+        rowCount={displayRows.length}
+        scrollContainerRef={scrollContainerRef}
+        overlay={
+          isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null
+        }
+        thead={
+          <thead className={TABLE_STICKY_HEADER_CLASS}>
             <tr>
               {isReorderable ? (
                 <th className="w-10 border-b border-slate-200 px-2 py-2 text-left sm:py-3 dark:border-slate-600" aria-label="Reorder" />
@@ -329,7 +329,7 @@ export function DataTable<T extends { id: string }>({
                 return (
                   <th
                     key={columnKey}
-                    className="border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-2.5 dark:border-slate-600 dark:text-slate-100"
+                    className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-2.5 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   >
                     {columnSortable ? (
                       <SortableColumnHeader
@@ -346,69 +346,69 @@ export function DataTable<T extends { id: string }>({
               })}
             </tr>
           </thead>
-          <tbody ref={tbodyRef}>
-            {displayRows.map((row) => {
-              const isRowDragging = draggedRowId === row.id;
-              const isDropTarget = dragOverRowId === row.id && draggedRowId !== row.id;
-              const isEvenRow = hasEvenStripe(row.id);
+        }
+      >
+        <tbody ref={tbodyRef}>
+          {displayRows.map((row) => {
+            const isRowDragging = draggedRowId === row.id;
+            const isDropTarget = dragOverRowId === row.id && draggedRowId !== row.id;
+            const isEvenRow = hasEvenStripe(row.id);
 
-              return (
-                <tr
-                  key={row.id}
-                  data-reorder-row-id={isReorderable ? row.id : undefined}
-                  className={cn(
-                    isEvenRow ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70",
-                    !isDragging && "hover:bg-blue-50/50 dark:hover:bg-blue-400/10",
-                    isRowDragging && "opacity-40",
-                    isDropTarget && "bg-blue-50 shadow-[inset_0_0_0_2px_rgb(147,197,253)] dark:bg-blue-500/10 dark:shadow-[inset_0_0_0_2px_rgb(96,165,250)]"
-                  )}
-                >
-                  {isReorderable ? (
-                    <td className="border-b border-slate-100 px-2 py-2 align-top sm:py-3 dark:border-slate-700/80">
-                      <div
-                        data-drag-handle
-                        data-dragging={isRowDragging ? "true" : undefined}
-                        title="Drag to move"
-                        style={{ touchAction: "none" }}
-                        onPointerDown={(event) => startPointerDrag(row.id, event)}
-                        aria-label={`Drag to reorder ${row.id}`}
-                        className={cn(
-                          "flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full border bg-white text-slate-500 shadow-sm transition-colors",
-                          isRowDragging
-                            ? "border-blue-400 bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/30"
-                            : "border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-                        )}
-                      >
-                        <GripVertical size={14} strokeWidth={2.25} className="pointer-events-none" />
-                      </div>
-                    </td>
-                  ) : null}
-                  {isSelectable ? (
-                    <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => onToggleRow?.(row.id)}
-                        aria-label={`Select row ${row.id}`}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
-                      />
-                    </td>
-                  ) : null}
-                  {columns.map((column) => (
-                    <td
-                      key={String(column.key)}
-                      className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
+            return (
+              <tr
+                key={row.id}
+                data-reorder-row-id={isReorderable ? row.id : undefined}
+                className={cn(
+                  isEvenRow ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70",
+                  !isDragging && "hover:bg-blue-50/50 dark:hover:bg-blue-400/10",
+                  isRowDragging && "opacity-40",
+                  isDropTarget && "bg-blue-50 shadow-[inset_0_0_0_2px_rgb(147,197,253)] dark:bg-blue-500/10 dark:shadow-[inset_0_0_0_2px_rgb(96,165,250)]"
+                )}
+              >
+                {isReorderable ? (
+                  <td className="border-b border-slate-100 px-2 py-2 align-top sm:py-3 dark:border-slate-700/80">
+                    <div
+                      data-drag-handle
+                      data-dragging={isRowDragging ? "true" : undefined}
+                      title="Drag to move"
+                      style={{ touchAction: "none" }}
+                      onPointerDown={(event) => startPointerDrag(row.id, event)}
+                      aria-label={`Drag to reorder ${row.id}`}
+                      className={cn(
+                        "flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full border bg-white text-slate-500 shadow-sm transition-colors",
+                        isRowDragging
+                          ? "border-blue-400 bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/30"
+                          : "border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                      )}
                     >
-                      {renderCellContent(row, column)}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-          </table>
-        </div>
-      </div>
+                      <GripVertical size={14} strokeWidth={2.25} className="pointer-events-none" />
+                    </div>
+                  </td>
+                ) : null}
+                {isSelectable ? (
+                  <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(row.id)}
+                      onChange={() => onToggleRow?.(row.id)}
+                      aria-label={`Select row ${row.id}`}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+                    />
+                  </td>
+                ) : null}
+                {columns.map((column) => (
+                  <td
+                    key={String(column.key)}
+                    className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
+                  >
+                    {renderCellContent(row, column)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </ScrollableTableShell>
 
       {isDragging && pointerPosition && draggedRow ? (
         <div

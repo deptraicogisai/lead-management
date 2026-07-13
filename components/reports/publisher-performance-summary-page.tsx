@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/search-filter-layout";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
+import {
+  ScrollableTableShell,
+  TABLE_STICKY_HEADER_CLASS,
+} from "@/components/ui/scrollable-table-shell";
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
@@ -566,105 +570,108 @@ function PerformanceSummaryTable({
   const bodyCellClassName = tableBodyCellClassName;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <p className="border-b border-slate-200 px-3 py-2 text-xs text-slate-500 sm:hidden dark:border-slate-700 dark:text-slate-400">
-        Swipe horizontally to see more columns
-      </p>
-      <div className="relative max-h-[min(480px,62vh)] overflow-auto overscroll-x-contain">
-        <table className="min-w-max w-full border-separate border-spacing-0 text-sm tabular-nums">
-          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800">
-            <tr>
-              <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>Publisher</th>
-              <th className={cn(headerCellClassName, "text-left")}>Publisher Tags</th>
-              {SUMMARY_COLUMNS.map((column) => (
-                <th
-                  key={column.key}
-                  className={cn(
-                    headerCellClassName,
-                    "text-right",
-                    column.key === "redirect"
-                      ? cn(redirectMetricColorClassName, metricLinkClassName)
-                      : column.key === "reject"
-                        ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
-                        : (column.linkMetric || column.linkRedirect) && metricLinkClassName
-                  )}
-                >
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                className="bg-white transition-colors hover:bg-blue-50/50 dark:bg-slate-900 dark:hover:bg-blue-400/10"
+    <ScrollableTableShell
+      rowCount={rows.length}
+      thead={
+        <thead className={TABLE_STICKY_HEADER_CLASS}>
+          <tr>
+            <th className={cn(headerCellClassName, "bg-slate-50 text-left dark:bg-slate-800", metricLinkClassName)}>
+              Publisher
+            </th>
+            <th className={cn(headerCellClassName, "bg-slate-50 text-left dark:bg-slate-800")}>Publisher Tags</th>
+            {SUMMARY_COLUMNS.map((column) => (
+              <th
+                key={column.key}
+                className={cn(
+                  headerCellClassName,
+                  "bg-slate-50 text-right dark:bg-slate-800",
+                  column.key === "redirect"
+                    ? cn(redirectMetricColorClassName, metricLinkClassName)
+                    : column.key === "reject"
+                      ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
+                      : (column.linkMetric || column.linkRedirect) && metricLinkClassName
+                )}
               >
-                <td className={cn(bodyCellClassName, "whitespace-nowrap")}>
-                  <Link
-                    href={buildRowLeadDetailsHref(row, appliedFilters)}
-                    className={publisherCellLinkClassName}
-                  >
-                    {row.publisherLabel}
-                  </Link>
-                </td>
-                <td className={cn(bodyCellClassName, "text-slate-600 dark:text-slate-200")}>
-                  <PublisherTagBadges tag={row.publisherTag} />
-                </td>
-                {SUMMARY_COLUMNS.map((column) => (
-                  <td
-                    key={column.key}
-                    className={cn(bodyCellClassName, tableNumericCellClassName, column.valueColorClass)}
-                  >
-                    {column.linkMetric ? (
-                      <PerformanceMetricLink
-                        count={row[column.linkMetric]}
-                        colorClass={column.valueColorClass}
-                        href={buildRowLeadDetailsHref(row, appliedFilters, {
-                          leadScope: column.linkMetric,
-                        })}
-                      />
-                    ) : column.linkRedirect ? (
-                      <PerformanceMetricLink
-                        count={row.redirect}
-                        colorClass={column.valueColorClass}
-                        href={buildRowLeadDetailsHref(row, appliedFilters, {
-                          redirectStatus: "Redirected",
-                        })}
-                        suffix={
-                          <span>
-                            {" "}
-                            ({formatPerformancePercent(row.redirectRate)})
-                          </span>
-                        }
-                      />
-                    ) : (
-                      column.render(row)
-                    )}
-                  </td>
-                ))}
-              </tr>
+                {column.label}
+              </th>
             ))}
-          </tbody>
-          <tfoot className="sticky bottom-0 z-10 bg-slate-100 dark:bg-slate-800">
-            <tr className="font-semibold text-slate-800 dark:text-slate-100">
-              <td className="border-t border-slate-300 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600">Totals</td>
-              <td className="border-t border-slate-300 px-3 py-2.5 sm:px-4 dark:border-slate-600" />
-              {SUMMARY_COLUMNS.map((column) => (
-                <td
-                  key={column.key}
-                  className={cn(
-                    "border-t border-slate-300 px-3 py-2.5 text-right tabular-nums sm:px-4 dark:border-slate-600",
-                    column.valueColorClass
-                  )}
-                >
-                  {column.renderTotal(totals)}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
+          </tr>
+        </thead>
+      }
+      tfoot={
+        <tfoot className="sticky bottom-0 z-10 bg-slate-100 dark:bg-slate-800">
+          <tr className="font-semibold text-slate-800 dark:text-slate-100">
+            <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600 dark:bg-slate-800">
+              Totals
+            </td>
+            <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 sm:px-4 dark:border-slate-600 dark:bg-slate-800" />
+            {SUMMARY_COLUMNS.map((column) => (
+              <td
+                key={column.key}
+                className={cn(
+                  "border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-right tabular-nums sm:px-4 dark:border-slate-600 dark:bg-slate-800",
+                  column.valueColorClass
+                )}
+              >
+                {column.renderTotal(totals)}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      }
+    >
+      <tbody>
+        {rows.map((row) => (
+          <tr
+            key={row.id}
+            className="bg-white transition-colors hover:bg-blue-50/50 dark:bg-slate-900 dark:hover:bg-blue-400/10"
+          >
+            <td className={cn(bodyCellClassName, "whitespace-nowrap")}>
+              <Link
+                href={buildRowLeadDetailsHref(row, appliedFilters)}
+                className={publisherCellLinkClassName}
+              >
+                {row.publisherLabel}
+              </Link>
+            </td>
+            <td className={cn(bodyCellClassName, "text-slate-600 dark:text-slate-200")}>
+              <PublisherTagBadges tag={row.publisherTag} />
+            </td>
+            {SUMMARY_COLUMNS.map((column) => (
+              <td
+                key={column.key}
+                className={cn(bodyCellClassName, tableNumericCellClassName, column.valueColorClass)}
+              >
+                {column.linkMetric ? (
+                  <PerformanceMetricLink
+                    count={row[column.linkMetric]}
+                    colorClass={column.valueColorClass}
+                    href={buildRowLeadDetailsHref(row, appliedFilters, {
+                      leadScope: column.linkMetric,
+                    })}
+                  />
+                ) : column.linkRedirect ? (
+                  <PerformanceMetricLink
+                    count={row.redirect}
+                    colorClass={column.valueColorClass}
+                    href={buildRowLeadDetailsHref(row, appliedFilters, {
+                      redirectStatus: "Redirected",
+                    })}
+                    suffix={
+                      <span>
+                        {" "}
+                        ({formatPerformancePercent(row.redirectRate)})
+                      </span>
+                    }
+                  />
+                ) : (
+                  column.render(row)
+                )}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </ScrollableTableShell>
   );
 }

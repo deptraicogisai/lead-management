@@ -18,12 +18,16 @@ const sellerLeadSchema = new Schema(
     // Buyer offer URL returned from a Redirect campaign accept.
     redirectUrl: { type: String, required: false, trim: true, default: "" },
     redirectConfirmedAt: { type: Date, required: false, index: true },
+    redirectClientIp: { type: String, required: false, trim: true, default: "" },
+    redirectReferrer: { type: String, required: false, trim: true, default: "" },
+    redirectClickUserAgent: { type: String, required: false, trim: true, default: "" },
     soldPrice: { type: Number, required: false, default: null },
     pingTreeAllocations: {
       type: [
         new Schema(
           {
             pingTreeType: { type: String, required: true },
+            processingType: { type: String, required: false, trim: true, default: "" },
             configId: { type: String, required: true },
             configName: { type: String, required: false, default: "" },
             displayId: { type: Number, required: false, default: null },

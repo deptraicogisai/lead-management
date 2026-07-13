@@ -6,6 +6,7 @@ import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-con
 import { Checkbox, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
+import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatDateTimeDisplay } from "@/lib/date-range";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
@@ -784,69 +785,69 @@ function SystemBuyerAttemptsGrid({
   const sortedAttempts = sortBuyerPostAttemptViews(attempts);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-          <thead className="bg-slate-50 dark:bg-slate-800/60">
-            <tr>
-              {["Log ID", "Campaign", "Campaign Type", "Buyer", "Status", "Posted Date", "Action"].map((heading) => (
-                <th
-                  key={heading}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300"
-                >
-                  {heading}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900">
-            {sortedAttempts.map((attempt, index) => {
-              const skipSummary = resolveBuyerAttemptSkipSummary(attempt);
+    <ScrollableTableShell
+      rowCount={sortedAttempts.length}
+      thead={
+        <thead className={cn(TABLE_STICKY_HEADER_CLASS, "dark:bg-slate-800/60")}>
+          <tr>
+            {["Log ID", "Campaign", "Campaign Type", "Buyer", "Status", "Posted Date", "Action"].map((heading) => (
+              <th
+                key={heading}
+                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300"
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+      }
+    >
+      <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900">
+        {sortedAttempts.map((attempt, index) => {
+          const skipSummary = resolveBuyerAttemptSkipSummary(attempt);
 
-              return (
-              <tr key={`${attempt.campaignId}-${index}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-200">
-                  {resolveBuyerAttemptGridLogId(index)}
-                </td>
-                <td className="px-4 py-3 text-slate-800 dark:text-slate-100">{attempt.campaignName}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{attempt.pingTreeType ?? "Redirect"}</td>
-                <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{attempt.buyerCompany}</td>
-                <td className="px-4 py-3">
-                  <div className="space-y-1">
-                    <span
-                      title={skipSummary ?? undefined}
-                      className={cn(
-                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold text-white",
-                        buyerStatusBadgeClass(attempt.buyerStatus, attempt.queueState)
-                      )}
-                    >
-                      {resolveBuyerAttemptDisplayStatus(attempt)}
-                    </span>
-                    {skipSummary ? (
-                      <p className="max-w-xs text-xs text-slate-500 dark:text-slate-400">{skipSummary}</p>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                  {formatBuyerAttemptPostedDateForGrid(attempt)}
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    disabled={isBuyerAttemptPending(attempt)}
-                    onClick={() => onViewLog(attempt)}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          return (
+            <tr key={`${attempt.campaignId}-${index}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+              <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-200">
+                {resolveBuyerAttemptGridLogId(index)}
+              </td>
+              <td className="px-4 py-3 text-slate-800 dark:text-slate-100">{attempt.campaignName}</td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{attempt.pingTreeType ?? "Redirect"}</td>
+              <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{attempt.buyerCompany}</td>
+              <td className="px-4 py-3">
+                <div className="space-y-1">
+                  <span
+                    title={skipSummary ?? undefined}
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold text-white",
+                      buyerStatusBadgeClass(attempt.buyerStatus, attempt.queueState)
+                    )}
                   >
-                    View log
-                  </button>
-                </td>
-              </tr>
-            );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                    {resolveBuyerAttemptDisplayStatus(attempt)}
+                  </span>
+                  {skipSummary ? (
+                    <p className="max-w-xs text-xs text-slate-500 dark:text-slate-400">{skipSummary}</p>
+                  ) : null}
+                </div>
+              </td>
+              <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                {formatBuyerAttemptPostedDateForGrid(attempt)}
+              </td>
+              <td className="px-4 py-3">
+                <button
+                  type="button"
+                  disabled={isBuyerAttemptPending(attempt)}
+                  onClick={() => onViewLog(attempt)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  View log
+                </button>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </ScrollableTableShell>
   );
 }
 
