@@ -17,7 +17,8 @@ import {
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
 import { ensureTrafficSourceForLead } from "@/lib/traffic-source-server";
-import { extractSubId } from "@/lib/traffic-source";
+import { extractSource } from "@/lib/traffic-source";
+import { isTrafficSourceAllowed } from "@/lib/models/traffic-source";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import {
   buildPublisherAcceptedResponse,
@@ -514,15 +515,43 @@ export async function handleSellerLeadPost(req: Request) {
       : null;
     verticalRefForLog = vertical?._id;
 
-    const subId = extractSubId(payload);
-    if (subId) {
+    const source = extractSource(payload);
+    if (source) {
       try {
-        await ensureTrafficSourceForLead({
+        const trafficSource = await ensureTrafficSourceForLead({
           sellerRef: seller._id,
           verticalRef: vertical?._id ?? null,
           mappingRef: matchedMapping._id ?? null,
-          sourceName: subId,
+          sourceName: source,
         });
+
+        if (trafficSource && !isTrafficSourceAllowed(trafficSource.status)) {
+          const reasons = ["Source is not allowed"];
+          const responsePayload = buildLeadRejectResponse(reasons);
+
+          await persistRejectedSellerLead({
+            sellerRef: seller._id,
+            verticalRef: vertical?._id,
+            mappingRef: matchedMapping._id,
+            payload,
+            reasons,
+            postedAt,
+            userAgent,
+          });
+
+          await createSellerIntakeLog({
+            sellerRef: seller._id,
+            verticalRef: vertical?._id,
+            endpointUrl,
+            requestPayload: body,
+            responseBody: JSON.stringify(responsePayload),
+            errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
+            deliveryStatus: "fail",
+            httpStatus: 400,
+          });
+
+          return NextResponse.json(responsePayload, { status: 400 });
+        }
       } catch (trafficSourceError) {
         console.error("Failed to ensure traffic source:", trafficSourceError);
       }

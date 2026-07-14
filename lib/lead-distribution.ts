@@ -118,7 +118,20 @@ function isTestLeadPayload(payload: Record<string, unknown>) {
   return false;
 }
 
-function orderPingTreeActiveCampaignIds(activeCampaignIds: string[]) {
+function getCampaignPriority(
+  priorities: Map<string, number> | Record<string, number>,
+  campaignId: string
+) {
+  if (priorities instanceof Map) {
+    return Number(priorities.get(campaignId) ?? 0);
+  }
+  return Number(priorities[campaignId] ?? 0);
+}
+
+function orderPingTreeActiveCampaignIds(
+  activeCampaignIds: string[],
+  priorities?: Map<string, number> | Record<string, number>
+) {
   const seen = new Set<string>();
   const ordered: string[] = [];
 
@@ -132,7 +145,19 @@ function orderPingTreeActiveCampaignIds(activeCampaignIds: string[]) {
     ordered.push(campaignId);
   }
 
-  return ordered;
+  if (!priorities) {
+    return ordered;
+  }
+
+  // Post highest STT first (top of ping tree with descending STT), then lower.
+  return [...ordered].sort((left, right) => {
+    const priorityDiff =
+      getCampaignPriority(priorities, right) - getCampaignPriority(priorities, left);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+    return ordered.indexOf(left) - ordered.indexOf(right);
+  });
 }
 
 function hasRedirectDeliveries(deliveries: CampaignDeliveryLog[]) {
@@ -377,7 +402,10 @@ async function resolvePingTreeCampaignIds(params: {
   /** When false, never expand an empty tree to all vertical campaigns. */
   allowEmptyTreeFallback?: boolean;
 }) {
-  const orderedFromTree = orderPingTreeActiveCampaignIds(params.treeActiveCampaignIds);
+  const orderedFromTree = orderPingTreeActiveCampaignIds(
+    params.treeActiveCampaignIds,
+    params.priorities
+  );
   if (orderedFromTree.length > 0 || !params.mockBuyerPost || params.allowEmptyTreeFallback === false) {
     return orderedFromTree;
   }

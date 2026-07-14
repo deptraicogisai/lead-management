@@ -1,15 +1,11 @@
-/** Payload keys that are treated as the publisher sub id (Traffic Source name). */
-const SUB_ID_KEYS = ["subid", "sub_id", "sub-id", "sub"];
-
 /**
- * Resolve the sub id from a lead payload.
- * Matching is case-insensitive and ignores common separators so `subId`, `sub_id`,
- * `SubID`, etc. all map to the same value.
+ * Resolve the traffic source from a lead payload field named `source`
+ * (case-insensitive; separators ignored so `Source`, `SOURCE` match).
  */
-export function extractSubId(payload: Record<string, unknown>): string | null {
+export function extractSource(payload: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(payload)) {
     const normalizedKey = key.trim().toLowerCase().replace(/[\s_-]/g, "");
-    if (normalizedKey !== "subid" && !SUB_ID_KEYS.includes(key.trim().toLowerCase())) {
+    if (normalizedKey !== "source") {
       continue;
     }
 

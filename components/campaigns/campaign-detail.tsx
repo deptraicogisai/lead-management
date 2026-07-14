@@ -31,11 +31,11 @@ import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar
 import { toast } from "@/lib/toast";
 import { Checkbox, FieldLabel, FormError, Input, PrimaryButton, Select, ToggleSwitch } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
-import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import {
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
@@ -774,41 +774,45 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             <ScrollableTableShell
               rowCount={campaign.scheduleRules.length}
               thead={
-                <thead
-                  className={cn(
-                    TABLE_STICKY_HEADER_CLASS,
-                    "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300"
-                  )}
-                >
-                  <tr>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Iteration</th>
-                    <th className="px-4 py-3">Period</th>
-                    <th className="px-4 py-3">Start time</th>
-                    <th className="px-4 py-3">End time</th>
-                    <th className="px-4 py-3">Cap sold</th>
-                    <th className="px-4 py-3">Cap send</th>
-                    <th className="px-4 py-3">Sold/Time</th>
-                    <th className="px-4 py-3">Send/Time</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Action</th>
-                  </tr>
-                </thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Iteration</th>
+                  <th className="px-4 py-3">Period</th>
+                  <th className="px-4 py-3">Start time</th>
+                  <th className="px-4 py-3">End time</th>
+                  <th className="px-4 py-3">Cap sold</th>
+                  <th className="px-4 py-3">Cap send</th>
+                  <th className="px-4 py-3">Sold/Time</th>
+                  <th className="px-4 py-3">Send/Time</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Action</th>
+                </tr>
               }
             >
               <tbody>
                 {campaign.scheduleRules.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-8 text-center text-slate-500">No schedule rules yet.</td>
+                    <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
+                      No schedule rules yet.
+                    </td>
                   </tr>
                 ) : (
                   campaign.scheduleRules.map((rule) => (
-                    <tr key={rule.id || `${rule.action}-${rule.startHour}`} className="border-t border-slate-200 dark:border-slate-700">
+                    <tr
+                      key={rule.id || `${rule.action}-${rule.startHour}`}
+                      className="border-t border-slate-200 dark:border-slate-700"
+                    >
                       <td className="px-4 py-3">{rule.action}</td>
                       <td className="px-4 py-3">{rule.scheduleMethod}</td>
-                      <td className="px-4 py-3">{rule.days.length === SCHEDULE_DAY_OPTIONS.length ? "All days" : rule.days.join(", ")}</td>
-                      <td className="px-4 py-3">{rule.startHour}:{rule.startMinute}</td>
-                      <td className="px-4 py-3">{rule.endHour}:{rule.endMinute}</td>
+                      <td className="px-4 py-3">
+                        {rule.days.length === SCHEDULE_DAY_OPTIONS.length ? "All days" : rule.days.join(", ")}
+                      </td>
+                      <td className="px-4 py-3">
+                        {rule.startHour}:{rule.startMinute}
+                      </td>
+                      <td className="px-4 py-3">
+                        {rule.endHour}:{rule.endMinute}
+                      </td>
                       <td className="px-4 py-3">{rule.dailySoldLeadsLimit ?? "∞"}</td>
                       <td className="px-4 py-3">{rule.dailyPostLeadsLimit ?? "∞"}</td>
                       <td className="px-4 py-3 text-slate-400">-</td>
@@ -831,7 +835,11 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                             variant="danger"
                             onClick={() => {
                               const nextRules = campaign.scheduleRules.filter((item) => item.id !== rule.id);
-                              void saveSection("schedule", { scheduleRules: nextRules }, "Schedule rule deleted successfully.");
+                              void saveSection(
+                                "schedule",
+                                { scheduleRules: nextRules },
+                                "Schedule rule deleted successfully."
+                              );
                             }}
                             className="rounded-lg px-2 py-1 text-xs"
                             aria-label="Delete schedule rule"

@@ -15,6 +15,7 @@ import {
 import { IdBadge } from "@/components/ui/id-badge";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { Modal } from "@/components/ui/modal";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import {
   ALL_CHANNELS_VALUE,
   PUBLISHER_DISTRIBUTION_TYPES,
@@ -370,40 +371,41 @@ export function SellerPingTreeTab({ sellerId }: { sellerId: string }) {
       {isLoading ? (
         <SectionLoading message="Loading distribution settings..." />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-          <table className="w-full min-w-[52rem] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Channel</th>
-                <th className="px-4 py-3">Ping Tree</th>
-                <th className="px-4 py-3">Distribution, %</th>
-                <th className="px-4 py-3 text-center">Action</th>
+        <ScrollableTableShell
+          rowCount={groups.reduce((sum, group) => sum + group.rows.length, 0)}
+          tableClassName="w-full min-w-[52rem] border-collapse"
+          thead={
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Channel</th>
+              <th className="px-4 py-3">Ping Tree</th>
+              <th className="px-4 py-3">Distribution, %</th>
+              <th className="px-4 py-3 text-center">Action</th>
+            </tr>
+          }
+        >
+          <tbody>
+            {groups.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No distribution settings yet. Click &quot;Create new Distribution Settings&quot; to add one.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {groups.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No distribution settings yet. Click &quot;Create new Distribution Settings&quot; to add one.
-                  </td>
-                </tr>
-              ) : (
-                groups.map((group) => (
-                  <GroupRows
-                    key={group.verticalId}
-                    label={group.label}
-                    rows={group.rows}
-                    onEdit={openEdit}
-                    onDelete={(distribution, allocation) =>
-                      setDeleteTarget({ distribution, allocation })
-                    }
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            ) : (
+              groups.map((group) => (
+                <GroupRows
+                  key={group.verticalId}
+                  label={group.label}
+                  rows={group.rows}
+                  onEdit={openEdit}
+                  onDelete={(distribution, allocation) =>
+                    setDeleteTarget({ distribution, allocation })
+                  }
+                />
+              ))
+            )}
+          </tbody>
+        </ScrollableTableShell>
       )}
 
       {/* Create / Edit modal */}

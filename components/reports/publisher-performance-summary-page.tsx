@@ -16,12 +16,9 @@ import {
 } from "@/components/ui/search-filter-layout";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
-import {
-  ScrollableTableShell,
-  TABLE_STICKY_HEADER_CLASS,
-} from "@/components/ui/scrollable-table-shell";
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { PageSection } from "@/components/ui/state";
 import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
@@ -572,34 +569,31 @@ function PerformanceSummaryTable({
   return (
     <ScrollableTableShell
       rowCount={rows.length}
+      bodyClassName="max-h-[min(420px,55vh)] overflow-y-auto"
       thead={
-        <thead className={TABLE_STICKY_HEADER_CLASS}>
-          <tr>
-            <th className={cn(headerCellClassName, "bg-slate-50 text-left dark:bg-slate-800", metricLinkClassName)}>
-              Publisher
+        <tr>
+          <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>Publisher</th>
+          <th className={cn(headerCellClassName, "text-left")}>Publisher Tags</th>
+          {SUMMARY_COLUMNS.map((column) => (
+            <th
+              key={column.key}
+              className={cn(
+                headerCellClassName,
+                "text-right",
+                column.key === "redirect"
+                  ? cn(redirectMetricColorClassName, metricLinkClassName)
+                  : column.key === "reject"
+                    ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
+                    : (column.linkMetric || column.linkRedirect) && metricLinkClassName
+              )}
+            >
+              {column.label}
             </th>
-            <th className={cn(headerCellClassName, "bg-slate-50 text-left dark:bg-slate-800")}>Publisher Tags</th>
-            {SUMMARY_COLUMNS.map((column) => (
-              <th
-                key={column.key}
-                className={cn(
-                  headerCellClassName,
-                  "bg-slate-50 text-right dark:bg-slate-800",
-                  column.key === "redirect"
-                    ? cn(redirectMetricColorClassName, metricLinkClassName)
-                    : column.key === "reject"
-                      ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
-                      : (column.linkMetric || column.linkRedirect) && metricLinkClassName
-                )}
-              >
-                {column.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
+          ))}
+        </tr>
       }
       tfoot={
-        <tfoot className="sticky bottom-0 z-10 bg-slate-100 dark:bg-slate-800">
+        <tfoot>
           <tr className="font-semibold text-slate-800 dark:text-slate-100">
             <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600 dark:bg-slate-800">
               Totals

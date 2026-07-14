@@ -12,9 +12,9 @@ type EnsureTrafficSourceParams = {
 };
 
 /**
- * Auto-create a Traffic Source for a publisher based on the lead's sub id.
+ * Auto-create a Traffic Source for a publisher based on the lead's `source` field.
  * Reuses the existing record when one already matches (sellerRef + sourceName),
- * so the same sub id never produces duplicate Traffic Sources.
+ * so the same source never produces duplicate Traffic Sources.
  */
 export async function ensureTrafficSourceForLead({
   sellerRef,
@@ -42,7 +42,7 @@ export async function ensureTrafficSourceForLead({
       status: "Active",
     });
   } catch (error) {
-    // A concurrent lead with the same sub id may have created it first; reuse that record.
+    // A concurrent lead with the same source may have created it first; reuse that record.
     if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
       return TrafficSourceModel.findOne({ sellerRef, sourceName: normalizedSourceName });
     }

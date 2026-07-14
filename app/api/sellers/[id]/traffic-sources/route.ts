@@ -4,6 +4,8 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { SellerModel } from "@/lib/models/seller";
 import {
   ensureTrafficSourceDisplayIdMigrated,
+  ensureTrafficSourceStatusMigrated,
+  normalizeTrafficSourceStatus,
   TrafficSourceModel,
 } from "@/lib/models/traffic-source";
 import { VerticalMappingModel } from "@/lib/models/vertical-mapping";
@@ -12,15 +14,28 @@ import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type Params = { params: Promise<{ id: string }> };
 
+function expandStatusFilterForLegacy(statusFilter: string | null) {
+  if (!statusFilter || statusFilter === "All") return statusFilter;
+  const statuses = statusFilter
+    .split(",")
+    .map((status) => status.trim())
+    .filter(Boolean);
+  if (statuses.includes("Paused") && !statuses.includes("Disabled")) {
+    statuses.push("Disabled");
+  }
+  return statuses.join(",");
+}
+
 export async function GET(req: Request, context: Params) {
   try {
     const { id } = await context.params;
     const { searchParams } = new URL(req.url);
-    const statusFilter = searchParams.get("status");
+    const statusFilter = expandStatusFilterForLegacy(searchParams.get("status"));
 
     await connectToDatabase();
     await ensureVerticalCollectionMigrated();
     await ensureTrafficSourceDisplayIdMigrated();
+    await ensureTrafficSourceStatusMigrated();
 
     const seller = await SellerModel.findById(id, { _id: 1 }).lean();
     if (!seller) {
@@ -58,12 +73,7 @@ export async function GET(req: Request, context: Params) {
         verticalName: source.verticalRef
           ? verticalNameById.get(source.verticalRef.toString()) ?? ""
           : "",
-        status:
-          source.status === "Deleted"
-            ? "Deleted"
-            : source.status === "Active"
-              ? "Active"
-              : "Disabled",
+        status: normalizeTrafficSourceStatus(source.status),
       }))
     );
   } catch {

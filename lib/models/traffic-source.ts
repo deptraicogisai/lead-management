@@ -7,7 +7,7 @@ const trafficSourceSchema = new Schema(
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: false, index: true },
     mappingRef: { type: Schema.Types.ObjectId, ref: "VerticalMapping", required: false, index: true },
     sourceName: { type: String, required: true, trim: true },
-    status: { type: String, enum: ["Active", "Disabled", "Deleted"], default: "Active", index: true },
+    status: { type: String, enum: ["Active", "Paused", "Disabled", "Deleted"], default: "Active", index: true },
   },
   { timestamps: true }
 );
@@ -20,7 +20,35 @@ if (models.TrafficSource) {
 
 export const TrafficSourceModel = model("TrafficSource", trafficSourceSchema);
 
+export const TRAFFIC_SOURCE_STATUSES = ["Active", "Paused", "Deleted"] as const;
+export type TrafficSourceStatus = (typeof TRAFFIC_SOURCE_STATUSES)[number];
+
+/** Legacy "Disabled" maps to Paused. */
+export function normalizeTrafficSourceStatus(status?: string | null): TrafficSourceStatus {
+  if (status === "Deleted") return "Deleted";
+  if (status === "Paused" || status === "Disabled") return "Paused";
+  return "Active";
+}
+
+export function isTrafficSourceAllowed(status?: string | null) {
+  return normalizeTrafficSourceStatus(status) === "Active";
+}
+
 let displayIdMigrationPromise: Promise<void> | null = null;
+let statusMigrationPromise: Promise<void> | null = null;
+
+export async function ensureTrafficSourceStatusMigrated() {
+  if (!statusMigrationPromise) {
+    statusMigrationPromise = (async () => {
+      await TrafficSourceModel.updateMany({ status: "Disabled" }, { $set: { status: "Paused" } });
+    })().catch((error) => {
+      statusMigrationPromise = null;
+      throw error;
+    });
+  }
+
+  await statusMigrationPromise;
+}
 
 export async function ensureTrafficSourceDisplayIdMigrated() {
   if (!displayIdMigrationPromise) {
@@ -54,6 +82,7 @@ export async function ensureTrafficSourceDisplayIdMigrated() {
 
 export async function getNextTrafficSourceDisplayId() {
   await ensureTrafficSourceDisplayIdMigrated();
+  await ensureTrafficSourceStatusMigrated();
   const latest = await TrafficSourceModel.findOne()
     .sort({ displayId: -1 })
     .select({ displayId: 1 })

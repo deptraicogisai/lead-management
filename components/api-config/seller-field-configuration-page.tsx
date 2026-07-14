@@ -65,7 +65,6 @@ type NewFieldDraft = {
   dataTypeFilter: string;
   emailDuplicateMode: "days" | "forever";
   emailDuplicateDays: string;
-  ignoreValues: string[];
 };
 
 const defaultNewFieldDraft: NewFieldDraft = {
@@ -78,7 +77,6 @@ const defaultNewFieldDraft: NewFieldDraft = {
   dataTypeFilter: "",
   emailDuplicateMode: "forever",
   emailDuplicateDays: "",
-  ignoreValues: [],
 };
 
 function normalizeApiField(field: ApiField): ApiField {
@@ -298,7 +296,6 @@ export function SellerFieldConfigurationPage() {
         const isEmailType = patch.type.trim().toLowerCase() === "email";
         if (isEmailType) {
           next.format = "email";
-          next.ignoreValues = [];
         } else if (current.type.trim().toLowerCase() === "email") {
           next.format = "";
         }
@@ -346,7 +343,7 @@ export function SellerFieldConfigurationPage() {
       displayArrayMapping: createDraft.displayArrayMapping,
       dataTypeFilter: createDraft.dataTypeFilter.trim() || null,
       options: [],
-      ignoreValues: isEmailType ? [] : createDraft.ignoreValues,
+      ignoreValues: [],
     };
 
     try {
@@ -1131,39 +1128,7 @@ export function SellerFieldConfigurationPage() {
                 </div>
               ) : null}
             </>
-          ) : (
-            <div className="md:col-span-2">
-              <FieldLabel htmlFor="create-mapping-ignore-values" label="Ignore Values" />
-              <div className="rounded-2xl border border-slate-300 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
-                {createDraft.ignoreValues.length > 0 ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {createDraft.ignoreValues.map((value) => (
-                      <span
-                        key={value}
-                        className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        {value}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateCreateDraft({
-                              ignoreValues: createDraft.ignoreValues.filter((item) => item !== value),
-                            })
-                          }
-                          className="text-slate-500 transition hover:text-slate-800 dark:text-slate-300 dark:hover:text-white"
-                        >
-                          x
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Ignore values can be configured after creating the field.
-                </p>
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       </Modal>
 

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, RefreshCw } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { FieldLabel, Input } from "@/components/ui/form-controls";
+import { CancelButton, FieldLabel, Input, PrimaryButton, ToggleSwitch } from "@/components/ui/form-controls";
+import { Modal } from "@/components/ui/modal";
 import {
   SEARCH_FILTER_CONTROL_CLASS,
   SearchFilterActions,
@@ -26,7 +27,7 @@ import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { cn } from "@/lib/utils";
 
-type TrafficSourceStatus = "Active" | "Disabled" | "Deleted";
+type TrafficSourceStatus = "Active" | "Paused" | "Deleted";
 
 type TrafficSource = {
   id: string;
@@ -48,11 +49,11 @@ type TrafficSourceResponse = {
 
 const STATUS_MULTI_OPTIONS = [
   { value: "Active", label: "Active" },
-  { value: "Disabled", label: "Disabled" },
+  { value: "Paused", label: "Paused" },
   { value: "Deleted", label: "Deleted" },
 ];
 
-const BULK_STATUS_OPTIONS: TrafficSourceStatus[] = ["Active", "Disabled"];
+const BULK_STATUS_OPTIONS: Array<"Active" | "Paused"> = ["Active", "Paused"];
 
 const ALL_STATUS_VALUES = STATUS_MULTI_OPTIONS.map((option) => option.value).join(",");
 
@@ -82,6 +83,11 @@ const emptyFilters: AppliedFilters = {
   status: [],
 };
 
+type StatusConfirmTarget = {
+  row: TrafficSource;
+  nextStatus: "Active" | "Paused";
+};
+
 type SellerTrafficSourcesTabProps = {
   sellerId: string;
 };
@@ -103,6 +109,8 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
   const [exportOpen, setExportOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [statusConfirm, setStatusConfirm] = useState<StatusConfirmTarget | null>(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const bulkMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -217,6 +225,52 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     setSelectedIds(checked ? pagedRows.map((row) => row.id) : []);
   };
 
+  const requestStatusChange = (row: TrafficSource, nextActive: boolean) => {
+    if (row.status === "Deleted") return;
+    const nextStatus = nextActive ? "Active" : "Paused";
+    if (row.status === nextStatus) return;
+    setStatusConfirm({ row, nextStatus });
+  };
+
+  const closeStatusConfirm = () => {
+    if (isUpdatingStatus) return;
+    setStatusConfirm(null);
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusConfirm) return;
+
+    const { row, nextStatus } = statusConfirm;
+    setIsUpdatingStatus(true);
+    try {
+      const response = await fetch(
+        `/api/sellers/${encodeURIComponent(sellerId)}/traffic-sources/${encodeURIComponent(row.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: nextStatus }),
+        }
+      );
+
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(result?.message ?? "Failed to update traffic source status.");
+        return;
+      }
+
+      // Local update only — avoid full-grid remount / column remeasure jump.
+      setRows((current) =>
+        current.map((item) => (item.id === row.id ? { ...item, status: nextStatus } : item))
+      );
+      toast.success(`Traffic source set to ${nextStatus}.`);
+      setStatusConfirm(null);
+    } catch {
+      toast.error("Failed to update traffic source status.");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleExport = (mode: "current-page" | "all-pages") => {
     setExportOpen(false);
     const target = mode === "all-pages" ? filteredRows : pagedRows;
@@ -231,7 +285,7 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     );
   };
 
-  const handleBulkStatusChange = async (status: TrafficSourceStatus) => {
+  const handleBulkStatusChange = async (status: "Active" | "Paused") => {
     setBulkOpen(false);
     if (selectedIds.length === 0) return;
 
@@ -302,7 +356,22 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => (
+        <div className="w-[5.1rem]">
+          {row.status === "Deleted" ? (
+            <StatusBadge status={row.status} />
+          ) : (
+            <ToggleSwitch
+              id={`traffic-source-status-${row.id}`}
+              checked={row.status === "Active"}
+              onLabel="Active"
+              offLabel="Paused"
+              disabled={isUpdatingStatus || isBulkUpdating}
+              onChange={(checked) => requestStatusChange(row, checked)}
+            />
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -453,7 +522,7 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
             selectedRowIds={selectedIds}
             onToggleRow={toggleRow}
             onToggleAllRows={toggleAllRows}
-            emptyMessage="No traffic sources yet. They appear automatically when a lead is posted with a subId."
+            emptyMessage="No traffic sources yet. They appear automatically when a lead is posted with a source."
           />
         </ListTableContainer>
       </div>
@@ -466,6 +535,39 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
         pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
         onPageChange={setPage}
       />
+
+      <Modal
+        open={Boolean(statusConfirm)}
+        title="Confirm status change"
+        onClose={closeStatusConfirm}
+        actions={
+          <>
+            <CancelButton onClick={closeStatusConfirm} disabled={isUpdatingStatus} />
+            <PrimaryButton onClick={() => void confirmStatusChange()} disabled={isUpdatingStatus}>
+              {isUpdatingStatus ? "Updating..." : "Confirm"}
+            </PrimaryButton>
+          </>
+        }
+      >
+        {statusConfirm ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Set traffic source{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-100">
+              {statusConfirm.row.sourceName}
+            </span>{" "}
+            to{" "}
+            <span className="font-semibold text-slate-800 dark:text-slate-100">
+              {statusConfirm.nextStatus}
+            </span>
+            ?
+            {statusConfirm.nextStatus === "Paused" ? (
+              <span className="mt-2 block text-slate-500 dark:text-slate-400">
+                Leads with this source will be rejected with reason &quot;Source is not allowed&quot;.
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+      </Modal>
     </div>
   );
 }

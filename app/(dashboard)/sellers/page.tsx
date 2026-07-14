@@ -387,6 +387,7 @@ export default function SellersPage() {
                 selectedRowIds={selectedIds}
                 onToggleRow={toggleRow}
                 onToggleAllRows={toggleAllRows}
+                stickyHeader
               />
             </ListTableContainer>
           </div>

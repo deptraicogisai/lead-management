@@ -14,12 +14,14 @@ import {
   buildLeadDetailRecord,
   buildLeadFilterLog,
   buildLeadFilterProcessing,
+  type LeadDetailTreeCampaign,
 } from "@/lib/lead-detail";
 import {
   normalizeLeadPayload,
   normalizePublisherLeadPingTreeAllocations,
   type PublisherLeadAcceptedDelivery,
 } from "@/lib/publisher-lead-details";
+import { isPingTreeProcessingType } from "@/lib/ping-tree-config";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -130,26 +132,79 @@ export async function GET(_req: Request, context: Params) {
           .filter((value) => Types.ObjectId.isValid(value))
       ),
     ].map((value) => new Types.ObjectId(value));
-    const campaignIds = [
+    const deliveryCampaignIds = [
       ...new Set(
         deliveries
           .map((delivery) => delivery.campaignRef?.toString() ?? "")
           .filter((value) => Types.ObjectId.isValid(value))
       ),
-    ].map((value) => new Types.ObjectId(value));
+    ];
 
-    const [buyers, campaigns] = await Promise.all([
+    const payload = normalizeLeadPayload(lead as Record<string, unknown>);
+    const pingTreeAllocations = normalizePublisherLeadPingTreeAllocations(lead.pingTreeAllocations);
+    const pingTreeConfigIds = [
+      ...new Set(
+        pingTreeAllocations
+          .map((allocation) => allocation.configId)
+          .filter((configId) => Types.ObjectId.isValid(configId))
+      ),
+    ].map((configId) => new Types.ObjectId(configId));
+
+    const pingTreeConfigs =
+      pingTreeConfigIds.length > 0
+        ? await PingTreeConfigModel.find({ _id: { $in: pingTreeConfigIds } })
+            .select({ activeCampaignIds: 1, inactiveCampaignIds: 1, processingType: 1 })
+            .lean()
+        : [];
+
+    const treeCampaignIdStrings = [
+      ...new Set(
+        pingTreeConfigs.flatMap((config) =>
+          Array.isArray(config.activeCampaignIds)
+            ? config.activeCampaignIds.map((id) => String(id ?? "").trim()).filter(Boolean)
+            : []
+        )
+      ),
+    ];
+
+    const campaignIds = [
+      ...new Set([...deliveryCampaignIds, ...treeCampaignIdStrings]),
+    ]
+      .filter((value) => Types.ObjectId.isValid(value))
+      .map((value) => new Types.ObjectId(value));
+
+    const [deliveryBuyers, campaigns] = await Promise.all([
       buyerIds.length > 0
         ? BuyerModel.find({ _id: { $in: buyerIds } }).select({ company: 1, name: 1, displayId: 1 }).lean()
         : [],
       campaignIds.length > 0
         ? CampaignModel.find({ _id: { $in: campaignIds } })
-            .select({ name: 1, displayId: 1, minPrice: 1 })
+            .select({ name: 1, displayId: 1, minPrice: 1, status: 1, buyerRef: 1 })
             .lean()
         : [],
     ]);
 
-    const buyerById = new Map(buyers.map((buyer) => [buyer._id.toString(), buyer]));
+    const treeBuyerIds = [
+      ...new Set(
+        campaigns
+          .map((campaign) => campaign.buyerRef?.toString() ?? "")
+          .filter(
+            (value) =>
+              Types.ObjectId.isValid(value) && !buyerIds.some((id) => id.toString() === value)
+          )
+      ),
+    ].map((value) => new Types.ObjectId(value));
+
+    const extraBuyers =
+      treeBuyerIds.length > 0
+        ? await BuyerModel.find({ _id: { $in: treeBuyerIds } })
+            .select({ company: 1, name: 1, displayId: 1 })
+            .lean()
+        : [];
+
+    const buyerById = new Map(
+      [...deliveryBuyers, ...extraBuyers].map((buyer) => [buyer._id.toString(), buyer])
+    );
     const campaignById = new Map(campaigns.map((campaign) => [campaign._id.toString(), campaign]));
 
     const acceptedDeliveries = deliveries.filter((delivery) => delivery.buyerStatus === "Accept");
@@ -200,28 +255,47 @@ export async function GET(_req: Request, context: Params) {
       fieldLabelsByName.set(name, field.description?.trim() || name);
     }
 
-    const payload = normalizeLeadPayload(lead as Record<string, unknown>);
-    const pingTreeAllocations = normalizePublisherLeadPingTreeAllocations(lead.pingTreeAllocations);
-    const pingTreeConfigIds = [
-      ...new Set(
-        pingTreeAllocations
-          .map((allocation) => allocation.configId)
-          .filter((configId) => Types.ObjectId.isValid(configId))
-      ),
-    ].map((configId) => new Types.ObjectId(configId));
-
-    const pingTreeConfigs =
-      pingTreeConfigIds.length > 0
-        ? await PingTreeConfigModel.find({ _id: { $in: pingTreeConfigIds } })
-            .select({ activeCampaignIds: 1, inactiveCampaignIds: 1 })
-            .lean()
-        : [];
-
     const campaignCountByConfigId: Record<string, number> = {};
+    const configById = new Map(pingTreeConfigs.map((config) => [config._id.toString(), config]));
+
     for (const config of pingTreeConfigs) {
       const active = Array.isArray(config.activeCampaignIds) ? config.activeCampaignIds.length : 0;
       campaignCountByConfigId[config._id.toString()] = active;
     }
+
+    const treeCampaigns: LeadDetailTreeCampaign[] = pingTreeAllocations.flatMap((allocation) => {
+      const config = configById.get(allocation.configId);
+      if (!config) return [];
+
+      const processingType = isPingTreeProcessingType(config.processingType)
+        ? config.processingType
+        : isPingTreeProcessingType(allocation.processingType)
+          ? allocation.processingType
+          : allocation.pingTreeType === "Silent"
+            ? "Silent"
+            : "Main processing";
+
+      const activeIds = Array.isArray(config.activeCampaignIds) ? config.activeCampaignIds : [];
+      return activeIds
+        .map((rawId) => String(rawId ?? "").trim())
+        .filter(Boolean)
+        .map((campaignId) => {
+          const campaign = campaignById.get(campaignId);
+          const buyer = campaign?.buyerRef
+            ? buyerById.get(campaign.buyerRef.toString())
+            : undefined;
+          return {
+            campaignId,
+            processingType,
+            campaignName: campaign?.name?.trim() || "Campaign",
+            campaignDisplayId: typeof campaign?.displayId === "number" ? campaign.displayId : null,
+            campaignStatus: typeof campaign?.status === "string" ? campaign.status : "Active",
+            minPrice: typeof campaign?.minPrice === "number" ? campaign.minPrice : null,
+            buyerDisplayId: typeof buyer?.displayId === "number" ? buyer.displayId : null,
+            buyerCompany: buyer ? resolveBuyerName(buyer as BuyerDoc) : "Buyer",
+          } satisfies LeadDetailTreeCampaign;
+        });
+    });
 
     const filterLog = buildLeadFilterLog({
       validationErrors: lead.validationErrors ?? [],
@@ -240,6 +314,7 @@ export async function GET(_req: Request, context: Params) {
     const filterProcessing = buildLeadFilterProcessing({
       pingTreeAllocations,
       campaignCountByConfigId,
+      treeCampaigns,
       deliveries: deliveries.map((delivery) => {
         const campaign = campaignById.get(delivery.campaignRef?.toString() ?? "");
         const buyer = buyerById.get(delivery.buyerRef?.toString() ?? "");

@@ -10,10 +10,10 @@ import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
-import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { toast } from "@/lib/toast";
 import { FieldLabel, PrimaryButton, primaryButtonClassName, Checkbox } from "@/components/ui/form-controls";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DUPLICATE_METHOD_OPTIONS,
@@ -408,24 +408,17 @@ export function MappingIntakeSettingsTabs({
           <ScrollableTableShell
             rowCount={settings.scheduleRules.length}
             thead={
-              <thead
-                className={cn(
-                  TABLE_STICKY_HEADER_CLASS,
-                  "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300"
-                )}
-              >
-                <tr>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Iteration</th>
-                  <th className="px-4 py-3">Period</th>
-                  <th className="px-4 py-3">Start time</th>
-                  <th className="px-4 py-3">End time</th>
-                  <th className="px-4 py-3">Cap sold</th>
-                  <th className="px-4 py-3">Cap send</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Action</th>
-                </tr>
-              </thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-300">
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Iteration</th>
+                <th className="px-4 py-3">Period</th>
+                <th className="px-4 py-3">Start time</th>
+                <th className="px-4 py-3">End time</th>
+                <th className="px-4 py-3">Cap sold</th>
+                <th className="px-4 py-3">Cap send</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Action</th>
+              </tr>
             }
           >
             <tbody>

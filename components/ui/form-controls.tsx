@@ -346,9 +346,20 @@ type ToggleSwitchProps = {
   onChange: (checked: boolean) => void;
   disabled?: boolean;
   id?: string;
+  onLabel?: string;
+  offLabel?: string;
 };
 
-export function ToggleSwitch({ checked, onChange, disabled, id }: ToggleSwitchProps) {
+export function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  id,
+  onLabel = "On",
+  offLabel = "Off",
+}: ToggleSwitchProps) {
+  const usesCustomLabels = onLabel !== "On" || offLabel !== "Off";
+
   return (
     <button
       id={id}
@@ -358,39 +369,57 @@ export function ToggleSwitch({ checked, onChange, disabled, id }: ToggleSwitchPr
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-8 w-[4.25rem] shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60",
+        "relative inline-flex shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200",
+        "shadow-inner focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30",
+        "disabled:cursor-not-allowed disabled:opacity-55",
+        usesCustomLabels ? "h-7 w-[5.1rem] px-0.5" : "h-8 w-[4.5rem] p-0.5",
         checked
-          ? "border-emerald-700 bg-emerald-800 dark:border-emerald-500 dark:bg-emerald-700"
-          : "border-slate-300 bg-slate-200 dark:border-slate-600 dark:bg-slate-700"
+          ? "border-emerald-600/40 bg-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-600"
+          : "border-slate-300 bg-slate-300 dark:border-slate-600 dark:bg-slate-600"
       )}
     >
       <span
         className={cn(
-          "absolute text-[10px] font-bold uppercase tracking-wide transition-opacity duration-200",
-          checked ? "left-2.5 text-white opacity-100" : "opacity-0"
+          "absolute font-semibold uppercase tracking-wide transition-opacity duration-200",
+          usesCustomLabels ? "text-[9px]" : "text-[10px] font-bold",
+          checked ? "left-1.5 text-white opacity-100" : "opacity-0"
         )}
       >
-        On
+        {onLabel}
       </span>
       <span
         className={cn(
-          "absolute text-[10px] font-bold uppercase tracking-wide transition-opacity duration-200",
-          !checked ? "right-2 text-slate-600 opacity-100 dark:text-slate-300" : "opacity-0"
+          "absolute font-semibold uppercase tracking-wide transition-opacity duration-200",
+          usesCustomLabels ? "text-[9px]" : "text-[10px] font-bold",
+          checked ? "opacity-0" : "right-1.5 text-slate-700 opacity-100 dark:text-slate-100"
         )}
       >
-        Off
+        {offLabel}
       </span>
       <span
         className={cn(
-          "absolute left-0.5 top-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200",
-          checked ? "translate-x-[2.125rem]" : "translate-x-0"
+          "pointer-events-none absolute top-0.5 flex items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5 transition-transform duration-200 ease-out dark:ring-white/10",
+          usesCustomLabels ? "h-[22px] w-[22px]" : "h-7 w-7",
+          checked
+            ? usesCustomLabels
+              ? "translate-x-[3.2rem]"
+              : "translate-x-[2.35rem]"
+            : "translate-x-0"
         )}
       >
         {checked ? (
-          <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 text-emerald-700" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M2 6l3 3 5-5" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            viewBox="0 0 12 12"
+            className={cn(usesCustomLabels ? "h-3 w-3" : "h-3.5 w-3.5", "text-emerald-600")}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.25"
+          >
+            <path d="M2.5 6.2l2.4 2.4 4.6-4.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        ) : null}
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
+        )}
       </span>
     </button>
   );

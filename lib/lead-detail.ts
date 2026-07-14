@@ -72,6 +72,22 @@ export type LeadDetailFilterLogRow = {
   responseHeaders: Record<string, string>;
   rejectReason: string;
   errorReason: string;
+  /** Campaign is Disabled (or Deleted) on the ping tree. */
+  campaignDisabled: boolean;
+  /** True when this row has an actual buyer delivery / HTTP attempt. */
+  hasDelivery: boolean;
+};
+
+/** Snapshot of a campaign that was on the allocated ping tree for this lead. */
+export type LeadDetailTreeCampaign = {
+  campaignId: string;
+  processingType: PingTreeProcessingType;
+  campaignName: string;
+  campaignDisplayId: number | null;
+  campaignStatus: string;
+  minPrice: number | null;
+  buyerDisplayId: number | null;
+  buyerCompany: string;
 };
 
 export type LeadDetailFilterProcessingSection = {
@@ -85,6 +101,8 @@ export type LeadDetailFilterProcessingSection = {
   filteredCount: number;
   /** Campaigns in the tree that were actually posted to the buyer. */
   postedCount: number;
+  /** All tree campaigns (top → bottom), merged with delivery results. */
+  rows: LeadDetailFilterLogRow[];
   postedRows: LeadDetailFilterLogRow[];
   filteredRows: LeadDetailFilterLogRow[];
 };
@@ -333,6 +351,103 @@ function resolveAllocationForProcessingType(
   return allocations.find((allocation) => allocation.pingTreeType === pingTreeType) ?? null;
 }
 
+function isCampaignDisabledStatus(status: string) {
+  const normalized = status.trim().toLowerCase();
+  return normalized === "disabled" || normalized === "deleted" || normalized === "paused";
+}
+
+function buildFilterLogRowFromDelivery(
+  delivery: {
+    id: string;
+    postedAt: string;
+    buyerStatus: string;
+    price: number | null;
+    campaignMinPrice: number | null;
+    buyerDisplayId: number | null;
+    buyerCompany: string;
+    campaignId: string;
+    campaignDisplayId: number | null;
+    campaignName: string;
+    rejectReason?: string | null;
+    errorReason?: string | null;
+    validationErrors?: string[] | null;
+    responseTimeMs?: number | null;
+    httpStatus?: number | null;
+    postLeadUrl?: string | null;
+    requestPayload?: Record<string, unknown> | null;
+    responseBody?: string | null;
+    responseHeaders?: Record<string, string> | null;
+  },
+  options?: { campaignDisabled?: boolean }
+): LeadDetailFilterLogRow {
+  const money = resolveBuyerLeadMoneyMetrics({
+    buyerStatus: delivery.buyerStatus,
+    price: delivery.price,
+    campaignMinPrice: delivery.campaignMinPrice,
+  });
+  const isAccept = delivery.buyerStatus === "Accept";
+  const offeredPrice =
+    delivery.buyerStatus === "Price Reject" &&
+    typeof delivery.price === "number" &&
+    Number.isFinite(delivery.price)
+      ? formatBuyerLeadPrice(delivery.price)
+      : "";
+
+  return {
+    id: delivery.id,
+    date: delivery.postedAt,
+    dateLabel: formatDateTimeDisplay(delivery.postedAt),
+    buyerLabel: formatIndexedLabel(delivery.buyerCompany, delivery.buyerDisplayId),
+    campaignId: delivery.campaignId,
+    campaignLabel: formatIndexedLabel(delivery.campaignName, delivery.campaignDisplayId),
+    postPrice: money.postPrice,
+    soldPrice: isAccept ? money.ttl : "—",
+    status: delivery.buyerStatus,
+    message: resolveFilterLogMessage(delivery),
+    offeredPriceLabel: offeredPrice,
+    timeLabel: formatFilterLogResponseTime(delivery.responseTimeMs),
+    postLeadUrl: delivery.postLeadUrl?.trim() || "",
+    httpStatus: typeof delivery.httpStatus === "number" ? delivery.httpStatus : 0,
+    requestPayload: delivery.requestPayload ?? null,
+    responseBody: delivery.responseBody?.trim() || "",
+    responseHeaders: delivery.responseHeaders ?? {},
+    rejectReason: delivery.rejectReason?.trim() || "",
+    errorReason: delivery.errorReason?.trim() || "",
+    campaignDisabled: Boolean(options?.campaignDisabled),
+    hasDelivery: true,
+  };
+}
+
+function buildPlaceholderFilterLogRow(campaign: LeadDetailTreeCampaign): LeadDetailFilterLogRow {
+  const disabled = isCampaignDisabledStatus(campaign.campaignStatus);
+  return {
+    id: `tree-${campaign.campaignId}`,
+    date: "",
+    dateLabel: "—",
+    buyerLabel: formatIndexedLabel(campaign.buyerCompany, campaign.buyerDisplayId),
+    campaignId: campaign.campaignId,
+    campaignLabel: formatIndexedLabel(campaign.campaignName, campaign.campaignDisplayId),
+    postPrice:
+      campaign.minPrice != null && Number.isFinite(campaign.minPrice)
+        ? formatBuyerLeadPrice(campaign.minPrice)
+        : "—",
+    soldPrice: "—",
+    status: disabled ? "Disabled" : "—",
+    message: disabled ? "Campaign is disabled." : "",
+    offeredPriceLabel: "",
+    timeLabel: "—",
+    postLeadUrl: "",
+    httpStatus: 0,
+    requestPayload: null,
+    responseBody: "",
+    responseHeaders: {},
+    rejectReason: "",
+    errorReason: disabled ? "Campaign is disabled." : "",
+    campaignDisabled: disabled,
+    hasDelivery: false,
+  };
+}
+
 export function buildLeadFilterProcessing(params: {
   deliveries: Array<{
     id: string;
@@ -360,8 +475,11 @@ export function buildLeadFilterProcessing(params: {
   pingTreeAllocations?: PublisherLeadPingTreeAllocation[] | unknown;
   /** Total campaigns on each ping tree config (configId → count). */
   campaignCountByConfigId?: Record<string, number>;
+  /** Campaigns from allocated ping trees, ordered top → bottom. */
+  treeCampaigns?: LeadDetailTreeCampaign[];
 }): LeadDetailFilterProcessingSection[] {
   const allocations = normalizePublisherLeadPingTreeAllocations(params.pingTreeAllocations);
+  const treeCampaigns = params.treeCampaigns ?? [];
   const deliveriesWithType = params.deliveries.map((delivery) => ({
     delivery,
     processingType: resolveDeliveryProcessingType({
@@ -371,63 +489,83 @@ export function buildLeadFilterProcessing(params: {
     }),
   }));
 
-  const presentTypes = new Set(deliveriesWithType.map((entry) => entry.processingType));
+  const presentTypes = new Set<string>([
+    ...deliveriesWithType.map((entry) => entry.processingType),
+    ...treeCampaigns.map((campaign) => campaign.processingType),
+    ...allocations
+      .map((allocation) =>
+        isPingTreeProcessingType(allocation.processingType)
+          ? allocation.processingType
+          : allocation.pingTreeType === "Silent"
+            ? "Silent"
+            : "Main processing"
+      )
+      .filter(Boolean),
+  ]);
   const orderedTypes = [
     ...PING_TREE_PROCESSING_TYPES.filter((type) => presentTypes.has(type)),
     ...[...presentTypes].filter(
       (type) => !(PING_TREE_PROCESSING_TYPES as readonly string[]).includes(type)
     ),
-  ];
+  ] as PingTreeProcessingType[];
 
   return orderedTypes.map((processingType) => {
     const sectionDeliveries = deliveriesWithType.filter(
       (entry) => entry.processingType === processingType
     );
-    const postedRows: LeadDetailFilterLogRow[] = [];
-    const filteredRows: LeadDetailFilterLogRow[] = [];
+    const sectionTreeCampaigns = treeCampaigns.filter(
+      (campaign) => campaign.processingType === processingType
+    );
 
+    const deliveryByCampaignId = new Map<string, (typeof sectionDeliveries)[number]["delivery"]>();
     for (const { delivery } of sectionDeliveries) {
-      const money = resolveBuyerLeadMoneyMetrics({
-        buyerStatus: delivery.buyerStatus,
-        price: delivery.price,
-        campaignMinPrice: delivery.campaignMinPrice,
-      });
-      const isAccept = delivery.buyerStatus === "Accept";
-      const offeredPrice =
-        delivery.buyerStatus === "Price Reject" &&
-        typeof delivery.price === "number" &&
-        Number.isFinite(delivery.price)
-          ? formatBuyerLeadPrice(delivery.price)
-          : "";
+      if (!delivery.campaignId || deliveryByCampaignId.has(delivery.campaignId)) continue;
+      deliveryByCampaignId.set(delivery.campaignId, delivery);
+    }
 
-      const row: LeadDetailFilterLogRow = {
-        id: delivery.id,
-        date: delivery.postedAt,
-        dateLabel: formatDateTimeDisplay(delivery.postedAt),
-        buyerLabel: formatIndexedLabel(delivery.buyerCompany, delivery.buyerDisplayId),
-        campaignId: delivery.campaignId,
-        campaignLabel: formatIndexedLabel(delivery.campaignName, delivery.campaignDisplayId),
-        postPrice: money.postPrice,
-        soldPrice: isAccept ? money.ttl : "—",
-        status: delivery.buyerStatus,
-        message: resolveFilterLogMessage(delivery),
-        offeredPriceLabel: offeredPrice,
-        timeLabel: formatFilterLogResponseTime(delivery.responseTimeMs),
-        postLeadUrl: delivery.postLeadUrl?.trim() || "",
-        httpStatus: typeof delivery.httpStatus === "number" ? delivery.httpStatus : 0,
-        requestPayload: delivery.requestPayload ?? null,
-        responseBody: delivery.responseBody?.trim() || "",
-        responseHeaders: delivery.responseHeaders ?? {},
-        rejectReason: delivery.rejectReason?.trim() || "",
-        errorReason: delivery.errorReason?.trim() || "",
-      };
+    const treeStatusByCampaignId = new Map(
+      sectionTreeCampaigns.map((campaign) => [campaign.campaignId, campaign.campaignStatus])
+    );
 
-      if (wasBuyerDeliveryPosted(delivery)) {
-        postedRows.push(row);
+    const rows: LeadDetailFilterLogRow[] = [];
+    const seenCampaignIds = new Set<string>();
+
+    for (const campaign of sectionTreeCampaigns) {
+      seenCampaignIds.add(campaign.campaignId);
+      const delivery = deliveryByCampaignId.get(campaign.campaignId);
+      if (delivery) {
+        rows.push(
+          buildFilterLogRowFromDelivery(delivery, {
+            campaignDisabled: isCampaignDisabledStatus(campaign.campaignStatus),
+          })
+        );
       } else {
-        filteredRows.push(row);
+        rows.push(buildPlaceholderFilterLogRow(campaign));
       }
     }
+
+    for (const { delivery } of sectionDeliveries) {
+      if (!delivery.campaignId || seenCampaignIds.has(delivery.campaignId)) continue;
+      seenCampaignIds.add(delivery.campaignId);
+      rows.push(
+        buildFilterLogRowFromDelivery(delivery, {
+          campaignDisabled: isCampaignDisabledStatus(
+            treeStatusByCampaignId.get(delivery.campaignId) ?? ""
+          ),
+        })
+      );
+    }
+
+    const postedRows = rows.filter((row) => row.hasDelivery && wasBuyerDeliveryPosted({
+      httpStatus: row.httpStatus,
+      requestPayload: row.requestPayload,
+      responseBody: row.responseBody,
+    }));
+    const filteredRows = rows.filter(
+      (row) =>
+        !postedRows.some((posted) => posted.id === row.id) &&
+        (row.hasDelivery || row.campaignDisabled || row.status === "Skipped")
+    );
 
     const allocation = resolveAllocationForProcessingType(allocations, processingType);
     const treeTitle = formatFilterProcessingTreeTitle(processingType);
@@ -439,17 +577,16 @@ export function buildLeadFilterProcessing(params: {
           : `Ping Tree: ${treeTitle}`;
 
     const postedCount = postedRows.length;
-    const allRows = [...postedRows, ...filteredRows];
     const configCampaignCount =
       allocation?.configId && params.campaignCountByConfigId
         ? params.campaignCountByConfigId[allocation.configId]
         : undefined;
     const campaignCount =
       typeof configCampaignCount === "number" && Number.isFinite(configCampaignCount)
-        ? Math.max(configCampaignCount, allRows.length)
-        : Math.max(allRows.length, postedCount);
+        ? Math.max(configCampaignCount, sectionTreeCampaigns.length, rows.length)
+        : Math.max(sectionTreeCampaigns.length, rows.length, postedCount);
     const filteredCount = Math.max(campaignCount - postedCount, filteredRows.length);
-    const minPriceValues = allRows
+    const minPriceValues = rows
       .map((row) => Number.parseFloat(row.postPrice.replace(/[^0-9.-]/g, "")))
       .filter((value) => Number.isFinite(value));
     const minPriceLabel =
@@ -465,6 +602,7 @@ export function buildLeadFilterProcessing(params: {
       campaignCount,
       filteredCount,
       postedCount,
+      rows,
       postedRows,
       filteredRows,
     } satisfies LeadDetailFilterProcessingSection;

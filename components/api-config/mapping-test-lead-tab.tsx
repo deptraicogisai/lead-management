@@ -6,7 +6,6 @@ import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-con
 import { Checkbox, Input, PrimaryButton, Select } from "@/components/ui/form-controls";
 import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
-import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatDateTimeDisplay } from "@/lib/date-range";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
@@ -30,6 +29,7 @@ import {
 } from "@/lib/test-lead-buyer-progress";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import { Modal } from "@/components/ui/modal";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import type { TestLeadIntakeRuleGroup, TestLeadValidationCheck } from "@/lib/mapping-test-lead-intake";
 import {
   resolveStepResult,
@@ -788,26 +788,27 @@ function SystemBuyerAttemptsGrid({
     <ScrollableTableShell
       rowCount={sortedAttempts.length}
       thead={
-        <thead className={cn(TABLE_STICKY_HEADER_CLASS, "dark:bg-slate-800/60")}>
-          <tr>
-            {["Log ID", "Campaign", "Campaign Type", "Buyer", "Status", "Posted Date", "Action"].map((heading) => (
-              <th
-                key={heading}
-                className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300"
-              >
-                {heading}
-              </th>
-            ))}
-          </tr>
-        </thead>
+        <tr>
+          {["Log ID", "Campaign", "Campaign Type", "Buyer", "Status", "Posted Date", "Action"].map((heading) => (
+            <th
+              key={heading}
+              className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300"
+            >
+              {heading}
+            </th>
+          ))}
+        </tr>
       }
     >
-      <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-900">
+      <tbody>
         {sortedAttempts.map((attempt, index) => {
           const skipSummary = resolveBuyerAttemptSkipSummary(attempt);
 
           return (
-            <tr key={`${attempt.campaignId}-${index}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+            <tr
+              key={`${attempt.campaignId}-${index}`}
+              className="border-t border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/40"
+            >
               <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-200">
                 {resolveBuyerAttemptGridLogId(index)}
               </td>

@@ -23,6 +23,7 @@ import {
 } from "@/components/ping-trees/publisher-distribution-usage-alert";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import {
@@ -626,45 +627,46 @@ export function PingTreeConfigPage() {
         isRefreshing={isRefreshing}
         loadingMessage="Loading ping trees..."
       >
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-          <table className="w-full min-w-[60rem] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">Ping Tree Name</th>
-                <th className="px-4 py-3">Comment</th>
-                <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Global settings</th>
-                <th className="px-4 py-3">Custom settings</th>
-                <th className="px-4 py-3 text-center">Action</th>
+        <ScrollableTableShell
+          rowCount={groups.reduce((sum, group) => sum + group.rows.length, 0)}
+          tableClassName="border-collapse"
+          thead={
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <th className="whitespace-nowrap px-3 py-3">ID</th>
+              <th className="whitespace-nowrap px-3 py-3">Ping Tree Name</th>
+              <th className="max-w-[14rem] px-3 py-3">Comment</th>
+              <th className="whitespace-nowrap px-3 py-3">Product</th>
+              <th className="whitespace-nowrap px-3 py-3">Status</th>
+              <th className="whitespace-nowrap px-3 py-3">Global settings</th>
+              <th className="whitespace-nowrap px-3 py-3">Custom settings</th>
+              <th className="whitespace-nowrap px-3 py-3 text-center">Action</th>
+            </tr>
+          }
+        >
+          <tbody>
+            {groups.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No ping trees found for {activeTab}.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {groups.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No ping trees found for {activeTab}.
-                  </td>
-                </tr>
-              ) : (
-                groups.map((group) => (
-                  <GroupRows
-                    key={group.verticalId}
-                    label={group.label}
-                    rows={group.rows}
-                    onConfig={() => openConfig(group.verticalId)}
-                    onRename={openRename}
-                    onDuplicate={handleDuplicate}
-                    onDelete={setDeleteTarget}
-                    onRestore={handleRestore}
-                    onEdit={openEdit}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            ) : (
+              groups.map((group) => (
+                <GroupRows
+                  key={group.verticalId}
+                  label={group.label}
+                  rows={group.rows}
+                  onConfig={() => openConfig(group.verticalId)}
+                  onRename={openRename}
+                  onDuplicate={handleDuplicate}
+                  onDelete={setDeleteTarget}
+                  onRestore={handleRestore}
+                  onEdit={openEdit}
+                />
+              ))
+            )}
+          </tbody>
+        </ScrollableTableShell>
       </ListTableContainer>
 
       {/* Create modal */}
@@ -767,7 +769,7 @@ export function PingTreeConfigPage() {
         open={configProductId !== null}
         title={`Config percentage for product ${configProductLabel}`}
         onClose={() => setConfigProductId(null)}
-        panelClassName="max-w-2xl"
+        panelClassName="max-w-xl"
         actions={
           <PrimaryButton onClick={submitConfig} disabled={isSavingConfig || configTotal !== 100}>
             {isSavingConfig ? "Applying..." : "Apply"}
@@ -779,45 +781,61 @@ export function PingTreeConfigPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">No ping trees for this product yet.</p>
         ) : (
           <>
-            <div className="grid grid-cols-[1fr_8rem_6rem_auto] items-center gap-3 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              <span>Ping Tree Name</span>
-              <span>New Value</span>
-              <span>Current Value</span>
-              <span />
-            </div>
-            <div className="mt-2 space-y-2">
-              {configRows.map((row) => (
-                <div key={row.id} className="grid grid-cols-[1fr_8rem_6rem_auto] items-center gap-3">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">{row.name}</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={configValues[row.id] ?? 0}
-                    onChange={(event) =>
-                      setConfigValue(row.id, Math.max(0, Math.min(100, Number(event.target.value) || 0)))
-                    }
-                  />
-                  <span className="text-sm text-emerald-600 dark:text-emerald-400">{row.percent}%</span>
-                  <button
-                    type="button"
-                    onClick={() => setRowTo100(row.id)}
-                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
+            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_5.5rem_7rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">
+                <span>Ping Tree Name</span>
+                <span className="text-center">New Value</span>
+                <span className="text-center">Current</span>
+                <span className="text-center">Action</span>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {configRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[minmax(0,1fr)_6.5rem_5.5rem_7rem] items-center gap-3 px-3 py-2.5"
                   >
-                    Set to 100%
-                  </button>
-                </div>
-              ))}
+                    <span className="truncate font-medium text-slate-800 dark:text-slate-100" title={row.name}>
+                      {row.name}
+                    </span>
+                    <div className="flex items-center justify-center gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={configValues[row.id] ?? 0}
+                        onChange={(event) =>
+                          setConfigValue(row.id, Math.max(0, Math.min(100, Number(event.target.value) || 0)))
+                        }
+                        className="!h-9 w-[4.25rem] !px-2 text-center tabular-nums"
+                      />
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">%</span>
+                    </div>
+                    <span className="text-center text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      {row.percent}%
+                    </span>
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setRowTo100(row.id)}
+                        className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
+                      >
+                        Set to 100%
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div
               className={cn(
-                "mt-4 rounded-xl border px-3 py-2 text-sm font-medium",
+                "mt-3 flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-medium",
                 configTotal === 100
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
                   : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
               )}
             >
-              Total percent: {configTotal}%
+              <span>Total percent</span>
+              <span className="tabular-nums">{configTotal}%</span>
             </div>
           </>
         )}
@@ -841,7 +859,7 @@ function GroupRows({ label, rows, onConfig, onRename, onDuplicate, onDelete, onR
   return (
     <>
       <tr className="border-b border-slate-300 bg-slate-200 dark:border-slate-600 dark:bg-slate-700/70">
-        <td colSpan={8} className="px-4 py-2.5">
+        <td colSpan={8} className="px-3 py-2.5">
           <div className="relative flex items-center justify-center">
             <span className="text-center text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">
               {label}
@@ -862,7 +880,7 @@ function GroupRows({ label, rows, onConfig, onRename, onDuplicate, onDelete, onR
           key={row.id}
           className="border-b border-slate-100 text-slate-700 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/40"
         >
-          <td className="px-4 py-3 align-middle">
+          <td className="whitespace-nowrap px-3 py-3 align-middle">
             <Link
               href={`/ping-tree-settings/editor?id=${row.id}&type=${PROCESSING_TO_CAMPAIGN_TYPE[row.processingType]}`}
               className="group inline-flex"
@@ -871,16 +889,22 @@ function GroupRows({ label, rows, onConfig, onRename, onDuplicate, onDelete, onR
               <IdBadge id={row.displayId ?? "-"} interactive />
             </Link>
           </td>
-          <td className="px-4 py-3 align-middle font-medium text-slate-800 dark:text-slate-100">{row.name}</td>
-          <td className="px-4 py-3 align-middle text-slate-600 dark:text-slate-300">{row.comment || "—"}</td>
-          <td className="px-4 py-3 align-middle text-xs text-slate-600 dark:text-slate-300">{row.productLabel}</td>
-          <td className="px-4 py-3 align-middle">
+          <td className="whitespace-nowrap px-3 py-3 align-middle font-medium text-slate-800 dark:text-slate-100">
+            {row.name}
+          </td>
+          <td className="max-w-[14rem] truncate px-3 py-3 align-middle text-slate-600 dark:text-slate-300" title={row.comment || undefined}>
+            {row.comment || "—"}
+          </td>
+          <td className="whitespace-nowrap px-3 py-3 align-middle text-xs text-slate-600 dark:text-slate-300">
+            {row.productLabel}
+          </td>
+          <td className="whitespace-nowrap px-3 py-3 align-middle">
             <StatusBadge status={row.status} />
           </td>
-          <td className="px-4 py-3 align-middle">{formatPingTreePercentLabel(row.percent)}</td>
-          <td className="px-4 py-3 align-middle text-slate-400 dark:text-slate-500">—</td>
-          <td className="px-4 py-3 align-middle">
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <td className="whitespace-nowrap px-3 py-3 align-middle">{formatPingTreePercentLabel(row.percent)}</td>
+          <td className="whitespace-nowrap px-3 py-3 align-middle text-slate-400 dark:text-slate-500">—</td>
+          <td className="whitespace-nowrap px-3 py-3 align-middle">
+            <div className="inline-flex items-center justify-center gap-1.5">
               <TableActionButton onClick={() => onRename(row)}>Rename</TableActionButton>
               <TableActionButton onClick={() => onDuplicate(row)}>Duplicate</TableActionButton>
               {row.status === "Deleted" ? (

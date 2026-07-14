@@ -7,7 +7,7 @@ import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { IdBadge } from "@/components/ui/id-badge";
 import { Modal } from "@/components/ui/modal";
-import { ScrollableTableShell, TABLE_STICKY_HEADER_CLASS } from "@/components/ui/scrollable-table-shell";
+import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-control";
 import type { StatusBadgeVariant } from "@/lib/status-badge";
@@ -333,21 +333,14 @@ function TestLeadLogHistory({
       <ScrollableTableShell
         rowCount={logs.length}
         thead={
-          <thead
-            className={cn(
-              TABLE_STICKY_HEADER_CLASS,
-              "text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400"
-            )}
-          >
-            <tr>
-              <th className="px-4 py-3 font-semibold">ID</th>
-              <th className="px-4 py-3 font-semibold">Submitted</th>
-              <th className="px-4 py-3 font-semibold">URL</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
-              <th className="px-4 py-3 font-semibold">Message</th>
-              <th className="px-4 py-3 font-semibold">Time (s)</th>
-            </tr>
-          </thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <th className="px-4 py-3 font-semibold">ID</th>
+            <th className="px-4 py-3 font-semibold">Submitted</th>
+            <th className="px-4 py-3 font-semibold">URL</th>
+            <th className="px-4 py-3 font-semibold">Status</th>
+            <th className="px-4 py-3 font-semibold">Message</th>
+            <th className="px-4 py-3 font-semibold">Time (s)</th>
+          </tr>
         }
       >
         <tbody>
