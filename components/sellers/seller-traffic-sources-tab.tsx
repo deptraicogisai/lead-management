@@ -533,6 +533,10 @@ export function SellerTrafficSourcesTab({ sellerId }: SellerTrafficSourcesTabPro
         totalItems={totalItems}
         pageSize={pageSize}
         pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
         onPageChange={setPage}
       />
 

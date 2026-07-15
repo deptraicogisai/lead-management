@@ -14,6 +14,10 @@ import { resolveBuyerName } from "@/lib/buyer";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { mapBuyerDeliveryToLeadDetailsRow } from "@/lib/buyer-lead-details";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
+import {
+  buildMultiValuePayloadMatch,
+  parseCommaSeparatedFilter,
+} from "@/lib/publisher-channel-source-filters";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 
 function parsePageSize(value: string | null) {
@@ -61,6 +65,8 @@ type BuyerLeadQueryParams = {
   pingTreeId: string;
   productId: string;
   publisherId: string;
+  publisherChannel: string[];
+  publisherSource: string[];
   redirectStatus: string;
   publisherTag: string;
   status: string;
@@ -175,6 +181,35 @@ function buildPostLookupMatch(params: BuyerLeadQueryParams) {
     andConditions.push({ "seller.publisherTag": params.publisherTag });
   }
 
+  const channelMatch = buildMultiValuePayloadMatch(
+    params.publisherChannel,
+    [
+      "sellerLead.payload.channel",
+      "sellerLead.payload.publisher_channel",
+      "sellerLead.payload.publisherChannel",
+      "sellerLead.payload.channel_id",
+      "sellerLead.payload.channelId",
+    ],
+    escapeRegex
+  );
+  if (channelMatch) {
+    andConditions.push(channelMatch);
+  }
+
+  const sourceMatch = buildMultiValuePayloadMatch(
+    params.publisherSource,
+    [
+      "sellerLead.payload.source",
+      "sellerLead.payload.publisher_source",
+      "sellerLead.payload.publisherSource",
+      "sellerLead.payload.utm_source",
+    ],
+    escapeRegex
+  );
+  if (sourceMatch) {
+    andConditions.push(sourceMatch);
+  }
+
   if (params.pingTreeId) {
     andConditions.push({
       $expr: {
@@ -247,6 +282,8 @@ export async function GET(req: Request) {
     const pingTreeId = normalizeSearchParam(searchParams.get("pingTreeId"));
     const productId = normalizeSearchParam(searchParams.get("productId"));
     const publisherId = normalizeSearchParam(searchParams.get("publisherId"));
+    const publisherChannel = parseCommaSeparatedFilter(searchParams.get("publisherChannel"));
+    const publisherSource = parseCommaSeparatedFilter(searchParams.get("publisherSource"));
     const redirectStatus = normalizeSearchParam(searchParams.get("redirectStatus")) || "All";
     const publisherTag = normalizeSearchParam(searchParams.get("publisherTag"));
     const status = normalizeSearchParam(searchParams.get("status")) || "All";
@@ -274,6 +311,8 @@ export async function GET(req: Request) {
       pingTreeId,
       productId,
       publisherId,
+      publisherChannel,
+      publisherSource,
       redirectStatus,
       publisherTag,
       status,

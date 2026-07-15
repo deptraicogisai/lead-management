@@ -66,7 +66,7 @@ type CampaignListResponse = {
   totalPages: number;
 };
 
-const PAGE_SIZE_OPTIONS = [15, 50, 100, 500] as const;
+const PAGE_SIZE_OPTIONS = [15, 50, 100, 500, 1000] as const;
 
 const CAMPAIGN_STATUS_MULTI_OPTIONS = CAMPAIGN_STATUS_FILTER_OPTIONS.filter(
   (status) => status !== "All"
@@ -670,6 +670,7 @@ export function CampaignsPage() {
             totalItems={totalItems}
             tableFilter={tableSearch}
             onTableFilterChange={setTableSearch}
+            filterPlaceholder="Filter current page..."
             selectedCount={selectedIds.length}
             actions={
               <>
@@ -720,7 +721,8 @@ export function CampaignsPage() {
           >
             <DataTable
               columns={columns}
-              rows={filteredRows}
+              rows={rows}
+              filterQuery={tableSearch}
               emptyMessage="No campaigns found."
               selectedRowIds={selectedIds}
               onToggleRow={toggleRow}

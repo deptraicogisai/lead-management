@@ -18,6 +18,10 @@ import {
   type PublisherLeadDetailsRow,
 } from "@/lib/publisher-lead-details";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
+import {
+  buildMultiValuePayloadMatch,
+  parseCommaSeparatedFilter,
+} from "@/lib/publisher-channel-source-filters";
 
 type LeadDoc = {
   _id?: { toString(): string };
@@ -82,8 +86,8 @@ function buildMongoFilter(params: {
   productId: string;
   status: string;
   publisherId: string;
-  publisherChannel: string;
-  publisherSource: string;
+  publisherChannel: string[];
+  publisherSource: string[];
   publisherTags: string;
   redirectStatus: string;
   leadScope: string;
@@ -156,29 +160,22 @@ function buildMongoFilter(params: {
     andConditions.push({ sellerRef: new Types.ObjectId(params.publisherId) });
   }
 
-  if (params.publisherChannel) {
-    const regex = { $regex: params.publisherChannel, $options: "i" };
-    andConditions.push({
-      $or: [
-        { "payload.channel": regex },
-        { "payload.publisher_channel": regex },
-        { "payload.publisherChannel": regex },
-        { "payload.channel_id": regex },
-        { "payload.channelId": regex },
-      ],
-    });
+  const channelMatch = buildMultiValuePayloadMatch(
+    params.publisherChannel,
+    ["payload.channel", "payload.publisher_channel", "payload.publisherChannel", "payload.channel_id", "payload.channelId"],
+    escapeRegex
+  );
+  if (channelMatch) {
+    andConditions.push(channelMatch);
   }
 
-  if (params.publisherSource) {
-    const regex = { $regex: params.publisherSource, $options: "i" };
-    andConditions.push({
-      $or: [
-        { "payload.source": regex },
-        { "payload.publisher_source": regex },
-        { "payload.publisherSource": regex },
-        { "payload.utm_source": regex },
-      ],
-    });
+  const sourceMatch = buildMultiValuePayloadMatch(
+    params.publisherSource,
+    ["payload.source", "payload.publisher_source", "payload.publisherSource", "payload.utm_source"],
+    escapeRegex
+  );
+  if (sourceMatch) {
+    andConditions.push(sourceMatch);
   }
 
   if (params.publisherTags) {
@@ -335,8 +332,8 @@ export async function GET(req: Request) {
     const productId = normalizeSearchParam(searchParams.get("productId"));
     const status = normalizeSearchParam(searchParams.get("status"));
     const publisherId = normalizeSearchParam(searchParams.get("publisherId"));
-    const publisherChannel = normalizeSearchParam(searchParams.get("publisherChannel"));
-    const publisherSource = normalizeSearchParam(searchParams.get("publisherSource"));
+    const publisherChannel = parseCommaSeparatedFilter(searchParams.get("publisherChannel"));
+    const publisherSource = parseCommaSeparatedFilter(searchParams.get("publisherSource"));
     const publisherTags = normalizeSearchParam(searchParams.get("publisherTags"));
     const redirectStatus = normalizeSearchParam(searchParams.get("redirectStatus"));
     const leadScope = normalizeSearchParam(searchParams.get("leadScope"));

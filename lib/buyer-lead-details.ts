@@ -6,6 +6,8 @@ import {
   buildPublisherLeadDisplayCode,
   formatPublisherLeadMoney,
   normalizePublisherLeadPingTreeAllocations,
+  resolvePublisherChannelLabel,
+  resolvePublisherSourceLabel,
   type PublisherLeadPingTreeAllocation,
 } from "@/lib/publisher-lead-details";
 
@@ -27,7 +29,8 @@ export type BuyerLeadDetailsRow = {
   ttl: string;
   publisherLabel: string;
   publisherTag: string;
-  sourceLabel: string;
+  publisherChannel: string;
+  publisherSource: string;
   responseTimeLabel: string;
   campaignId: string;
   buyerId: string;
@@ -58,6 +61,8 @@ export type BuyerLeadDetailsFilters = {
   dateTo: string;
   productId: string;
   publisherId: string;
+  publisherChannel: string[];
+  publisherSource: string[];
   buyerId: string;
   campaignId: string;
   pingTreeId: string;
@@ -75,6 +80,8 @@ export const defaultBuyerLeadDetailsFilters: BuyerLeadDetailsFilters = {
   dateTo: defaultDateRange.to,
   productId: "",
   publisherId: "",
+  publisherChannel: [],
+  publisherSource: [],
   buyerId: "",
   campaignId: "",
   pingTreeId: "",
@@ -116,28 +123,10 @@ export function formatBuyerLeadPrice(price: number | null) {
   return formatPublisherLeadMoney(price);
 }
 
+/** @deprecated Use resolvePublisherSourceLabel — lead payload `source` is Publisher Source. */
 export function resolveBuyerLeadSource(payload: Record<string, unknown> | null | undefined) {
-  if (!payload) return "";
-
-  const exactValue = payload.source;
-  if (typeof exactValue === "string" && exactValue.trim()) {
-    return exactValue.trim();
-  }
-  if (typeof exactValue === "number" && Number.isFinite(exactValue)) {
-    return String(exactValue);
-  }
-
-  for (const [key, value] of Object.entries(payload)) {
-    if (key.trim().toLowerCase() !== "source") continue;
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return String(value);
-    }
-  }
-
-  return "";
+  const value = resolvePublisherSourceLabel(payload);
+  return value === "—" ? "" : value;
 }
 
 /** Buyer HTTP response time: request sent to buyer until response received (seconds). */
@@ -293,7 +282,8 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
       ? `[${input.publisherIndex}] ${input.publisherName}`
       : input.publisherName,
     publisherTag: input.publisherTag,
-    sourceLabel: resolveBuyerLeadSource(input.leadPayload),
+    publisherChannel: resolvePublisherChannelLabel(input.leadPayload),
+    publisherSource: resolvePublisherSourceLabel(input.leadPayload),
     responseTimeLabel: formatBuyerResponseTime(input.responseTimeMs),
     campaignId: input.campaignId,
     buyerId: input.buyerId,

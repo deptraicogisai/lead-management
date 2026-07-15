@@ -82,16 +82,6 @@ export function PresentListsPage() {
     void fetchLists();
   }, [fetchLists, reloadKey]);
 
-  const filteredRows = rows.filter((row) => {
-    const search = tableFilter.trim().toLowerCase();
-    if (!search) return true;
-
-    return [String(row.displayId), row.name, row.productLabel, row.applyToField, row.listType]
-      .join(" ")
-      .toLowerCase()
-      .includes(search);
-  });
-
   const columns: Column<PresentListRecord>[] = [
     {
       key: "id",
@@ -143,8 +133,8 @@ export function PresentListsPage() {
       ) },
   ];
 
-  const showingFrom = filteredRows.length > 0 ? (page - 1) * pageSize + 1 : 0;
-  const showingTo = filteredRows.length > 0 ? Math.min((page - 1) * pageSize + filteredRows.length, totalItems) : 0;
+  const showingFrom = rows.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
 
   return (
     <div className="space-y-6">
@@ -211,6 +201,7 @@ export function PresentListsPage() {
             totalItems={totalItems}
             tableFilter={tableFilter}
             onTableFilterChange={setTableFilter}
+            filterPlaceholder="Filter current page..."
             actions={
               <AddNewButton type="button"
                 onClick={() => setIsCreateOpen(true)}
@@ -224,7 +215,12 @@ export function PresentListsPage() {
             isRefreshing={isRefreshing}
             loadingMessage="Loading lists..."
           >
-            <DataTable columns={columns} rows={filteredRows} emptyMessage="No lists found." />
+            <DataTable
+              columns={columns}
+              rows={rows}
+              filterQuery={tableFilter}
+              emptyMessage="No lists found."
+            />
           </ListTableContainer>
         </div>
 

@@ -2,13 +2,9 @@
 
 import { useEffect, type RefObject } from "react";
 
-function maxScrollLeft(node: HTMLElement) {
-  return Math.max(0, node.scrollWidth - node.clientWidth);
-}
-
 /**
- * Keep multiple overflow-x containers visually aligned.
- * Uses scroll ratio so zoom / sub-pixel width differences stay in sync.
+ * Keep horizontal scroll positions identical across overflow-x containers.
+ * Absolute scrollLeft — not ratio — so table columns stay locked.
  */
 export function useSyncedHorizontalScroll(
   refs: Array<RefObject<HTMLElement | null>>,
@@ -23,17 +19,15 @@ export function useSyncedHorizontalScroll(
 
     let syncing = false;
     let unlockFrame: number | null = null;
-    let lastRatio = 0;
+    let lastScrollLeft = 0;
 
-    const applyRatio = (ratio: number, source?: HTMLElement) => {
-      const clamped = Math.min(1, Math.max(0, ratio));
-      lastRatio = clamped;
+    const applyScrollLeft = (left: number, source?: HTMLElement) => {
+      const nextLeft = Math.max(0, left);
+      lastScrollLeft = nextLeft;
       for (const node of nodes) {
         if (node === source) continue;
-        const max = maxScrollLeft(node);
-        const next = clamped * max;
-        if (Math.abs(node.scrollLeft - next) > 0.5) {
-          node.scrollLeft = next;
+        if (Math.abs(node.scrollLeft - nextLeft) > 0.5) {
+          node.scrollLeft = nextLeft;
         }
       }
     };
@@ -41,10 +35,7 @@ export function useSyncedHorizontalScroll(
     const syncFrom = (source: HTMLElement) => {
       if (syncing) return;
       syncing = true;
-
-      const max = maxScrollLeft(source);
-      const ratio = max > 0 ? source.scrollLeft / max : 0;
-      applyRatio(ratio, source);
+      applyScrollLeft(source.scrollLeft, source);
 
       if (unlockFrame != null) cancelAnimationFrame(unlockFrame);
       unlockFrame = requestAnimationFrame(() => {
@@ -57,7 +48,11 @@ export function useSyncedHorizontalScroll(
 
     const realign = () => {
       syncing = true;
-      applyRatio(lastRatio);
+      const dominant = nodes.reduce((best, node) =>
+        node.scrollLeft > best.scrollLeft ? node : best
+      );
+      const preferred = lastScrollLeft > 0.5 ? lastScrollLeft : dominant.scrollLeft;
+      applyScrollLeft(preferred);
       requestAnimationFrame(() => {
         syncing = false;
       });
@@ -80,6 +75,8 @@ export function useSyncedHorizontalScroll(
       if (node.firstElementChild) resizeObserver.observe(node.firstElementChild);
     }
 
+    realign();
+
     return () => {
       for (const cleanup of cleanups) cleanup();
       window.removeEventListener("resize", realign);
@@ -88,7 +85,6 @@ export function useSyncedHorizontalScroll(
       resizeObserver.disconnect();
       if (unlockFrame != null) cancelAnimationFrame(unlockFrame);
     };
-    // refs are stable; remountKey controls when to rebind (e.g. overflow toggled)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remountKey]);
 }

@@ -9,9 +9,18 @@ type SortableColumnHeaderProps = {
   active: boolean;
   direction?: SortDirection;
   onClick: () => void;
+  align?: "left" | "right";
+  className?: string;
 };
 
-export function SortableColumnHeader({ label, active, direction, onClick }: SortableColumnHeaderProps) {
+export function SortableColumnHeader({
+  label,
+  active,
+  direction,
+  onClick,
+  align = "left",
+  className,
+}: SortableColumnHeaderProps) {
   return (
     <button
       type="button"
@@ -19,17 +28,22 @@ export function SortableColumnHeader({ label, active, direction, onClick }: Sort
         event.preventDefault();
         onClick();
       }}
-      className="inline-flex select-none items-center gap-1 text-left font-semibold text-slate-700 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-100 dark:hover:text-white"
+      className={cn(
+        "inline-flex select-none items-center gap-1 font-semibold text-slate-700 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-100 dark:hover:text-white",
+        align === "right" ? "w-full justify-end text-right" : "text-left",
+        className
+      )}
     >
       <span>{label}</span>
       <span
         className={cn(
-          "text-[10px] leading-none",
+          "inline-flex w-3 shrink-0 flex-col items-center justify-center text-[8px] leading-[0.7]",
           active ? "text-blue-600 dark:text-blue-300" : "text-slate-400"
         )}
         aria-hidden
       >
-        {active ? (direction === "asc" ? "▲" : "▼") : "▲▼"}
+        <span className={cn(active && direction !== "asc" && "opacity-30")}>▲</span>
+        <span className={cn(active && direction !== "desc" && "opacity-30")}>▼</span>
       </span>
     </button>
   );

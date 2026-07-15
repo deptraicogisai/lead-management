@@ -435,7 +435,7 @@ export default function BuyersPage() {
             totalPages={totalPages}
             totalItems={totalItems}
             pageSize={pageSize}
-            pageSizeOptions={[15, 50]}
+            pageSizeOptions={[15, 50, 100, 500, 1000]}
             onPageSizeChange={(value) => {
               setPageSize(value);
               setPage(1);

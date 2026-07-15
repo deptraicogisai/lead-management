@@ -41,16 +41,6 @@ type LogListResponse = {
   totalPages: number;
 };
 
-const PREVIEW_LIMIT = 80;
-
-function previewText(value: string) {
-  return value.length > PREVIEW_LIMIT ? `${value.slice(0, PREVIEW_LIMIT)}...` : value;
-}
-
-function previewPayload(value: Record<string, unknown>) {
-  return previewText(JSON.stringify(value));
-}
-
 function formatRequestType(value: LogRow["requestType"]) {
   return value === "seller-intake" ? "Seller Intake" : "Buyer Delivery";
 }
@@ -216,71 +206,34 @@ export default function LogsPage() {
       key: "postLeadUrl",
       label: "Post Lead URL",
       render: (row) => (
-        <div className="max-w-sm break-words rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">
-          {row.postLeadUrl}
-        </div>
-      ),
-    },
-    {
-      key: "requestPayload",
-      label: "Posted Data",
-      render: (row) => (
-        <div className="max-w-sm space-y-2">
-          <pre className="rounded-xl bg-slate-50 p-3 whitespace-pre-wrap break-words text-xs leading-5 text-slate-700 dark:bg-slate-800 dark:text-slate-100">
-            {previewPayload(row.requestPayload)}
-          </pre>
-          <button
-            type="button"
-            onClick={() => setSelectedLog(row)}
-            className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
-          >
-            Open Log
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: "responseBody",
-      label: "Response",
-      render: (row) => {
-        const responseText = row.errorMessage || row.responseBody || "-";
-
-        return (
-          <div className="max-w-sm space-y-2">
-            <pre className="rounded-xl bg-slate-50 p-3 whitespace-pre-wrap break-words text-xs leading-5 text-slate-700 dark:bg-slate-800 dark:text-slate-100">
-              {previewText(responseText)}
-            </pre>
-            {responseText !== "-" ? (
-              <button
-                type="button"
-                onClick={() => setSelectedLog(row)}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
-              >
-                Open Log
-              </button>
-            ) : null}
-          </div>
-        );
-      },
-    },
-    {
-      key: "actions",
-      label: "Log",
-      render: (row) => (
-        <button
-          type="button"
-          onClick={() => setSelectedLog(row)}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
-        >
-          View
-        </button>
+        <span className="line-clamp-2 max-w-xs break-all text-xs text-slate-700 dark:text-slate-300">
+          {row.postLeadUrl || "—"}
+        </span>
       ),
     },
     {
       key: "createdAt",
       label: "Logged At",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{formatDateTimeDisplay(row.createdAt)}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">
+          {formatDateTimeDisplay(row.createdAt)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Log",
+      sortable: false,
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => setSelectedLog(row)}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+        >
+          Open Log
+        </button>
+      ),
     },
   ];
 

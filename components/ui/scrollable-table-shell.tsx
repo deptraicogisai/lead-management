@@ -9,7 +9,6 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { useSyncedHorizontalScroll } from "@/lib/use-synced-horizontal-scroll";
 import { cn } from "@/lib/utils";
 
 export const TABLE_STICKY_HEADER_CLASS = "bg-slate-50 dark:bg-slate-800";
@@ -26,11 +25,23 @@ type ScrollableTableShellProps = {
   className?: string;
   /** Extra classes for the body scroller (e.g. max-h + overflow-y-auto) */
   bodyClassName?: string;
+  /** Keep body area from collapsing (e.g. while filtering current page). */
+  bodyMinHeight?: number;
   scrollContainerRef?: Ref<HTMLDivElement>;
   showMobileHint?: boolean;
   overlay?: ReactNode;
   /** Stick header + top scrollbar under app chrome (window) or keep in flow */
   stickyHeader?: boolean;
+  /**
+   * Reuse the last measured column widths instead of remeasuring.
+   * Use while client-side filtering/sorting so columns don't jump as rows reorder.
+   */
+  freezeColumnWidths?: boolean;
+  /**
+   * When this value changes (e.g. new page of rows), discard frozen widths and remasure.
+   * Row reorder / filter on the same page should keep the same key.
+   */
+  columnLayoutKey?: string | number;
 };
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
@@ -66,8 +77,8 @@ function ensureColgroup(table: HTMLTableElement, widths: string[]) {
 
 function clearSyncColgroup(table: HTMLTableElement) {
   table.querySelector("colgroup[data-scroll-sync]")?.remove();
-  // Measure against intrinsic content width (avoid stretched w-full columns).
   table.style.width = "max-content";
+  table.style.minWidth = "";
 }
 
 function readRowWidths(row: Element | null, widths: number[]) {
@@ -95,8 +106,10 @@ function measureColumnWidths(
   clearSyncColgroup(bodyTable);
   if (footerTable) clearSyncColgroup(footerTable);
 
+  headerTable.style.transform = "";
+  if (footerTable) footerTable.style.transform = "";
+
   const headerRow = headerTable.querySelector("thead tr");
-  // Skip group/summary rows with colspan so they do not inflate measured widths.
   const bodyRows = Array.from(bodyTable.querySelectorAll("tbody tr"))
     .filter((row) =>
       Array.from(row.children).every((cell) => ((cell as HTMLTableCellElement).colSpan || 1) === 1)
@@ -120,6 +133,11 @@ function measureColumnWidths(
   return widths.map((width) => Math.ceil(width));
 }
 
+/**
+ * Dual-table shell with one horizontal scroll source of truth (body).
+ * Header/footer do NOT scroll independently — they follow via translateX.
+ * Top scrollbar mirrors body.scrollLeft for usability.
+ */
 export function ScrollableTableShell({
   rowCount: _rowCount,
   thead,
@@ -128,20 +146,26 @@ export function ScrollableTableShell({
   tableClassName,
   className,
   bodyClassName,
+  bodyMinHeight,
   scrollContainerRef,
   showMobileHint = false,
   overlay,
   stickyHeader = false,
+  freezeColumnWidths = false,
+  columnLayoutKey,
 }: ScrollableTableShellProps) {
-  const headerScrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
-  const footerScrollRef = useRef<HTMLDivElement>(null);
+  const headerClipRef = useRef<HTMLDivElement>(null);
+  const footerClipRef = useRef<HTMLDivElement>(null);
   const headerTableRef = useRef<HTMLTableElement>(null);
   const bodyTableRef = useRef<HTMLTableElement>(null);
   const footerTableRef = useRef<HTMLTableElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
   const syncingLayoutRef = useRef(false);
+  const syncingScrollRef = useRef(false);
+  const scrollLeftRef = useRef(0);
+  const frozenWidthsRef = useRef<number[] | null>(null);
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
   const [stickyTop, setStickyTop] = useState(0);
 
@@ -155,11 +179,28 @@ export function ScrollableTableShell({
     [scrollContainerRef]
   );
 
-  // Header/footer use overflow scroll (hidden bar) — no transform, so stickyHeader keeps working.
-  useSyncedHorizontalScroll(
-    [headerScrollRef, topScrollRef, bodyScrollRef, footerScrollRef],
-    `${hasHorizontalOverflow}:${Boolean(tfoot)}`
-  );
+  const applyScrollLeft = useCallback((left: number) => {
+    const next = Math.max(0, left);
+    scrollLeftRef.current = next;
+
+    const bodyScroll = bodyScrollRef.current;
+    const topScroll = topScrollRef.current;
+    const headerTable = headerTableRef.current;
+    const footerTable = footerTableRef.current;
+
+    if (bodyScroll && Math.abs(bodyScroll.scrollLeft - next) > 0.5) {
+      bodyScroll.scrollLeft = next;
+    }
+    if (topScroll && Math.abs(topScroll.scrollLeft - next) > 0.5) {
+      topScroll.scrollLeft = next;
+    }
+    if (headerTable) {
+      headerTable.style.transform = next > 0 ? `translate3d(${-next}px, 0, 0)` : "";
+    }
+    if (footerTable) {
+      footerTable.style.transform = next > 0 ? `translate3d(${-next}px, 0, 0)` : "";
+    }
+  }, []);
 
   const syncLayout = useCallback(() => {
     if (syncingLayoutRef.current) return;
@@ -174,33 +215,68 @@ export function ScrollableTableShell({
 
     syncingLayoutRef.current = true;
     try {
-      const widths = measureColumnWidths(headerTable, bodyTable, footerTable);
+      const preservedLeft = scrollLeftRef.current || bodyScroll.scrollLeft;
+      const frozen = freezeColumnWidths ? frozenWidthsRef.current : null;
+      const widths =
+        frozen && frozen.length > 0
+          ? frozen
+          : measureColumnWidths(headerTable, bodyTable, footerTable);
       if (widths.length === 0) return;
 
-      const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+      if (!freezeColumnWidths || !frozenWidthsRef.current?.length) {
+        frozenWidthsRef.current = widths;
+      }
+
+      const measuredTotal = widths.reduce((sum, width) => sum + width, 0);
       const containerWidth = bodyScroll.clientWidth;
-      const needsHorizontalScroll = totalWidth > containerWidth + 1;
+      const needsHorizontalScroll = measuredTotal > containerWidth + 1;
 
       if (needsHorizontalScroll) {
         const pxWidths = widths.map((width) => `${width}px`);
         ensureColgroup(headerTable, pxWidths);
         ensureColgroup(bodyTable, pxWidths);
         if (footerTable) ensureColgroup(footerTable, pxWidths);
-        // Measured total only — avoid scrollWidth feedback loops.
-        const px = `${totalWidth}px`;
-        headerTable.style.width = px;
-        bodyTable.style.width = px;
-        if (footerTable) footerTable.style.width = px;
-        spacer.style.width = px;
-        spacer.style.minWidth = px;
+
+        // Lock all tables + top spacer to the same pixel width (body is truth).
+        headerTable.style.width = `${measuredTotal}px`;
+        headerTable.style.minWidth = `${measuredTotal}px`;
+        bodyTable.style.width = `${measuredTotal}px`;
+        bodyTable.style.minWidth = `${measuredTotal}px`;
+        if (footerTable) {
+          footerTable.style.width = `${measuredTotal}px`;
+          footerTable.style.minWidth = `${measuredTotal}px`;
+        }
+
+        const syncedWidth = Math.max(
+          measuredTotal,
+          bodyTable.scrollWidth,
+          headerTable.scrollWidth,
+          footerTable?.scrollWidth ?? 0
+        );
+        const syncedPx = `${syncedWidth}px`;
+        headerTable.style.width = syncedPx;
+        headerTable.style.minWidth = syncedPx;
+        bodyTable.style.width = syncedPx;
+        bodyTable.style.minWidth = syncedPx;
+        if (footerTable) {
+          footerTable.style.width = syncedPx;
+          footerTable.style.minWidth = syncedPx;
+        }
+        spacer.style.width = syncedPx;
+        spacer.style.minWidth = syncedPx;
       } else {
-        const pctWidths = widths.map((width) => `${((width / totalWidth) * 100).toFixed(4)}%`);
+        const pctWidths = widths.map((width) => `${((width / measuredTotal) * 100).toFixed(4)}%`);
         ensureColgroup(headerTable, pctWidths);
         ensureColgroup(bodyTable, pctWidths);
         if (footerTable) ensureColgroup(footerTable, pctWidths);
         headerTable.style.width = "100%";
+        headerTable.style.minWidth = "";
         bodyTable.style.width = "100%";
-        if (footerTable) footerTable.style.width = "100%";
+        bodyTable.style.minWidth = "";
+        if (footerTable) {
+          footerTable.style.width = "100%";
+          footerTable.style.minWidth = "";
+        }
         spacer.style.width = "100%";
         spacer.style.minWidth = "";
       }
@@ -214,46 +290,86 @@ export function ScrollableTableShell({
         current === needsHorizontalScroll ? current : needsHorizontalScroll
       );
 
-      const left = bodyScroll.scrollLeft;
-      for (const target of [
-        headerScrollRef.current,
-        topScroll,
-        bodyScroll,
-        footerScrollRef.current,
-      ]) {
-        if (target && Math.abs(target.scrollLeft - left) > 0.5) {
-          target.scrollLeft = left;
-        }
-      }
+      // Re-apply shared scroll after width changes (clamp automatically via browser).
+      applyScrollLeft(needsHorizontalScroll ? preservedLeft : 0);
     } finally {
       requestAnimationFrame(() => {
         syncingLayoutRef.current = false;
       });
     }
-  }, []);
+  }, [applyScrollLeft, freezeColumnWidths]);
+
+  const previousLayoutKeyRef = useRef(columnLayoutKey);
 
   useLayoutEffect(() => {
+    if (previousLayoutKeyRef.current !== columnLayoutKey) {
+      frozenWidthsRef.current = null;
+      previousLayoutKeyRef.current = columnLayoutKey;
+    }
     syncLayout();
-  }, [children, thead, tfoot, syncLayout]);
+  }, [children, thead, tfoot, freezeColumnWidths, columnLayoutKey, syncLayout]);
 
   useEffect(() => {
     const bodyScroll = bodyScrollRef.current;
-    if (!bodyScroll) return;
+    const topScroll = topScrollRef.current;
+    const headerClip = headerClipRef.current;
+    const footerClip = footerClipRef.current;
+    if (!bodyScroll || !topScroll) return;
+
+    const onBodyScroll = () => {
+      if (syncingScrollRef.current || syncingLayoutRef.current) return;
+      syncingScrollRef.current = true;
+      applyScrollLeft(bodyScroll.scrollLeft);
+      requestAnimationFrame(() => {
+        syncingScrollRef.current = false;
+      });
+    };
+
+    const onTopScroll = () => {
+      if (syncingScrollRef.current || syncingLayoutRef.current) return;
+      syncingScrollRef.current = true;
+      applyScrollLeft(topScroll.scrollLeft);
+      requestAnimationFrame(() => {
+        syncingScrollRef.current = false;
+      });
+    };
+
+    const forwardWheel = (event: WheelEvent) => {
+      const mostlyHorizontal =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey;
+      if (!mostlyHorizontal) return;
+      event.preventDefault();
+      const delta = event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
+      applyScrollLeft(bodyScroll.scrollLeft + delta);
+    };
+
+    bodyScroll.addEventListener("scroll", onBodyScroll, { passive: true });
+    topScroll.addEventListener("scroll", onTopScroll, { passive: true });
+    headerClip?.addEventListener("wheel", forwardWheel, { passive: false });
+    footerClip?.addEventListener("wheel", forwardWheel, { passive: false });
 
     const observer = new ResizeObserver(() => {
-      if (syncingLayoutRef.current) return;
+      // Avoid remeasure thrash while column widths are frozen (e.g. page filter).
+      if (syncingLayoutRef.current || freezeColumnWidths) return;
       syncLayout();
     });
     observer.observe(bodyScroll);
+    if (bodyTableRef.current) observer.observe(bodyTableRef.current);
+    if (headerClip) observer.observe(headerClip);
 
     window.addEventListener("resize", syncLayout);
     window.visualViewport?.addEventListener("resize", syncLayout);
+
     return () => {
+      bodyScroll.removeEventListener("scroll", onBodyScroll);
+      topScroll.removeEventListener("scroll", onTopScroll);
+      headerClip?.removeEventListener("wheel", forwardWheel);
+      footerClip?.removeEventListener("wheel", forwardWheel);
       observer.disconnect();
       window.removeEventListener("resize", syncLayout);
       window.visualViewport?.removeEventListener("resize", syncLayout);
     };
-  }, [syncLayout, tfoot]);
+  }, [applyScrollLeft, freezeColumnWidths, syncLayout, tfoot]);
 
   useEffect(() => {
     if (!stickyHeader) {
@@ -284,7 +400,6 @@ export function ScrollableTableShell({
   return (
     <div
       className={cn(
-        // Do not use overflow-hidden here — it breaks position:sticky for stickyHeader lists.
         "rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900",
         className
       )}
@@ -306,11 +421,9 @@ export function ScrollableTableShell({
           )}
           style={stickyHeader ? { top: stickyTop } : undefined}
         >
-          <div
-            ref={headerScrollRef}
-            className="table-scroll-hide-bar overflow-x-auto overflow-y-hidden overscroll-x-contain"
-          >
-            <table ref={headerTableRef} className={mergedTableClassName}>
+          {/* Header is clipped + translated — never an independent H-scroller. */}
+          <div ref={headerClipRef} className="overflow-hidden">
+            <table ref={headerTableRef} className={cn(mergedTableClassName, "will-change-transform")}>
               <thead className="bg-slate-50 dark:bg-slate-800">{thead}</thead>
             </table>
           </div>
@@ -327,12 +440,8 @@ export function ScrollableTableShell({
 
         <div
           ref={setBodyNode}
-          className={cn(
-            "overscroll-x-contain",
-            // Same scrollbar skin as the top bar so max-scroll / thumb size stay aligned.
-            hasHorizontalOverflow ? "table-scroll-top overflow-x-auto" : "overflow-x-hidden",
-            bodyClassName
-          )}
+          className={cn("table-scroll-top overflow-x-auto overscroll-x-contain", bodyClassName)}
+          style={bodyMinHeight && bodyMinHeight > 0 ? { minHeight: bodyMinHeight } : undefined}
         >
           <table ref={bodyTableRef} className={mergedTableClassName}>
             {children}
@@ -341,11 +450,8 @@ export function ScrollableTableShell({
 
         {tfoot ? (
           <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-            <div
-              ref={footerScrollRef}
-              className="table-scroll-hide-bar overflow-x-auto overflow-y-hidden overscroll-x-contain"
-            >
-              <table ref={footerTableRef} className={mergedTableClassName}>
+            <div ref={footerClipRef} className="overflow-hidden">
+              <table ref={footerTableRef} className={cn(mergedTableClassName, "will-change-transform")}>
                 {tfoot}
               </table>
             </div>

@@ -18,11 +18,18 @@ import {
 } from "@/components/ui/search-filter-layout";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
+import {
+  ColumnVisibilitySelect,
+  usePersistedVisibleColumnKeys,
+} from "@/components/ui/column-visibility-select";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { METRIC_COLUMN_HINTS, metricColumnVisibilityLabel } from "@/lib/metric-column-hints";
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { downloadCsv } from "@/lib/csv-export";
+import { filterRowsByQuery } from "@/lib/table-filter";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
   defaultPublisherLeadDetailsFilters,
@@ -35,8 +42,14 @@ import {
   type PublisherLeadFieldColumn,
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusMultiSelect } from "@/components/ui/status-multi-select";
 import { getStatusBadgePresentation } from "@/lib/status-badge";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
+import {
+  fetchPublisherChannelSourceOptions,
+  serializeCommaSeparatedFilter,
+  type PublisherFilterOption,
+} from "@/lib/publisher-channel-source-filters";
 import { cn } from "@/lib/utils";
 
 type FilterOption = {
@@ -116,10 +129,46 @@ export function PublisherLeadDetailsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const [channelOptions, setChannelOptions] = useState<PublisherFilterOption[]>([]);
+  const [sourceOptions, setSourceOptions] = useState<PublisherFilterOption[]>([]);
+  const [isLoadingChannelSourceOptions, setIsLoadingChannelSourceOptions] = useState(false);
+  const [pageFilter, setPageFilter] = useState("");
 
   const updateDraft = (patch: Partial<PublisherLeadDetailsFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
   };
+
+  useEffect(() => {
+    const publisherId = draftFilters.publisherId.trim();
+    if (!publisherId) {
+      setChannelOptions([]);
+      setSourceOptions([]);
+      setIsLoadingChannelSourceOptions(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingChannelSourceOptions(true);
+
+    void fetchPublisherChannelSourceOptions(publisherId)
+      .then((options) => {
+        if (cancelled) return;
+        setChannelOptions(options.channels);
+        setSourceOptions(options.sources);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setChannelOptions([]);
+        setSourceOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingChannelSourceOptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draftFilters.publisherId]);
 
   const buildQuery = useCallback(
     (filters: PublisherLeadDetailsFilters, nextPage: number, nextPageSize: number) => {
@@ -134,6 +183,10 @@ export function PublisherLeadDetailsPage() {
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.status !== "All") params.set("status", filters.status);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
+      const channelFilter = serializeCommaSeparatedFilter(filters.publisherChannel);
+      if (channelFilter) params.set("publisherChannel", channelFilter);
+      const sourceFilter = serializeCommaSeparatedFilter(filters.publisherSource);
+      if (sourceFilter) params.set("publisherSource", sourceFilter);
       if (filters.leadScope) params.set("leadScope", filters.leadScope);
       if (filters.redirectStatus !== "All") params.set("redirectStatus", filters.redirectStatus);
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
@@ -193,6 +246,10 @@ export function PublisherLeadDetailsPage() {
   }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
+    setPageFilter("");
+  }, [page, pageSize, appliedFilters, searchNonce]);
+
+  useEffect(() => {
     if (!exportOpen) {
       return undefined;
     }
@@ -212,6 +269,7 @@ export function PublisherLeadDetailsPage() {
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
     setPage(1);
+    setPageFilter("");
     setSearchNonce((current) => current + 1);
   };
 
@@ -222,39 +280,44 @@ export function PublisherLeadDetailsPage() {
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
     setPage(1);
+    setPageFilter("");
   };
 
   const buildExportMatrix = (
     exportRows: PublisherLeadDetailsRow[],
-    exportFieldColumns: PublisherLeadFieldColumn[]
+    exportFieldColumns: PublisherLeadFieldColumn[],
+    selectedKeys: string[]
   ) => {
-    const headers = [
-      "ID",
-      "Date",
-      "Status",
-      "Publisher",
-      "Redirect",
-      "Pub",
-      "ADM",
-      "TTL",
-      "Product",
-      ...exportFieldColumns.map((field) => field.label),
+    const exportColumns: Array<{
+      key: string;
+      label: string;
+      value: (row: PublisherLeadDetailsRow) => string;
+    }> = [
+      { key: "displayCode", label: "ID", value: (row) => row.displayCode },
+      { key: "postedAt", label: "Date", value: (row) => formatPublisherLeadTime(row.postedAt) },
+      { key: "statusLabel", label: "Status", value: (row) => row.statusLabel },
+      { key: "publisherLabel", label: "Publisher", value: (row) => row.publisherLabel },
+      { key: "channelLabel", label: "Publisher Channel", value: (row) => row.channelLabel },
+      { key: "publisherSource", label: "Publisher Source", value: (row) => row.publisherSource },
+      { key: "redirectLabel", label: "Redirect", value: (row) => row.redirectLabel },
+      { key: "publisherPayout", label: "Pub", value: (row) => row.publisherPayout },
+      { key: "adm", label: "ADM", value: (row) => row.adm },
+      { key: "ttl", label: "TTL", value: (row) => row.ttl },
+      { key: "productLabel", label: "Product", value: (row) => row.productLabel },
+      ...exportFieldColumns.map((field) => ({
+        key: `field:${field.fieldName}`,
+        label: field.label,
+        value: (row: PublisherLeadDetailsRow) => formatPayloadFieldValue(row.rawPayload[field.fieldName]),
+      })),
     ];
 
-    const matrix = exportRows.map((row) => [
-      row.displayCode,
-      formatPublisherLeadTime(row.postedAt),
-      row.statusLabel,
-      row.publisherLabel,
-      row.redirectLabel,
-      row.publisherPayout,
-      row.adm,
-      row.ttl,
-      row.productLabel,
-      ...exportFieldColumns.map((field) => formatPayloadFieldValue(row.rawPayload[field.fieldName])),
-    ]);
+    const selectedSet = new Set(selectedKeys);
+    const visibleExportColumns = exportColumns.filter((column) => selectedSet.has(column.key));
 
-    return { headers, matrix };
+    return {
+      headers: visibleExportColumns.map((column) => column.label),
+      matrix: exportRows.map((row) => visibleExportColumns.map((column) => column.value(row))),
+    };
   };
 
   const fetchAllRows = async () => {
@@ -285,15 +348,33 @@ export function PublisherLeadDetailsPage() {
     setIsExporting(true);
     setExportOpen(false);
 
+    const selectedKeys =
+      visibleColumnKeys ??
+      [
+        "displayCode",
+        "postedAt",
+        "statusLabel",
+        "publisherLabel",
+        "channelLabel",
+        "publisherSource",
+        "redirectLabel",
+        "publisherPayout",
+        "adm",
+        "ttl",
+        "productLabel",
+        ...fieldColumns.map((field) => `field:${field.fieldName}`),
+      ];
+
     try {
       if (mode === "all-pages") {
         const result = await fetchAllRows();
-        const { headers, matrix } = buildExportMatrix(result.items, result.fieldColumns);
+        const { headers, matrix } = buildExportMatrix(result.items, result.fieldColumns, selectedKeys);
         downloadCsv("publisher-lead-details-all.csv", headers, matrix);
         return;
       }
 
-      const { headers, matrix } = buildExportMatrix(rows, fieldColumns);
+      const pageRows = filterRowsByQuery(rows, columns, pageFilter);
+      const { headers, matrix } = buildExportMatrix(pageRows, fieldColumns, selectedKeys);
       downloadCsv("publisher-lead-details-current-page.csv", headers, matrix);
     } catch {
       // Ignore export errors for now.
@@ -312,7 +393,7 @@ export function PublisherLeadDetailsPage() {
     setSelectedIds(checked ? rows.map((row) => row.id) : []);
   };
 
-  const columns: Column<PublisherLeadDetailsRow>[] = useMemo(() => {
+  const allColumns: Column<PublisherLeadDetailsRow>[] = useMemo(() => {
     const systemColumns: Column<PublisherLeadDetailsRow>[] = [
       {
         key: "displayCode",
@@ -352,6 +433,22 @@ export function PublisherLeadDetailsPage() {
         render: (row) => <span className="whitespace-nowrap">{row.publisherLabel}</span>,
       },
       {
+        key: "channelLabel",
+        label: "Publisher Channel",
+        sortValue: (row) => row.channelLabel,
+        render: (row) => <span className="whitespace-nowrap">{row.channelLabel}</span>,
+      },
+      {
+        key: "publisherSource",
+        label: "Publisher Source",
+        sortValue: (row) => row.publisherSource,
+        render: (row) => (
+          <span className="whitespace-nowrap">
+            {row.publisherSource && row.publisherSource !== "—" ? row.publisherSource : "—"}
+          </span>
+        ),
+      },
+      {
         key: "redirectLabel",
         label: "Redirect",
         sortValue: (row) => row.redirectLabel,
@@ -365,7 +462,14 @@ export function PublisherLeadDetailsPage() {
       },
       {
         key: "publisherPayout",
-        label: "Pub",
+        label: (
+          <InfoPopover
+            title={METRIC_COLUMN_HINTS.pub.title}
+            description={METRIC_COLUMN_HINTS.pub.description}
+          >
+            Pub
+          </InfoPopover>
+        ),
         sortValue: (row) => row.publisherPayout,
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
@@ -375,7 +479,14 @@ export function PublisherLeadDetailsPage() {
       },
       {
         key: "adm",
-        label: "ADM",
+        label: (
+          <InfoPopover
+            title={METRIC_COLUMN_HINTS.adm.title}
+            description={METRIC_COLUMN_HINTS.adm.description}
+          >
+            ADM
+          </InfoPopover>
+        ),
         sortValue: (row) => row.adm,
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">{row.adm}</span>
@@ -408,6 +519,30 @@ export function PublisherLeadDetailsPage() {
 
     return [...systemColumns, ...dynamicFieldColumns];
   }, [fieldColumns]);
+
+  const columnOptions = useMemo(
+    () =>
+      allColumns.map((column) => ({
+        key: String(column.key),
+        label:
+          typeof column.label === "string"
+            ? column.label
+            : metricColumnVisibilityLabel(String(column.key), String(column.key)),
+      })),
+    [allColumns]
+  );
+
+  const allColumnKeys = useMemo(() => columnOptions.map((option) => option.key), [columnOptions]);
+
+  const { visibleColumnKeys, setVisibleColumnKeys, effectiveVisibleKeys } =
+    usePersistedVisibleColumnKeys("publisher-lead-details-v2", allColumnKeys, {
+      ready: !isInitialLoad && !isRefreshing,
+    });
+
+  const columns = useMemo(
+    () => allColumns.filter((column) => effectiveVisibleKeys.includes(String(column.key))),
+    [allColumns, effectiveVisibleKeys]
+  );
 
   const showingFrom = rows.length > 0 ? (page - 1) * pageSize + 1 : 0;
   const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
@@ -466,12 +601,54 @@ export function PublisherLeadDetailsPage() {
                   id="publisher"
                   label="Publisher"
                   value={draftFilters.publisherId}
-                  onChange={(value) => updateDraft({ publisherId: value })}
+                  onChange={(value) =>
+                    updateDraft({
+                      publisherId: value,
+                      publisherChannel: [],
+                      publisherSource: [],
+                    })
+                  }
                   options={[
                     { value: "", label: "All" },
                     ...publishers.map((publisher) => ({ value: publisher.id, label: publisher.label })),
                   ]}
                 />
+
+                <SearchFilterField>
+                  <FieldLabel htmlFor="publisher-channel" label="Publisher Channel" />
+                  <StatusMultiSelect
+                    id="publisher-channel"
+                    options={channelOptions}
+                    selected={draftFilters.publisherChannel}
+                    onChange={(selected) => updateDraft({ publisherChannel: selected })}
+                    placeholder={
+                      !draftFilters.publisherId
+                        ? "Select publisher first"
+                        : isLoadingChannelSourceOptions
+                          ? "Loading..."
+                          : "All"
+                    }
+                    disabled={!draftFilters.publisherId || isLoadingChannelSourceOptions}
+                  />
+                </SearchFilterField>
+
+                <SearchFilterField>
+                  <FieldLabel htmlFor="publisher-source" label="Publisher Source" />
+                  <StatusMultiSelect
+                    id="publisher-source"
+                    options={sourceOptions}
+                    selected={draftFilters.publisherSource}
+                    onChange={(selected) => updateDraft({ publisherSource: selected })}
+                    placeholder={
+                      !draftFilters.publisherId
+                        ? "Select publisher first"
+                        : isLoadingChannelSourceOptions
+                          ? "Loading..."
+                          : "All"
+                    }
+                    disabled={!draftFilters.publisherId || isLoadingChannelSourceOptions}
+                  />
+                </SearchFilterField>
 
                 <SearchFilterSelect
                   id="redirect-status"
@@ -496,40 +673,47 @@ export function PublisherLeadDetailsPage() {
                 showingFrom={showingFrom}
                 showingTo={showingTo}
                 totalItems={totalItems}
-                tableFilter={draftFilters.tableSearch}
-                onTableFilterChange={(value) => updateDraft({ tableSearch: value })}
-                onTableFilterSubmit={handleSearch}
-                filterPlaceholder="Search table..."
+                tableFilter={pageFilter}
+                onTableFilterChange={setPageFilter}
+                filterPlaceholder="Filter current page..."
                 selectedCount={selectedIds.length}
                 actions={
-                  <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
-                    <button
-                      type="button"
-                      onClick={() => setExportOpen((current) => !current)}
-                      disabled={isExporting}
-                      className={cn(toolbarPrimaryButtonClassName, "w-full sm:w-auto")}
-                    >
-                      <Download size={15} />
-                      {isExporting ? "Exporting..." : "Export"}
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                    <ToolbarDropdownMenu open={exportOpen}>
+                  <>
+                    <ColumnVisibilitySelect
+                      id="publisher-lead-columns"
+                      options={columnOptions}
+                      selectedKeys={effectiveVisibleKeys}
+                      onChange={setVisibleColumnKeys}
+                    />
+                    <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
                       <button
                         type="button"
-                        className={toolbarDropdownItemClassName}
-                        onClick={() => void handleExport("current-page")}
+                        onClick={() => setExportOpen((current) => !current)}
+                        disabled={isExporting || effectiveVisibleKeys.length === 0}
+                        className={cn(toolbarPrimaryButtonClassName, "w-full sm:w-auto")}
                       >
-                        Current Page to CSV
+                        <Download size={15} />
+                        {isExporting ? "Exporting..." : "Export"}
+                        <ChevronDown className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        className={toolbarDropdownItemClassName}
-                        onClick={() => void handleExport("all-pages")}
-                      >
-                        All Page to CSV
-                      </button>
-                    </ToolbarDropdownMenu>
-                  </div>
+                      <ToolbarDropdownMenu open={exportOpen}>
+                        <button
+                          type="button"
+                          className={toolbarDropdownItemClassName}
+                          onClick={() => void handleExport("current-page")}
+                        >
+                          Current Page to CSV
+                        </button>
+                        <button
+                          type="button"
+                          className={toolbarDropdownItemClassName}
+                          onClick={() => void handleExport("all-pages")}
+                        >
+                          All Page to CSV
+                        </button>
+                      </ToolbarDropdownMenu>
+                    </div>
+                  </>
                 }
               />
 
@@ -541,6 +725,7 @@ export function PublisherLeadDetailsPage() {
                 <DataTable
                   columns={columns}
                   rows={rows}
+                  filterQuery={pageFilter}
                   emptyMessage="No leads found for the selected filters."
                   selectedRowIds={selectedIds}
                   onToggleRow={toggleRowSelection}
@@ -554,6 +739,10 @@ export function PublisherLeadDetailsPage() {
                     totalItems={totalItems}
                     pageSize={pageSize}
                     pageSizeOptions={[...REPORT_PAGE_SIZE_OPTIONS]}
+                    onPageSizeChange={(size) => {
+                      setPageSize(size);
+                      setPage(1);
+                    }}
                     onPageChange={setPage}
                   />
                 </div>

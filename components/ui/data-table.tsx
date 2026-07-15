@@ -5,6 +5,7 @@ import {
   ReactNode,
   startTransition,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -14,6 +15,7 @@ import {
 import { SortableColumnHeader } from "@/components/ui/sortable-column-header";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { reorderIds } from "@/lib/reorder-fields";
+import { filterRowsByQuery } from "@/lib/table-filter";
 import { sortTableRows, type SortDirection, type TableSortState } from "@/lib/table-sort";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +75,8 @@ type DataTableProps<T> = {
   defaultSort?: TableSortState;
   /** Stick thead under the app chrome while the window scrolls. */
   stickyHeader?: boolean;
+  /** Client-side filter against the currently loaded rows (current page). */
+  filterQuery?: string;
 };
 
 function resolveRowDropTarget(tbody: HTMLElement, clientY: number) {
@@ -125,17 +129,24 @@ export function DataTable<T extends { id: string }>({
   rowReorder,
   defaultSort,
   stickyHeader = false,
+  filterQuery = "",
 }: DataTableProps<T>) {
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dragOverRowIdRef = useRef<string | null>(null);
   const dropTargetRef = useRef<string | null>(null);
+  const stableBodyHeightRef = useRef(0);
 
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const [pointerPosition, setPointerPosition] = useState<{ x: number; y: number } | null>(null);
   const [dropIndicatorTop, setDropIndicatorTop] = useState<number | null>(null);
   const [sortState, setSortState] = useState<TableSortState | null>(defaultSort ?? null);
+  const [bodyMinHeight, setBodyMinHeight] = useState(0);
+
+  const deferredFilterQuery = useDeferredValue(filterQuery);
+  const isFilterPending = deferredFilterQuery !== filterQuery;
+  const isFiltering = Boolean(filterQuery.trim());
 
   const isSelectable = Boolean(onToggleRow);
   const isReorderable = Boolean(rowReorder) && !rowReorder?.disabled;
@@ -147,16 +158,32 @@ export function DataTable<T extends { id: string }>({
     [draggedRowId, rows]
   );
   const selectedIds = new Set(selectedRowIds);
-  const allRowsSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
 
   const displayRows = useMemo(() => {
-    if (!isSortable || !sortState) return rows;
+    const filtered = filterRowsByQuery(rows, columns, deferredFilterQuery);
+
+    if (!isSortable || !sortState) return filtered;
 
     const column = columns.find((item) => String(item.key) === sortState.key);
-    if (!column || !isColumnSortable(column)) return rows;
+    if (!column || !isColumnSortable(column)) return filtered;
 
-    return sortTableRows(rows, (row) => getColumnSortValue(row, column), sortState.direction);
-  }, [columns, isSortable, rows, sortState]);
+    return sortTableRows(filtered, (row) => getColumnSortValue(row, column), sortState.direction);
+  }, [columns, deferredFilterQuery, isSortable, rows, sortState]);
+
+  useLayoutEffect(() => {
+    const body = scrollContainerRef.current;
+    if (!body) return;
+
+    if (!isFiltering) {
+      stableBodyHeightRef.current = body.offsetHeight;
+      setBodyMinHeight(0);
+      return;
+    }
+
+    setBodyMinHeight(stableBodyHeightRef.current);
+  }, [isFiltering, rows]);
+
+  const allRowsSelected = displayRows.length > 0 && displayRows.every((row) => selectedIds.has(row.id));
 
   const handleSort = useCallback((columnKey: string) => {
     startTransition(() => {
@@ -288,6 +315,16 @@ export function DataTable<T extends { id: string }>({
     setDropIndicatorTop(rowRect.top - containerRect.top + container.scrollTop - 2);
   }, [dragOverRowId, draggedRowId, displayRows, isDragging]);
 
+  const columnLayoutKey = useMemo(
+    () =>
+      rows
+        .map((row) => row.id)
+        .slice()
+        .sort()
+        .join("|"),
+    [rows]
+  );
+
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
@@ -338,75 +375,98 @@ export function DataTable<T extends { id: string }>({
     </tr>
   );
 
-  const bodyRows = displayRows.map((row) => {
-    const isRowDragging = draggedRowId === row.id;
-    const isDropTarget = dragOverRowId === row.id && draggedRowId !== row.id;
-    const isEvenRow = hasEvenStripe(row.id);
-
-    return (
-      <tr
-        key={row.id}
-        data-reorder-row-id={isReorderable ? row.id : undefined}
-        className={cn(
-          isEvenRow ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70",
-          !isDragging && "hover:bg-blue-50/50 dark:hover:bg-blue-400/10",
-          isRowDragging && "opacity-40",
-          isDropTarget && "bg-blue-50 shadow-[inset_0_0_0_2px_rgb(147,197,253)] dark:bg-blue-500/10 dark:shadow-[inset_0_0_0_2px_rgb(96,165,250)]"
-        )}
-      >
-        {isReorderable ? (
-          <td className="border-b border-slate-100 px-2 py-2 align-top sm:py-3 dark:border-slate-700/80">
-            <div
-              data-drag-handle
-              data-dragging={isRowDragging ? "true" : undefined}
-              title="Drag to move"
-              style={{ touchAction: "none" }}
-              onPointerDown={(event) => startPointerDrag(row.id, event)}
-              aria-label={`Drag to reorder ${row.id}`}
-              className={cn(
-                "flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full border bg-white text-slate-500 shadow-sm transition-colors",
-                isRowDragging
-                  ? "border-blue-400 bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/30"
-                  : "border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-              )}
-            >
-              <GripVertical size={14} strokeWidth={2.25} className="pointer-events-none" />
-            </div>
-          </td>
-        ) : null}
-        {isSelectable ? (
-          <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
-            <input
-              type="checkbox"
-              checked={selectedIds.has(row.id)}
-              onChange={() => onToggleRow?.(row.id)}
-              aria-label={`Select row ${row.id}`}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
-            />
-          </td>
-        ) : null}
-        {columns.map((column) => (
-          <td
-            key={String(column.key)}
-            className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
-          >
-            {renderCellContent(row, column)}
-          </td>
-        ))}
+  const bodyRows =
+    displayRows.length === 0 ? (
+      <tr>
+        <td
+          colSpan={columns.length + (isSelectable ? 1 : 0) + (isReorderable ? 1 : 0)}
+          className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700/80 dark:text-slate-400"
+        >
+          {deferredFilterQuery.trim() ? "No matching rows on this page." : emptyMessage}
+        </td>
       </tr>
+    ) : (
+      displayRows.map((row) => {
+        const isRowDragging = draggedRowId === row.id;
+        const isDropTarget = dragOverRowId === row.id && draggedRowId !== row.id;
+        const isEvenRow = hasEvenStripe(row.id);
+
+        return (
+          <tr
+            key={row.id}
+            data-reorder-row-id={isReorderable ? row.id : undefined}
+            className={cn(
+              isEvenRow ? "bg-white dark:bg-slate-900" : "bg-slate-50/50 dark:bg-slate-800/70",
+              !isDragging && "hover:bg-blue-50/50 dark:hover:bg-blue-400/10",
+              isRowDragging && "opacity-40",
+              isDropTarget &&
+                "bg-blue-50 shadow-[inset_0_0_0_2px_rgb(147,197,253)] dark:bg-blue-500/10 dark:shadow-[inset_0_0_0_2px_rgb(96,165,250)]"
+            )}
+          >
+            {isReorderable ? (
+              <td className="border-b border-slate-100 px-2 py-2 align-top sm:py-3 dark:border-slate-700/80">
+                <div
+                  data-drag-handle
+                  data-dragging={isRowDragging ? "true" : undefined}
+                  title="Drag to move"
+                  style={{ touchAction: "none" }}
+                  onPointerDown={(event) => startPointerDrag(row.id, event)}
+                  aria-label={`Drag to reorder ${row.id}`}
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-full border bg-white text-slate-500 shadow-sm transition-colors",
+                    isRowDragging
+                      ? "border-blue-400 bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-400/30"
+                      : "border-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                  )}
+                >
+                  <GripVertical size={14} strokeWidth={2.25} className="pointer-events-none" />
+                </div>
+              </td>
+            ) : null}
+            {isSelectable ? (
+              <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(row.id)}
+                  onChange={() => onToggleRow?.(row.id)}
+                  aria-label={`Select row ${row.id}`}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+                />
+              </td>
+            ) : null}
+            {columns.map((column) => (
+              <td
+                key={String(column.key)}
+                className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
+              >
+                {renderCellContent(row, column)}
+              </td>
+            ))}
+          </tr>
+        );
+      })
     );
-  });
 
   const tableContent = (
-    <ScrollableTableShell
-      rowCount={displayRows.length}
-      stickyHeader={stickyHeader}
-      scrollContainerRef={scrollContainerRef}
-      overlay={isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
-      thead={headerRow}
+    <div
+      className={cn(
+        "transition-opacity duration-150 ease-out",
+        isFilterPending && "opacity-70"
+      )}
     >
-      <tbody ref={tbodyRef}>{bodyRows}</tbody>
-    </ScrollableTableShell>
+      <ScrollableTableShell
+        rowCount={rows.length}
+        stickyHeader={stickyHeader}
+        scrollContainerRef={scrollContainerRef}
+        freezeColumnWidths
+        columnLayoutKey={columnLayoutKey}
+        bodyMinHeight={isFiltering ? bodyMinHeight : undefined}
+        overlay={isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
+        thead={headerRow}
+      >
+        <tbody ref={tbodyRef}>{bodyRows}</tbody>
+      </ScrollableTableShell>
+    </div>
   );
 
   return (

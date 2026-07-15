@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ChevronDown, Download } from "lucide-react";
 import { SearchButton } from "@/components/ui/action-buttons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
@@ -21,8 +29,13 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { PageSection } from "@/components/ui/state";
 import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { SortableColumnHeader } from "@/components/ui/sortable-column-header";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { downloadCsv } from "@/lib/csv-export";
+import { METRIC_COLUMN_HINTS } from "@/lib/metric-column-hints";
+import { filterRecordsByQuery } from "@/lib/table-filter";
+import { sortTableRows, type SortDirection, type TableSortState } from "@/lib/table-sort";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
@@ -75,7 +88,10 @@ function buildDefaultFilters(): PublisherPerformanceFilters {
 type SummaryColumn = {
   key: string;
   label: string;
+  hint?: (typeof METRIC_COLUMN_HINTS)[keyof typeof METRIC_COLUMN_HINTS];
   align: "left" | "right";
+  sortable?: boolean;
+  sortValue?: (row: PublisherPerformanceRow) => string | number | null | undefined;
   valueColorClass: string;
   linkMetric?: PublisherLeadScope;
   linkRedirect?: boolean;
@@ -97,6 +113,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "post",
     label: "Post",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.post,
     valueColorClass: PERFORMANCE_METRIC_COLORS.post,
     linkMetric: "post",
     render: (row) => formatPerformanceCount(row.post),
@@ -107,6 +125,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "lead",
     label: "Lead",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.lead,
     valueColorClass: PERFORMANCE_METRIC_COLORS.lead,
     linkMetric: "lead",
     render: (row) => formatPerformanceCount(row.lead),
@@ -117,6 +137,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "sold",
     label: "Sold",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.sold,
     valueColorClass: PERFORMANCE_METRIC_COLORS.sold,
     linkMetric: "sold",
     render: (row) => formatPerformanceCount(row.sold),
@@ -127,6 +149,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "reject",
     label: "Reject",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.reject,
     valueColorClass: PERFORMANCE_METRIC_COLORS.reject,
     linkMetric: "reject",
     render: (row) => formatPerformanceCount(row.reject),
@@ -137,6 +161,7 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "redirect",
     label: "Redirect",
     align: "right",
+    sortable: false,
     valueColorClass: PERFORMANCE_METRIC_COLORS.redirect,
     linkRedirect: true,
     render: (row) => (
@@ -156,7 +181,10 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "epl",
     label: "EPL",
+    hint: METRIC_COLUMN_HINTS.epl,
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.epl,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.epl),
     renderTotal: (totals) => formatPerformanceMoney(totals.epl),
@@ -165,7 +193,10 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "alp",
     label: "ALP",
+    hint: METRIC_COLUMN_HINTS.alp,
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.alp,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.alp),
     renderTotal: (totals) => formatPerformanceMoney(totals.alp),
@@ -174,7 +205,10 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "pub",
     label: "Pub",
+    hint: METRIC_COLUMN_HINTS.pub,
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.pub,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.pub),
     renderTotal: (totals) => formatPerformanceMoney(totals.pub),
@@ -183,7 +217,10 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "adm",
     label: "ADM",
+    hint: METRIC_COLUMN_HINTS.adm,
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.adm,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => (
       <span className={row.adm < 0 ? PERFORMANCE_METRIC_COLORS.reject : undefined}>
@@ -201,6 +238,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "ttl",
     label: "TTL",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.ttl,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformanceMoney(row.ttl),
     renderTotal: (totals) => formatPerformanceMoney(totals.ttl),
@@ -210,6 +249,8 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     key: "revShare",
     label: "Rev-Share",
     align: "right",
+    sortable: true,
+    sortValue: (row) => row.revShare,
     valueColorClass: "text-slate-700 dark:text-slate-200",
     render: (row) => formatPerformancePercent(row.revShare),
     renderTotal: (totals) => formatPerformancePercent(totals.revShare),
@@ -234,6 +275,7 @@ export function PublisherPerformanceSummaryPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const [pageFilter, setPageFilter] = useState("");
 
   const updateDraft = (patch: Partial<PublisherPerformanceFilters>) => {
     setDraftFilters((current) => ({ ...current, ...patch }));
@@ -296,6 +338,10 @@ export function PublisherPerformanceSummaryPage() {
   }, [appliedFilters, page, pageSize, loadRows, searchNonce]);
 
   useEffect(() => {
+    setPageFilter("");
+  }, [page, pageSize, appliedFilters, searchNonce]);
+
+  useEffect(() => {
     if (!exportOpen) {
       return undefined;
     }
@@ -313,6 +359,7 @@ export function PublisherPerformanceSummaryPage() {
   const handleSearch = () => {
     setAppliedFilters({ ...draftFilters });
     setPage(1);
+    setPageFilter("");
     setSearchNonce((current) => current + 1);
   };
 
@@ -321,6 +368,7 @@ export function PublisherPerformanceSummaryPage() {
     setDraftFilters(defaults);
     setAppliedFilters(defaults);
     setPage(1);
+    setPageFilter("");
   };
 
   const fetchAllRows = useCallback(async () => {
@@ -360,7 +408,7 @@ export function PublisherPerformanceSummaryPage() {
         return;
       }
 
-      const { headers, matrix } = buildExportMatrix(rows, totals);
+      const { headers, matrix } = buildExportMatrix(filteredRows, totals);
       downloadCsv("publisher-performance-summary-current-page.csv", headers, matrix);
     } catch {
       // Ignore export errors for now.
@@ -368,6 +416,18 @@ export function PublisherPerformanceSummaryPage() {
       setIsExporting(false);
     }
   };
+
+  const deferredPageFilter = useDeferredValue(pageFilter);
+  const isFilterPending = deferredPageFilter !== pageFilter;
+  const filteredRows = useMemo(
+    () =>
+      filterRecordsByQuery(rows, deferredPageFilter, [
+        "publisherLabel",
+        "publisherTag",
+        (row) => row.id,
+      ]),
+    [deferredPageFilter, rows]
+  );
 
   const showingFrom = rows.length > 0 ? (page - 1) * pageSize + 1 : 0;
   const showingTo = rows.length > 0 ? Math.min(page * pageSize, totalItems) : 0;
@@ -439,10 +499,9 @@ export function PublisherPerformanceSummaryPage() {
             showingFrom={showingFrom}
             showingTo={showingTo}
             totalItems={totalItems}
-            tableFilter={draftFilters.tableSearch}
-            onTableFilterChange={(value) => updateDraft({ tableSearch: value })}
-            onTableFilterSubmit={handleSearch}
-            filterPlaceholder="Search publisher..."
+            tableFilter={pageFilter}
+            onTableFilterChange={setPageFilter}
+            filterPlaceholder="Filter current page..."
             actions={
               <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
                 <button
@@ -480,7 +539,19 @@ export function PublisherPerformanceSummaryPage() {
             isRefreshing={isRefreshing}
             loadingMessage="Loading performance summary..."
           >
-            <PerformanceSummaryTable rows={rows} totals={totals} appliedFilters={appliedFilters} />
+            <PerformanceSummaryTable
+              rows={filteredRows}
+              sourceRowCount={rows.length}
+              columnLayoutKey={rows.map((row) => row.id).join("|")}
+              totals={totals}
+              appliedFilters={appliedFilters}
+              isFilterPending={isFilterPending}
+              emptyMessage={
+                pageFilter.trim()
+                  ? "No matching rows on this page."
+                  : "No publishers found for the selected filters."
+              }
+            />
 
             <div className="mt-4">
               <PaginationControls
@@ -488,6 +559,11 @@ export function PublisherPerformanceSummaryPage() {
                 totalPages={totalPages}
                 totalItems={totalItems}
                 pageSize={pageSize}
+                pageSizeOptions={[...REPORT_PAGE_SIZE_OPTIONS]}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
                 onPageChange={setPage}
               />
             </div>
@@ -548,124 +624,199 @@ function buildRowLeadDetailsHref(
 
 function PerformanceSummaryTable({
   rows,
+  sourceRowCount,
+  columnLayoutKey = "",
   totals,
   appliedFilters,
+  isFilterPending = false,
+  emptyMessage = "No publishers found for the selected filters.",
 }: {
   rows: PublisherPerformanceRow[];
+  sourceRowCount: number;
+  columnLayoutKey?: string;
   totals: PublisherPerformanceMetrics;
   appliedFilters: PublisherPerformanceFilters;
+  isFilterPending?: boolean;
+  emptyMessage?: string;
 }) {
-  if (rows.length === 0) {
+  const [sortState, setSortState] = useState<TableSortState | null>(null);
+
+  const sortedRows = useMemo(() => {
+    if (!sortState) return rows;
+
+    if (sortState.key === "publisher") {
+      return sortTableRows(rows, (row) => row.publisherLabel, sortState.direction);
+    }
+
+    const column = SUMMARY_COLUMNS.find((item) => item.key === sortState.key);
+    if (!column?.sortable || !column.sortValue) return rows;
+
+    return sortTableRows(rows, column.sortValue, sortState.direction);
+  }, [rows, sortState]);
+
+  const handleSort = (columnKey: string) => {
+    setSortState((current) => {
+      if (current?.key === columnKey) {
+        const nextDirection: SortDirection = current.direction === "asc" ? "desc" : "asc";
+        return { key: columnKey, direction: nextDirection };
+      }
+      return { key: columnKey, direction: "asc" };
+    });
+  };
+
+  if (sourceRowCount === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-        No publishers found for the selected filters.
+        {emptyMessage}
       </div>
     );
   }
 
   const headerCellClassName = tableHeaderCellClassName;
   const bodyCellClassName = tableBodyCellClassName;
+  const columnCount = SUMMARY_COLUMNS.length + 2;
+
+  const renderHeaderLabel = (column: SummaryColumn) =>
+    column.hint ? (
+      <InfoPopover title={column.hint.title} description={column.hint.description}>
+        {column.label}
+      </InfoPopover>
+    ) : (
+      column.label
+    );
 
   return (
-    <ScrollableTableShell
-      rowCount={rows.length}
-      bodyClassName="max-h-[min(420px,55vh)] overflow-y-auto"
-      thead={
-        <tr>
-          <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>Publisher</th>
-          <th className={cn(headerCellClassName, "text-left")}>Publisher Tags</th>
-          {SUMMARY_COLUMNS.map((column) => (
-            <th
-              key={column.key}
-              className={cn(
-                headerCellClassName,
-                "text-right",
-                column.key === "redirect"
-                  ? cn(redirectMetricColorClassName, metricLinkClassName)
-                  : column.key === "reject"
-                    ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
-                    : (column.linkMetric || column.linkRedirect) && metricLinkClassName
-              )}
-            >
-              {column.label}
+    <div className={cn("transition-opacity duration-150 ease-out", isFilterPending && "opacity-70")}>
+      <ScrollableTableShell
+        rowCount={sourceRowCount}
+        freezeColumnWidths
+        columnLayoutKey={columnLayoutKey}
+        bodyClassName="max-h-[min(420px,55vh)] overflow-y-auto"
+        thead={
+          <tr>
+            <th className={cn(headerCellClassName, "text-left", metricLinkClassName)}>
+              <SortableColumnHeader
+                label="Publisher"
+                active={sortState?.key === "publisher"}
+                direction={sortState?.key === "publisher" ? sortState.direction : undefined}
+                onClick={() => handleSort("publisher")}
+              />
             </th>
-          ))}
-        </tr>
-      }
-      tfoot={
-        <tfoot>
-          <tr className="font-semibold text-slate-800 dark:text-slate-100">
-            <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600 dark:bg-slate-800">
-              Totals
-            </td>
-            <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 sm:px-4 dark:border-slate-600 dark:bg-slate-800" />
+            <th className={cn(headerCellClassName, "text-left")}>Publisher Tags</th>
             {SUMMARY_COLUMNS.map((column) => (
-              <td
+              <th
                 key={column.key}
                 className={cn(
-                  "border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-right tabular-nums sm:px-4 dark:border-slate-600 dark:bg-slate-800",
-                  column.valueColorClass
+                  headerCellClassName,
+                  "text-right",
+                  column.key === "redirect"
+                    ? cn(redirectMetricColorClassName, metricLinkClassName)
+                    : column.key === "reject"
+                      ? cn(PERFORMANCE_METRIC_COLORS.reject, metricLinkClassName)
+                      : (column.linkMetric || column.linkRedirect) && metricLinkClassName
                 )}
               >
-                {column.renderTotal(totals)}
-              </td>
-            ))}
-          </tr>
-        </tfoot>
-      }
-    >
-      <tbody>
-        {rows.map((row) => (
-          <tr
-            key={row.id}
-            className="bg-white transition-colors hover:bg-blue-50/50 dark:bg-slate-900 dark:hover:bg-blue-400/10"
-          >
-            <td className={cn(bodyCellClassName, "whitespace-nowrap")}>
-              <Link
-                href={buildRowLeadDetailsHref(row, appliedFilters)}
-                className={publisherCellLinkClassName}
-              >
-                {row.publisherLabel}
-              </Link>
-            </td>
-            <td className={cn(bodyCellClassName, "text-slate-600 dark:text-slate-200")}>
-              <PublisherTagBadges tag={row.publisherTag} />
-            </td>
-            {SUMMARY_COLUMNS.map((column) => (
-              <td
-                key={column.key}
-                className={cn(bodyCellClassName, tableNumericCellClassName, column.valueColorClass)}
-              >
-                {column.linkMetric ? (
-                  <PerformanceMetricLink
-                    count={row[column.linkMetric]}
-                    colorClass={column.valueColorClass}
-                    href={buildRowLeadDetailsHref(row, appliedFilters, {
-                      leadScope: column.linkMetric,
-                    })}
-                  />
-                ) : column.linkRedirect ? (
-                  <PerformanceMetricLink
-                    count={row.redirect}
-                    colorClass={column.valueColorClass}
-                    href={buildRowLeadDetailsHref(row, appliedFilters, {
-                      redirectStatus: "Redirected",
-                    })}
-                    suffix={
-                      <span>
-                        {" "}
-                        ({formatPerformancePercent(row.redirectRate)})
-                      </span>
-                    }
+                {column.sortable ? (
+                  <SortableColumnHeader
+                    label={renderHeaderLabel(column)}
+                    align="right"
+                    active={sortState?.key === column.key}
+                    direction={sortState?.key === column.key ? sortState.direction : undefined}
+                    onClick={() => handleSort(column.key)}
                   />
                 ) : (
-                  column.render(row)
+                  renderHeaderLabel(column)
                 )}
-              </td>
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </ScrollableTableShell>
+        }
+        tfoot={
+          <tfoot>
+            <tr className="font-semibold text-slate-800 dark:text-slate-100">
+              <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-left sm:px-4 dark:border-slate-600 dark:bg-slate-800">
+                Totals
+              </td>
+              <td className="border-t border-slate-300 bg-slate-100 px-3 py-2.5 sm:px-4 dark:border-slate-600 dark:bg-slate-800" />
+              {SUMMARY_COLUMNS.map((column) => (
+                <td
+                  key={column.key}
+                  className={cn(
+                    "border-t border-slate-300 bg-slate-100 px-3 py-2.5 text-right tabular-nums sm:px-4 dark:border-slate-600 dark:bg-slate-800",
+                    column.valueColorClass
+                  )}
+                >
+                  {column.renderTotal(totals)}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        }
+      >
+        <tbody>
+          {sortedRows.length === 0 ? (
+            <tr>
+              <td
+                colSpan={columnCount}
+                className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700/80 dark:text-slate-400"
+              >
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            sortedRows.map((row) => (
+              <tr
+                key={row.id}
+                className="bg-white transition-colors hover:bg-blue-50/50 dark:bg-slate-900 dark:hover:bg-blue-400/10"
+              >
+                <td className={cn(bodyCellClassName, "whitespace-nowrap")}>
+                  <Link
+                    href={buildRowLeadDetailsHref(row, appliedFilters)}
+                    className={publisherCellLinkClassName}
+                  >
+                    {row.publisherLabel}
+                  </Link>
+                </td>
+                <td className={cn(bodyCellClassName, "text-slate-600 dark:text-slate-200")}>
+                  <PublisherTagBadges tag={row.publisherTag} />
+                </td>
+                {SUMMARY_COLUMNS.map((column) => (
+                  <td
+                    key={column.key}
+                    className={cn(bodyCellClassName, tableNumericCellClassName, column.valueColorClass)}
+                  >
+                    {column.linkMetric ? (
+                      <PerformanceMetricLink
+                        count={row[column.linkMetric]}
+                        colorClass={column.valueColorClass}
+                        href={buildRowLeadDetailsHref(row, appliedFilters, {
+                          leadScope: column.linkMetric,
+                        })}
+                      />
+                    ) : column.linkRedirect ? (
+                      <PerformanceMetricLink
+                        count={row.redirect}
+                        colorClass={column.valueColorClass}
+                        href={buildRowLeadDetailsHref(row, appliedFilters, {
+                          redirectStatus: "Redirected",
+                        })}
+                        suffix={
+                          <span>
+                            {" "}
+                            ({formatPerformancePercent(row.redirectRate)})
+                          </span>
+                        }
+                      />
+                    ) : (
+                      column.render(row)
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </ScrollableTableShell>
+    </div>
   );
 }

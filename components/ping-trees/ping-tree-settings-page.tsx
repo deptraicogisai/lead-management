@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   Filter,
   Search,
   Settings2,
@@ -115,16 +116,21 @@ function CampaignNameLabel({
   variant: "active" | "inactive";
 }) {
   return (
-    <p
+    <a
+      href={`/campaigns/${encodeURIComponent(card.id)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open campaign in new tab"
       className={cn(
-        "min-w-0 leading-snug text-blue-700 dark:text-blue-300",
-        variant === "active"
-          ? "text-sm font-medium"
-          : "truncate text-[13px] font-normal sm:text-sm"
+        "inline-flex min-w-0 max-w-full items-center gap-1 leading-snug text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200",
+        variant === "active" ? "text-sm font-medium" : "text-[13px] font-normal sm:text-sm"
       )}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      {formatCampaignLabel(card)}
-    </p>
+      <span className={cn("min-w-0", variant === "inactive" && "truncate")}>{formatCampaignLabel(card)}</span>
+      <ExternalLink size={13} strokeWidth={2.25} className="shrink-0 opacity-70" aria-hidden />
+    </a>
   );
 }
 

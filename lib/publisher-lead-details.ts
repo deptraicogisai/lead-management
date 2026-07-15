@@ -39,6 +39,7 @@ export type PublisherLeadDetailsRow = {
   agn: string;
   productLabel: string;
   channelLabel: string;
+  publisherSource: string;
   pingTreeLabel: string;
   pingTreeAllocations: PublisherLeadPingTreeAllocation[];
   userAgent: string;
@@ -97,8 +98,8 @@ export type PublisherLeadDetailsFilters = {
   method: string;
   status: string;
   publisherId: string;
-  publisherChannel: string;
-  publisherSource: string;
+  publisherChannel: string[];
+  publisherSource: string[];
   publisherTags: string;
   redirectStatus: string;
   leadScope: PublisherLeadScope | "";
@@ -115,8 +116,8 @@ export const defaultPublisherLeadDetailsFilters: PublisherLeadDetailsFilters = {
   method: "All",
   status: "All",
   publisherId: "",
-  publisherChannel: "",
-  publisherSource: "",
+  publisherChannel: [],
+  publisherSource: [],
   publisherTags: "",
   redirectStatus: "All",
   leadScope: "",
@@ -255,7 +256,58 @@ function readPayloadString(payload: Record<string, unknown>, keys: string[]) {
     if (typeof value === "number") return String(value);
   }
 
+  for (const [payloadKey, value] of Object.entries(payload)) {
+    const normalized = payloadKey.trim().toLowerCase().replace(/[\s_-]/g, "");
+    const matched = keys.some((key) => key.trim().toLowerCase().replace(/[\s_-]/g, "") === normalized);
+    if (!matched) continue;
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
   return "";
+}
+
+/** Shown as Publisher Channel in lead detail lists. */
+export function resolvePublisherChannelLabel(payload: Record<string, unknown> | null | undefined) {
+  if (!payload) return "[2] Organic";
+  const channelName =
+    readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
+  const channelId = readPayloadString(payload, ["channel_id", "channelId"]) || "2";
+  return `[${channelId}] ${channelName}`;
+}
+
+/** Posted lead `source` is Publisher Source — only resolve once. */
+export function resolvePublisherSourceLabel(payload: Record<string, unknown> | null | undefined) {
+  if (!payload) return "—";
+  const sourceName =
+    readPayloadString(payload, ["source", "publisher_source", "publisherSource", "utm_source"]) || "";
+  const sourceId = readPayloadString(payload, [
+    "source_id",
+    "sourceId",
+    "publisher_source_id",
+    "publisherSourceId",
+  ]);
+  if (sourceName.startsWith("[")) return sourceName;
+  if (sourceId && sourceName) return `[${sourceId}] ${sourceName}`;
+  if (sourceName) return sourceName;
+  if (sourceId) return `[${sourceId}]`;
+  return "—";
+}
+
+const CHANNEL_SOURCE_FIELD_KEYS = new Set([
+  "source",
+  "publishersource",
+  "utmsource",
+  "sourceid",
+  "publishersourceid",
+  "channel",
+  "publisherchannel",
+  "channelid",
+]);
+
+export function isPublisherChannelOrSourceFieldName(fieldName: string) {
+  const normalized = fieldName.trim().toLowerCase().replace(/[\s_-]/g, "");
+  return CHANNEL_SOURCE_FIELD_KEYS.has(normalized);
 }
 
 function readPayloadMoney(payload: Record<string, unknown>, keys: string[]) {
@@ -315,7 +367,7 @@ export function buildPublisherLeadFieldColumns(productId: string, verticals: Ver
   const appendFields = (fields: VerticalFieldDoc[] | undefined) => {
     for (const field of fields ?? []) {
       const fieldName = field.fieldName?.trim();
-      if (!fieldName || seen.has(fieldName)) {
+      if (!fieldName || seen.has(fieldName) || isPublisherChannelOrSourceFieldName(fieldName)) {
         continue;
       }
 
@@ -365,7 +417,7 @@ export function buildPublisherLeadFieldColumnsFromLeads(
 
   for (const lead of leads) {
     for (const fieldName of Object.keys(lead.payload ?? {})) {
-      if (!fieldName || seen.has(fieldName)) continue;
+      if (!fieldName || seen.has(fieldName) || isPublisherChannelOrSourceFieldName(fieldName)) continue;
       seen.add(fieldName);
       columns.push({
         fieldName,
@@ -476,9 +528,6 @@ export function mapLeadDocToPublisherRow(input: {
 }): PublisherLeadDetailsRow {
   const payload = input.payload ?? {};
   const pingTreeAllocations = input.pingTreeAllocations ?? [];
-  const channelName =
-    readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
-  const channelId = readPayloadString(payload, ["channel_id", "channelId"]) || "2";
   const moneyMetrics = resolvePublisherLeadMoneyMetrics({
     soldPrice: input.soldPrice,
     buyerRevenue: input.buyerRevenue,
@@ -514,7 +563,8 @@ export function mapLeadDocToPublisherRow(input: {
     ref: readPayloadMoney(payload, ["ref", "referral"]),
     agn: readPayloadMoney(payload, ["agn", "agent"]),
     productLabel: formatIndexedLabel(input.verticalName, input.verticalIndex),
-    channelLabel: `[${channelId}] ${channelName}`,
+    channelLabel: resolvePublisherChannelLabel(payload),
+    publisherSource: resolvePublisherSourceLabel(payload),
     pingTreeLabel: formatPublisherLeadPingTreeLabel(pingTreeAllocations),
     pingTreeAllocations,
     userAgent: input.userAgent?.trim() || "Unknown",
