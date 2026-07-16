@@ -43,8 +43,8 @@ export function InfoPopover({
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
-    const cardWidth = card?.offsetWidth || 280;
-    const cardHeight = card?.offsetHeight || 72;
+    const cardWidth = card?.offsetWidth || 160;
+    const cardHeight = card?.offsetHeight || 36;
     const gap = 8;
     const viewportPadding = 8;
 
@@ -125,8 +125,8 @@ export function InfoPopover({
                   : { top: -9999, left: -9999, visibility: "hidden" }
               }
               className={cn(
-                "pointer-events-none fixed z-[120] w-[min(300px,calc(100vw-16px))] px-3.5 py-2.5 text-center transition duration-150 ease-out",
-                "rounded-lg bg-slate-950 text-[12px] leading-relaxed text-white shadow-[0_10px_28px_-8px_rgba(15,23,42,0.55)]",
+                "pointer-events-none fixed z-[120] w-max max-w-[min(28rem,calc(100vw-16px))] px-2.5 py-1.5 text-left transition duration-150 ease-out",
+                "rounded-md bg-slate-950 text-[11px] leading-snug text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.5)]",
                 "ring-1 ring-white/10 dark:bg-slate-950 dark:ring-white/15",
                 position ? "opacity-100 translate-y-0" : "opacity-0 translate-y-0.5"
               )}
@@ -142,7 +142,9 @@ export function InfoPopover({
                 />
               ) : null}
 
-              <span className="relative z-[1] block text-slate-100">{description}</span>
+              <span className="relative z-[1] block whitespace-pre-line text-pretty text-slate-100">
+                {description}
+              </span>
             </div>,
             document.body
           )

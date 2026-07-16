@@ -1,8 +1,10 @@
 import mongoose, { Schema, model, models } from "mongoose";
 import {
+  DEFAULT_SILENT_POSTING_MODE,
   FIRST_PING_TREE_OFFICIAL_PERCENT,
   PING_TREE_POSTING_TYPES,
   PING_TREE_PROCESSING_TYPES,
+  SILENT_POSTING_MODES,
 } from "@/lib/ping-tree-config";
 
 const pingTreeConfigSchema = new Schema(
@@ -12,6 +14,11 @@ const pingTreeConfigSchema = new Schema(
     comment: { type: String, required: false, trim: true, default: "" },
     processingType: { type: String, enum: PING_TREE_PROCESSING_TYPES, required: true, index: true },
     postingType: { type: String, enum: PING_TREE_POSTING_TYPES, default: "Direct Post" },
+    silentPostingMode: {
+      type: String,
+      enum: SILENT_POSTING_MODES,
+      default: DEFAULT_SILENT_POSTING_MODE,
+    },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     percent: { type: Number, default: 0, min: 0, max: 100 },
     status: { type: String, enum: ["Active", "Disabled", "Deleted"], default: "Active", index: true },

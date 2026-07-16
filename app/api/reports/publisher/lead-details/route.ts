@@ -22,6 +22,11 @@ import {
   buildMultiValuePayloadMatch,
   parseCommaSeparatedFilter,
 } from "@/lib/publisher-channel-source-filters";
+import {
+  findVerticalMappingIdsByChannelNames,
+  getChannelMappingForLeadRef,
+  loadPublisherChannelMappingsByIds,
+} from "@/lib/publisher-channel-mapping";
 
 type LeadDoc = {
   _id?: { toString(): string };
@@ -86,7 +91,7 @@ function buildMongoFilter(params: {
   productId: string;
   status: string;
   publisherId: string;
-  publisherChannel: string[];
+  publisherChannelMappingIds: Types.ObjectId[] | null;
   publisherSource: string[];
   publisherTags: string;
   redirectStatus: string;
@@ -160,13 +165,12 @@ function buildMongoFilter(params: {
     andConditions.push({ sellerRef: new Types.ObjectId(params.publisherId) });
   }
 
-  const channelMatch = buildMultiValuePayloadMatch(
-    params.publisherChannel,
-    ["payload.channel", "payload.publisher_channel", "payload.publisherChannel", "payload.channel_id", "payload.channelId"],
-    escapeRegex
-  );
-  if (channelMatch) {
-    andConditions.push(channelMatch);
+  if (params.publisherChannelMappingIds) {
+    andConditions.push(
+      params.publisherChannelMappingIds.length > 0
+        ? { mappingRef: { $in: params.publisherChannelMappingIds } }
+        : { _id: { $in: [] } }
+    );
   }
 
   const sourceMatch = buildMultiValuePayloadMatch(
@@ -344,6 +348,9 @@ export async function GET(req: Request) {
     await ensureVerticalCollectionMigrated();
     await ensureSellerLeadReferencesMigrated();
 
+    const publisherChannelMappingIds =
+      publisherChannel.length > 0 ? await findVerticalMappingIdsByChannelNames(publisherChannel) : null;
+
     const filter = buildMongoFilter({
       leadId,
       dateFrom,
@@ -351,7 +358,7 @@ export async function GET(req: Request) {
       productId,
       status,
       publisherId,
-      publisherChannel,
+      publisherChannelMappingIds,
       publisherSource,
       publisherTags,
       redirectStatus,
@@ -433,6 +440,13 @@ export async function GET(req: Request) {
     const campaignById = new Map(campaigns.map((campaign) => [campaign._id?.toString() ?? "", campaign]));
     const buyerById = new Map(buyers.map((buyer) => [buyer._id?.toString() ?? "", buyer]));
 
+    const channelMappingById = await loadPublisherChannelMappingsByIds(
+      leads.map((lead) => {
+        const doc = lead as LeadDoc;
+        return typeof doc.mappingRef === "string" ? doc.mappingRef : doc.mappingRef?.toString() ?? "";
+      })
+    );
+
     const normalizedLeads = leads.map((lead) => {
       const doc = lead as LeadDoc;
       const payload = normalizeLeadPayload(doc as Record<string, unknown>);
@@ -458,6 +472,7 @@ export async function GET(req: Request) {
       const createdAt = toIsoString(doc.createdAt, doc.postedAt);
       const acceptedDeliveryDoc = resolveRedirectCampaignDelivery(leadId, acceptedDeliveries);
       const buyerRevenue = sumAcceptedDeliveryRevenue(leadId, acceptedDeliveries);
+      const channelMapping = getChannelMappingForLeadRef(channelMappingById, doc.mappingRef);
 
       return mapLeadDocToPublisherRow({
         id: leadId,
@@ -475,6 +490,7 @@ export async function GET(req: Request) {
         verticalName: verticalNameById.get(verticalRef) ?? "Unknown",
         verticalIndex: verticalIndexById.get(verticalRef) ?? 0,
         mappingLabel: doc.mappingRef ? `[${doc.mappingRef.toString().slice(-4)}]` : "—",
+        channelMapping,
         pingTreeAllocations: normalizePublisherLeadPingTreeAllocations(doc.pingTreeAllocations),
         acceptedDelivery: buildAcceptedDeliverySummary(acceptedDeliveryDoc, campaignById, buyerById),
         buyerRevenue,

@@ -5,6 +5,7 @@ export const PUBLISHER_RESPONSE_STATUS = {
   rejected: 2,
   inProgress: 3,
   error: 4,
+  accessDenied: 7,
 } as const;
 
 export const PUBLISHER_RESPONSE_STATUS_TEXT = {
@@ -12,6 +13,7 @@ export const PUBLISHER_RESPONSE_STATUS_TEXT = {
   rejected: "Rejected",
   inProgress: "In Progress",
   error: "Authentication or server error",
+  accessDenied: "Access Denied",
 } as const;
 
 export type PublisherResponseStatusCode =
@@ -43,6 +45,14 @@ export function buildPublisherErrorResponse(reasons: string[]): Record<string, u
   return {
     status: PUBLISHER_RESPONSE_STATUS.error,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.error,
+    reasons: formatPublisherReasons(reasons),
+  };
+}
+
+export function buildPublisherAccessDeniedResponse(reasons: string[]): Record<string, unknown> {
+  return {
+    status: PUBLISHER_RESPONSE_STATUS.accessDenied,
+    status_text: PUBLISHER_RESPONSE_STATUS_TEXT.accessDenied,
     reasons: formatPublisherReasons(reasons),
   };
 }

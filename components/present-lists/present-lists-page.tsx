@@ -216,6 +216,7 @@ export function PresentListsPage() {
             loadingMessage="Loading lists..."
           >
             <DataTable
+              scrollShell={false}
               columns={columns}
               rows={rows}
               filterQuery={tableFilter}

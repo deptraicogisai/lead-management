@@ -6,11 +6,11 @@ export type MetricColumnHint = {
 export const METRIC_COLUMN_HINTS = {
   epl: {
     title: "EPL",
-    description: "The Publisher earnings per lead (Publisher earnings divided by the total number of leads).",
+    description: "The Publisher earnings per lead\n(Publisher earnings ÷ total leads).",
   },
   alp: {
     title: "ALP",
-    description: "The average lead price (Publisher earnings divided by the total number of sold leads).",
+    description: "The average lead price\n(Publisher earnings ÷ sold leads).",
   },
   adm: {
     title: "ADM",
@@ -22,7 +22,11 @@ export const METRIC_COLUMN_HINTS = {
   },
   cpl: {
     title: "CPL",
-    description: "The earning per lead. The ratio of total earnings to the number of posts.",
+    description: "The earning per lead\n(total earnings ÷ number of posts).",
+  },
+  ttl: {
+    title: "TTL",
+    description: "Total revenue.",
   },
 } as const satisfies Record<string, MetricColumnHint>;
 
@@ -35,5 +39,6 @@ export function metricColumnVisibilityLabel(columnKey: string, fallback: string)
   if (columnKey === "epl") return METRIC_COLUMN_HINTS.epl.title;
   if (columnKey === "alp") return METRIC_COLUMN_HINTS.alp.title;
   if (columnKey === "cpl") return METRIC_COLUMN_HINTS.cpl.title;
+  if (columnKey === "ttl") return METRIC_COLUMN_HINTS.ttl.title;
   return fallback;
 }

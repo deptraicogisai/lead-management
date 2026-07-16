@@ -7,7 +7,7 @@ import {
   getNextPingTreeConfigDisplayId,
   PingTreeConfigModel,
 } from "@/lib/models/ping-tree-config";
-import { toPingTreeConfigRecord } from "@/lib/ping-tree-config";
+import { DEFAULT_SILENT_POSTING_MODE, toPingTreeConfigRecord } from "@/lib/ping-tree-config";
 import { buildPingTreeProductMap } from "@/lib/ping-tree-config-products";
 
 type Params = { params: Promise<{ id: string }> };
@@ -34,6 +34,7 @@ export async function POST(_: Request, context: Params) {
       comment: source.comment ?? "",
       processingType: source.processingType,
       postingType: source.postingType ?? "Direct Post",
+      silentPostingMode: source.silentPostingMode ?? DEFAULT_SILENT_POSTING_MODE,
       verticalRef: source.verticalRef,
       percent: 0,
       status: "Active",

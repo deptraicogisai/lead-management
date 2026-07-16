@@ -11,6 +11,13 @@ export const PING_TREE_POSTING_TYPES = ["Direct Post", "Ping Post"] as const;
 
 export type PingTreePostingType = (typeof PING_TREE_POSTING_TYPES)[number];
 
+/** Silent tab only: how buyer campaigns are posted. */
+export const SILENT_POSTING_MODES = ["Priority", "Parallel Pings (All Sold)"] as const;
+
+export type SilentPostingMode = (typeof SILENT_POSTING_MODES)[number];
+
+export const DEFAULT_SILENT_POSTING_MODE: SilentPostingMode = "Parallel Pings (All Sold)";
+
 export const PING_TREE_CONFIG_STATUSES = ["Active", "Disabled", "Deleted"] as const;
 
 export type PingTreeConfigStatus = (typeof PING_TREE_CONFIG_STATUSES)[number];
@@ -23,6 +30,14 @@ export function isPingTreePostingType(value: unknown): value is PingTreePostingT
   return typeof value === "string" && (PING_TREE_POSTING_TYPES as readonly string[]).includes(value);
 }
 
+export function isSilentPostingMode(value: unknown): value is SilentPostingMode {
+  return typeof value === "string" && (SILENT_POSTING_MODES as readonly string[]).includes(value);
+}
+
+export function normalizeSilentPostingMode(value: unknown): SilentPostingMode {
+  return isSilentPostingMode(value) ? value : DEFAULT_SILENT_POSTING_MODE;
+}
+
 export type PingTreeConfigRecord = {
   id: string;
   displayId: number | null;
@@ -30,6 +45,7 @@ export type PingTreeConfigRecord = {
   comment: string;
   processingType: PingTreeProcessingType;
   postingType: PingTreePostingType;
+  silentPostingMode: SilentPostingMode;
   verticalId: string;
   verticalName: string;
   productLabel: string;
@@ -46,6 +62,7 @@ type PingTreeConfigDoc = {
   comment?: string | null;
   processingType: string;
   postingType?: string | null;
+  silentPostingMode?: string | null;
   verticalRef?: { toString(): string } | string | null;
   percent?: number | null;
   status?: string | null;
@@ -72,6 +89,7 @@ export function toPingTreeConfigRecord(
       ? doc.processingType
       : "Main processing",
     postingType: isPingTreePostingType(doc.postingType) ? doc.postingType : "Direct Post",
+    silentPostingMode: normalizeSilentPostingMode(doc.silentPostingMode),
     verticalId: product.verticalId,
     verticalName: product.verticalName,
     productLabel: product.productLabel,

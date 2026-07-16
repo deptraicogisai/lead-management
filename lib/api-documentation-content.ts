@@ -653,6 +653,17 @@ const SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = 
       reasons: "Authentication failed. API key is required.",
     },
   },
+  {
+    statusCode: 7,
+    title: "Access Denied",
+    description:
+      "The publisher, publisher channel, or publisher source is paused and cannot accept leads.",
+    example: {
+      status: 7,
+      status_text: "Access Denied",
+      reasons: { message: "The publisher is currently paused" },
+    },
+  },
 ];
 
 function buildAcceptedLeadResponseExample(apiType: MappingApiType): Record<string, unknown> {
@@ -748,6 +759,12 @@ export function buildErrorRows(fields: DocumentationField[]): DocumentationError
       status: "401 Unauthorized",
       scenario: "Missing or invalid API key",
       message: '{"status":4,"errors":[{"Authorization Failed":""}]}',
+    },
+    {
+      status: "403 Forbidden",
+      scenario: "Publisher, publisher channel, or publisher source is paused",
+      message:
+        '{"status":7,"status_text":"Access Denied","reasons":{"message":"The publisher is currently paused"}}',
     },
     {
       status: "500 Internal Server Error",

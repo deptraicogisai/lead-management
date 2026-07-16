@@ -27,6 +27,7 @@ import {
   selectPingTreeConfig,
   type SelectedPingTreeConfig,
 } from "@/lib/ping-tree-allocation";
+import { normalizeSilentPostingMode } from "@/lib/ping-tree-config";
 import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import {
@@ -1090,6 +1091,124 @@ async function processCampaignAttempt(params: {
   } satisfies CampaignDeliveryLog;
 }
 
+const PRIORITY_STOP_SKIP_REASON = "Skipped because an earlier campaign accepted the lead.";
+
+async function createPrioritySkippedDeliveries(params: {
+  campaignIds: string[];
+  startCampaignOrder: number;
+  pingTreeType: PingTreeCampaignType;
+  processingType: string;
+  sellerLeadId: string;
+  sellerRefId: string;
+  verticalRefId: string;
+  postedAt: Date;
+  progress?: LeadDistributionProgressHandlers;
+}): Promise<CampaignDeliveryLog[]> {
+  if (params.campaignIds.length === 0) {
+    return [];
+  }
+
+  const campaigns = await CampaignModel.find({
+    _id: { $in: params.campaignIds.map((campaignId) => new Types.ObjectId(campaignId)) },
+  })
+    .select({ name: 1, buyerRef: 1, minPrice: 1 })
+    .lean();
+
+  const campaignById = new Map(campaigns.map((campaign) => [campaign._id?.toString() ?? "", campaign]));
+  const buyerIds = [
+    ...new Set(
+      campaigns
+        .map((campaign) => campaign.buyerRef?.toString() ?? "")
+        .filter((buyerId) => buyerId && Types.ObjectId.isValid(buyerId))
+    ),
+  ];
+  const buyers = buyerIds.length
+    ? await BuyerModel.find({ _id: { $in: buyerIds.map((buyerId) => new Types.ObjectId(buyerId)) } })
+        .select({ company: 1 })
+        .lean()
+    : [];
+  const buyerCompanyById = new Map(
+    buyers.map((buyer) => [buyer._id?.toString() ?? "", buyer.company?.trim() || "Buyer"])
+  );
+
+  const skippedDeliveries: CampaignDeliveryLog[] = [];
+
+  for (let offset = 0; offset < params.campaignIds.length; offset += 1) {
+    const campaignId = params.campaignIds[offset];
+    const campaignOrder = params.startCampaignOrder + offset;
+    const campaign = campaignById.get(campaignId);
+    if (!campaign) continue;
+
+    const buyerId = campaign.buyerRef?.toString() ?? "";
+    if (!buyerId || !Types.ObjectId.isValid(buyerId)) continue;
+
+    const campaignName = campaign.name?.trim() || "Campaign";
+    const buyerCompany = buyerCompanyById.get(buyerId) ?? "Buyer";
+    const traceSteps = appendBuyerPostTraceStep([], {
+      key: "priority-stop",
+      label: "Priority Queue",
+      status: "skip",
+      summary: PRIORITY_STOP_SKIP_REASON,
+      result: skippedStepResult(PRIORITY_STOP_SKIP_REASON),
+    });
+
+    if (params.progress?.onBuyerPostProcessing) {
+      await params.progress.onBuyerPostProcessing({
+        campaignId,
+        pingTreeType: params.pingTreeType,
+        campaignOrder,
+      });
+    }
+
+    await LeadDeliveryModel.create({
+      sellerLeadRef: new Types.ObjectId(params.sellerLeadId),
+      sellerRef: new Types.ObjectId(params.sellerRefId),
+      verticalRef: new Types.ObjectId(params.verticalRefId),
+      campaignRef: new Types.ObjectId(campaignId),
+      buyerRef: new Types.ObjectId(buyerId),
+      pingTreeType: params.pingTreeType,
+      processingType: params.processingType,
+      campaignOrder,
+      buyerStatus: "Skipped",
+      errorReason: PRIORITY_STOP_SKIP_REASON,
+      deliveryTrace: traceSteps,
+      postedAt: params.postedAt,
+    });
+
+    const skipped: CampaignDeliveryLog = {
+      campaignId,
+      campaignName,
+      buyerId,
+      buyerCompany,
+      pingTreeType: params.pingTreeType,
+      campaignOrder,
+      buyerStatus: "Skipped",
+      validationErrors: [],
+      price: null,
+      redirectUrl: "",
+      rejectSign: "",
+      rejectReason: "",
+      errorReason: PRIORITY_STOP_SKIP_REASON,
+      postLeadUrl: "",
+      httpStatus: 0,
+      traceSteps,
+      campaignMinPrice: campaign.minPrice ?? 0,
+      postedAt: params.postedAt.toISOString(),
+    };
+
+    skippedDeliveries.push(skipped);
+
+    if (params.progress?.onBuyerPostAttempt) {
+      const attempts = buildDeliveryProgressAttempts(skipped);
+      for (const attempt of attempts) {
+        await params.progress.onBuyerPostAttempt(attempt);
+      }
+    }
+  }
+
+  return skippedDeliveries;
+}
+
 async function processPingTree(params: {
   pingTreeType: PingTreeCampaignType;
   sellerLeadId: string;
@@ -1123,7 +1242,15 @@ async function processPingTree(params: {
     params.selectedConfig
   );
   const deliveries: CampaignDeliveryLog[] = [];
-  const parallelPosts = params.pingTreeType === "Silent";
+  const silentPostingMode =
+    params.pingTreeType === "Silent"
+      ? normalizeSilentPostingMode(params.selectedConfig?.silentPostingMode)
+      : null;
+  const parallelPosts =
+    params.pingTreeType === "Silent" && silentPostingMode === "Parallel Pings (All Sold)";
+  const stopOnAccept =
+    params.stopOnAccept ||
+    (params.pingTreeType === "Silent" && silentPostingMode === "Priority");
 
   if (parallelPosts) {
     if (params.progress?.onBuyerPostProcessing) {
@@ -1214,7 +1341,20 @@ async function processPingTree(params: {
       }
     }
 
-    if (params.stopOnAccept && result.buyerStatus === "Accept") {
+    if (stopOnAccept && result.buyerStatus === "Accept") {
+      const remainingCampaignIds = filteredCampaignIds.slice(index + 1);
+      const skippedDeliveries = await createPrioritySkippedDeliveries({
+        campaignIds: remainingCampaignIds,
+        startCampaignOrder: index + 2,
+        pingTreeType: params.pingTreeType,
+        processingType,
+        sellerLeadId: params.sellerLeadId,
+        sellerRefId: params.sellerRefId,
+        verticalRefId: params.verticalRefId,
+        postedAt: params.postedAt,
+        progress: params.progress,
+      });
+      deliveries.push(...skippedDeliveries);
       break;
     }
   }
@@ -1471,6 +1611,10 @@ export async function listPendingBuyerPostCampaigns(
         campaignOrder: index + 1,
         queueOrder: pending.length,
         logId: buildBuyerPostAttemptLogId(pingTreeType, index + 1),
+        silentPostingMode:
+          pingTreeType === "Silent"
+            ? normalizeSilentPostingMode(selectedConfig?.silentPostingMode)
+            : undefined,
       });
     });
   }

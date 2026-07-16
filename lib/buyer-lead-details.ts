@@ -8,6 +8,7 @@ import {
   normalizePublisherLeadPingTreeAllocations,
   resolvePublisherChannelLabel,
   resolvePublisherSourceLabel,
+  type PublisherChannelMappingInfo,
   type PublisherLeadPingTreeAllocation,
 } from "@/lib/publisher-lead-details";
 
@@ -230,6 +231,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
   publisherIndex: number;
   publisherTag: string;
   leadPayload?: Record<string, unknown> | null;
+  channelMapping?: PublisherChannelMappingInfo | null;
   responseTimeMs?: number | null;
   redirectUrl: string;
   rejectReason: string;
@@ -282,7 +284,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
       ? `[${input.publisherIndex}] ${input.publisherName}`
       : input.publisherName,
     publisherTag: input.publisherTag,
-    publisherChannel: resolvePublisherChannelLabel(input.leadPayload),
+    publisherChannel: resolvePublisherChannelLabel(input.leadPayload, input.channelMapping),
     publisherSource: resolvePublisherSourceLabel(input.leadPayload),
     responseTimeLabel: formatBuyerResponseTime(input.responseTimeMs),
     campaignId: input.campaignId,

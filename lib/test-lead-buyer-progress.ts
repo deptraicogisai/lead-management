@@ -1,6 +1,10 @@
 import type { BuyerPostAttemptSnapshot } from "@/lib/buyer-post-request";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
 import type { MappingTestLeadLogRecord } from "@/lib/mapping-test-lead-log-shared";
+import {
+  normalizeSilentPostingMode,
+  type SilentPostingMode,
+} from "@/lib/ping-tree-config";
 
 export type BuyerPostQueueState = "processing" | "waiting" | "done";
 
@@ -19,6 +23,7 @@ export type PendingBuyerPostCampaign = {
   campaignOrder: number;
   queueOrder: number;
   logId: string;
+  silentPostingMode?: SilentPostingMode;
 };
 
 function isPingTreeCampaignType(value: unknown): value is PingTreeCampaignType {
@@ -162,10 +167,27 @@ export function buildInitialBuyerPostQueue(
   _submittedAt: string
 ): BuyerPostAttemptView[] {
   const firstRedirectId = pending.find((campaign) => campaign.pingTreeType === "Redirect")?.campaignId;
+  const silentPostingMode = normalizeSilentPostingMode(
+    pending.find((campaign) => campaign.pingTreeType === "Silent")?.silentPostingMode
+  );
+  const silentIsPriority = silentPostingMode === "Priority";
+  const firstSilentId = pending.find((campaign) => campaign.pingTreeType === "Silent")?.campaignId;
   const silentStartedAt = new Date().toISOString();
 
   return pending.map((campaign) => {
     if (campaign.pingTreeType === "Silent") {
+      if (silentIsPriority) {
+        const isFirstSilent = campaign.campaignId === firstSilentId;
+        return buildQueuedPlaceholderAttempt(
+          {
+            ...campaign,
+            queueOrder: campaign.queueOrder,
+            logId: String(campaign.queueOrder + 1).padStart(3, "0"),
+          },
+          isFirstSilent ? "processing" : "waiting"
+        );
+      }
+
       return {
         ...buildQueuedPlaceholderAttempt(
           {
@@ -260,27 +282,38 @@ export function advanceBuyerPostQueueAfterAttempt(
     return updated;
   }
 
-  if (completed.buyerStatus === "Accept" && completedType === "Redirect") {
-    updated = updated.map((row) => {
-      if (row.pingTreeType === "Silent") {
+  if (completed.buyerStatus === "Accept" && (completedType === "Redirect" || completedType === "Silent")) {
+    const silentIsPriority =
+      completedType === "Silent" &&
+      updated.some((row) => row.pingTreeType === "Silent" && row.queueState === "waiting");
+
+    if (completedType === "Redirect" || silentIsPriority) {
+      updated = updated.map((row) => {
+        if (completedType === "Redirect" && row.pingTreeType === "Silent") {
+          return row;
+        }
+
+        if (row.pingTreeType !== completedType || queueRowKey(row) === completedKey) {
+          return row;
+        }
+
+        if (row.queueState === "waiting" || row.queueState === "processing") {
+          return markRowQueueSkipped(row);
+        }
+
         return row;
-      }
-
-      if (row.pingTreeType !== "Redirect" || queueRowKey(row) === completedKey) {
-        return row;
-      }
-
-      if (row.queueState === "waiting" || row.queueState === "processing") {
-        return markRowQueueSkipped(row);
-      }
-
-      return row;
-    });
+      });
+    }
   }
 
-  // Silent campaigns post in parallel — no sequential queue advancement.
+  // Parallel Silent posts all campaigns at once — no sequential queue advancement.
   if (completedType === "Silent") {
-    return updated;
+    const silentIsPriority = updated.some(
+      (row) => row.pingTreeType === "Silent" && row.queueState === "waiting"
+    );
+    if (!silentIsPriority) {
+      return updated;
+    }
   }
 
   const typeRows = updated

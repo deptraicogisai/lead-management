@@ -21,6 +21,7 @@ import {
   normalizePublisherLeadPingTreeAllocations,
   type PublisherLeadAcceptedDelivery,
 } from "@/lib/publisher-lead-details";
+import { getChannelMappingForLeadRef, loadPublisherChannelMappingsByIds } from "@/lib/publisher-channel-mapping";
 import { isPingTreeProcessingType } from "@/lib/ping-tree-config";
 
 type Params = { params: Promise<{ id: string }> };
@@ -29,6 +30,7 @@ type LeadDoc = {
   _id?: { toString(): string };
   sellerRef?: { toString(): string } | string;
   verticalRef?: { toString(): string } | string;
+  mappingRef?: { toString(): string } | string;
   payload?: Record<string, unknown>;
   rawData?: string;
   validationStatus: "success" | "fail";
@@ -364,6 +366,10 @@ export async function GET(_req: Request, context: Params) {
     const publisherName = seller?.name?.trim() || "Unknown";
     const verticalIndex = verticalIndexById.get(verticalRef) ?? 0;
     const verticalName = vertical?.name?.trim() || "Unknown";
+    const mappingRef =
+      typeof lead.mappingRef === "string" ? lead.mappingRef : lead.mappingRef?.toString() ?? "";
+    const channelMappingById = await loadPublisherChannelMappingsByIds([mappingRef]);
+    const channelMapping = getChannelMappingForLeadRef(channelMappingById, mappingRef);
 
     const detail = buildLeadDetailRecord({
       id: leadId,
@@ -390,6 +396,7 @@ export async function GET(_req: Request, context: Params) {
       fieldLabelsByName,
       filterLog,
       filterProcessing,
+      channelMapping,
     });
 
     return NextResponse.json(detail);

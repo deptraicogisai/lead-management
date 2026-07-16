@@ -25,6 +25,12 @@ export type Column<T> = {
   render?: (row: T) => ReactNode;
   sortable?: boolean;
   sortValue?: (row: T) => string | number | null | undefined;
+  headerClassName?: string;
+  className?: string;
+  /** Minimum column width in pixels after layout measure. */
+  minWidth?: number;
+  /** Maximum column width in pixels after layout measure. */
+  maxWidth?: number;
 };
 
 function isColumnSortable<T>(column: Column<T>) {
@@ -75,6 +81,11 @@ type DataTableProps<T> = {
   defaultSort?: TableSortState;
   /** Stick thead under the app chrome while the window scrolls. */
   stickyHeader?: boolean;
+  /**
+   * Use the dual-table ScrollableTableShell (wide report tables).
+   * Set false for compact admin grids where a single table keeps columns aligned.
+   */
+  scrollShell?: boolean;
   /** Client-side filter against the currently loaded rows (current page). */
   filterQuery?: string;
 };
@@ -129,6 +140,7 @@ export function DataTable<T extends { id: string }>({
   rowReorder,
   defaultSort,
   stickyHeader = false,
+  scrollShell = true,
   filterQuery = "",
 }: DataTableProps<T>) {
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
@@ -315,14 +327,23 @@ export function DataTable<T extends { id: string }>({
     setDropIndicatorTop(rowRect.top - containerRect.top + container.scrollTop - 2);
   }, [dragOverRowId, draggedRowId, displayRows, isDragging]);
 
+  const columnWidthHints = useMemo(
+    () =>
+      columns.map((column) => ({
+        min: column.minWidth,
+        max: column.maxWidth,
+      })),
+    [columns]
+  );
+
   const columnLayoutKey = useMemo(
     () =>
-      rows
+      `${columns.length}:${columns.map((column) => String(column.key)).join(",")}|${rows
         .map((row) => row.id)
         .slice()
         .sort()
-        .join("|"),
-    [rows]
+        .join("|")}`,
+    [columns, rows]
   );
 
   if (rows.length === 0) {
@@ -357,7 +378,10 @@ export function DataTable<T extends { id: string }>({
         return (
           <th
             key={columnKey}
-            className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-2.5 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className={cn(
+              "border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-2.5 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
+              column.headerClassName
+            )}
           >
             {columnSortable ? (
               <SortableColumnHeader
@@ -437,7 +461,10 @@ export function DataTable<T extends { id: string }>({
             {columns.map((column) => (
               <td
                 key={String(column.key)}
-                className="border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200"
+                className={cn(
+                  "border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200",
+                  column.className
+                )}
               >
                 {renderCellContent(row, column)}
               </td>
@@ -454,18 +481,32 @@ export function DataTable<T extends { id: string }>({
         isFilterPending && "opacity-70"
       )}
     >
-      <ScrollableTableShell
-        rowCount={rows.length}
-        stickyHeader={stickyHeader}
-        scrollContainerRef={scrollContainerRef}
-        freezeColumnWidths
-        columnLayoutKey={columnLayoutKey}
-        bodyMinHeight={isFiltering ? bodyMinHeight : undefined}
-        overlay={isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
-        thead={headerRow}
-      >
-        <tbody ref={tbodyRef}>{bodyRows}</tbody>
-      </ScrollableTableShell>
+      {scrollShell ? (
+        <ScrollableTableShell
+          rowCount={rows.length}
+          stickyHeader={stickyHeader}
+          scrollContainerRef={scrollContainerRef}
+          freezeColumnWidths
+          columnLayoutKey={columnLayoutKey}
+          columnWidthHints={columnWidthHints}
+          bodyMinHeight={isFiltering ? bodyMinHeight : undefined}
+          overlay={isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
+          thead={headerRow}
+        >
+          <tbody ref={tbodyRef}>{bodyRows}</tbody>
+        </ScrollableTableShell>
+      ) : (
+        <div
+          ref={scrollContainerRef}
+          className="relative overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        >
+          {isDragging && dropIndicatorTop !== null ? <RowDropIndicator top={dropIndicatorTop} /> : null}
+          <table className="w-full min-w-max border-separate border-spacing-0 text-sm tabular-nums">
+            <thead className="bg-slate-50 dark:bg-slate-800">{headerRow}</thead>
+            <tbody ref={tbodyRef}>{bodyRows}</tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 

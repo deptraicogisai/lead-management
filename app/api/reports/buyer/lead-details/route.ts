@@ -18,6 +18,11 @@ import {
   buildMultiValuePayloadMatch,
   parseCommaSeparatedFilter,
 } from "@/lib/publisher-channel-source-filters";
+import {
+  findVerticalMappingIdsByChannelNames,
+  getChannelMappingForLeadRef,
+  loadPublisherChannelMappingsByIds,
+} from "@/lib/publisher-channel-mapping";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 
 function parsePageSize(value: string | null) {
@@ -65,7 +70,7 @@ type BuyerLeadQueryParams = {
   pingTreeId: string;
   productId: string;
   publisherId: string;
-  publisherChannel: string[];
+  publisherChannelMappingIds: Types.ObjectId[] | null;
   publisherSource: string[];
   redirectStatus: string;
   publisherTag: string;
@@ -181,19 +186,12 @@ function buildPostLookupMatch(params: BuyerLeadQueryParams) {
     andConditions.push({ "seller.publisherTag": params.publisherTag });
   }
 
-  const channelMatch = buildMultiValuePayloadMatch(
-    params.publisherChannel,
-    [
-      "sellerLead.payload.channel",
-      "sellerLead.payload.publisher_channel",
-      "sellerLead.payload.publisherChannel",
-      "sellerLead.payload.channel_id",
-      "sellerLead.payload.channelId",
-    ],
-    escapeRegex
-  );
-  if (channelMatch) {
-    andConditions.push(channelMatch);
+  if (params.publisherChannelMappingIds) {
+    andConditions.push(
+      params.publisherChannelMappingIds.length > 0
+        ? { "sellerLead.mappingRef": { $in: params.publisherChannelMappingIds } }
+        : { _id: { $in: [] } }
+    );
   }
 
   const sourceMatch = buildMultiValuePayloadMatch(
@@ -304,6 +302,9 @@ export async function GET(req: Request) {
       return NextResponse.json(buildEmptyResponse(page, pageSize));
     }
 
+    const publisherChannelMappingIds =
+      publisherChannel.length > 0 ? await findVerticalMappingIdsByChannelNames(publisherChannel) : null;
+
     const queryParams: BuyerLeadQueryParams = {
       leadId,
       buyerId,
@@ -311,7 +312,7 @@ export async function GET(req: Request) {
       pingTreeId,
       productId,
       publisherId,
-      publisherChannel,
+      publisherChannelMappingIds,
       publisherSource,
       redirectStatus,
       publisherTag,
@@ -360,6 +361,15 @@ export async function GET(req: Request) {
 
     const { docs, total } = deliveryResult;
 
+    const channelMappingById = await loadPublisherChannelMappingsByIds(
+      docs.map((doc) => {
+        const sellerLead = doc.sellerLead as { mappingRef?: { toString(): string } | string } | undefined;
+        return typeof sellerLead?.mappingRef === "string"
+          ? sellerLead.mappingRef
+          : sellerLead?.mappingRef?.toString() ?? "";
+      })
+    );
+
     const sellerIndexById = new Map(sellers.map((seller, index) => [seller._id.toString(), index + 1001]));
     const sellerNameById = new Map(sellers.map((seller) => [seller._id.toString(), seller.name]));
     const sellerTagById = new Map(
@@ -379,6 +389,7 @@ export async function GET(req: Request) {
             soldPrice?: number | null;
             pingTreeAllocations?: unknown;
             payload?: Record<string, unknown>;
+            mappingRef?: { toString(): string } | string;
           }
         | undefined;
       const sellerId = String(doc.sellerRef ?? "");
@@ -409,6 +420,7 @@ export async function GET(req: Request) {
           sellerLead?.payload && typeof sellerLead.payload === "object" && !Array.isArray(sellerLead.payload)
             ? sellerLead.payload
             : null,
+        channelMapping: getChannelMappingForLeadRef(channelMappingById, sellerLead?.mappingRef),
         responseTimeMs: typeof doc.responseTimeMs === "number" ? doc.responseTimeMs : null,
         redirectUrl: typeof doc.redirectUrl === "string" ? doc.redirectUrl : "",
         rejectReason: typeof doc.rejectReason === "string" ? doc.rejectReason : "",

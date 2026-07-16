@@ -637,6 +637,7 @@ export default function IntegrationBuilderPage() {
               loadingMessage="Loading integration builder records..."
             >
               <DataTable<IntegrationBuilderRecord>
+                scrollShell={false}
                 columns={columns}
                 rows={rows}
                 emptyMessage="No integration builder records found."

@@ -1,5 +1,10 @@
 import type { CampaignType } from "@/lib/campaign";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
+import {
+  DEFAULT_SILENT_POSTING_MODE,
+  normalizeSilentPostingMode,
+  type SilentPostingMode,
+} from "@/lib/ping-tree-config";
 
 export type PingTreeStrategy = "Priority";
 export type PingTreeCampaignType = CampaignType;
@@ -23,6 +28,7 @@ export type PingTreeRecord = {
   name: string;
   campaignType: PingTreeCampaignType;
   strategy: PingTreeStrategy;
+  silentPostingMode: SilentPostingMode;
   activeCampaignIds: string[];
   createdAt: string;
   updatedAt: string;
@@ -36,6 +42,7 @@ type PingTreeDoc = {
   name: string;
   campaignType?: PingTreeCampaignType | null;
   strategy: PingTreeStrategy;
+  silentPostingMode?: string | null;
   activeCampaignIds?: string[];
   campaignPriorities?: Record<string, number> | Map<string, number>;
   createdAt?: Date | string;
@@ -49,6 +56,7 @@ export function toPingTreeRecord(doc: PingTreeDoc): PingTreeRecord {
     name: doc.name,
     campaignType: doc.campaignType === "Silent" ? "Silent" : "Redirect",
     strategy: doc.strategy,
+    silentPostingMode: normalizeSilentPostingMode(doc.silentPostingMode ?? DEFAULT_SILENT_POSTING_MODE),
     activeCampaignIds: doc.activeCampaignIds ?? [],
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : "",

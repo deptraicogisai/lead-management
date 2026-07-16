@@ -29,12 +29,12 @@ export function SortableColumnHeader({
         onClick();
       }}
       className={cn(
-        "inline-flex select-none items-center gap-1 font-semibold text-slate-700 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-100 dark:hover:text-white",
+        "inline-flex max-w-full select-none items-center gap-1 font-semibold text-slate-700 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 dark:text-slate-100 dark:hover:text-white",
         align === "right" ? "w-full justify-end text-right" : "text-left",
         className
       )}
     >
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       <span
         className={cn(
           "inline-flex w-3 shrink-0 flex-col items-center justify-center text-[8px] leading-[0.7]",

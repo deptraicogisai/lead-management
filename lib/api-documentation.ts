@@ -607,6 +607,10 @@ export async function generateApiDocumentationPdfBuffer(
   writeBullet(doc, "2 — Reject: lead rejected.");
   writeBullet(doc, "3 — In Progress: lead is still being processed.");
   writeBullet(doc, "4 — Authorization Failed: API key or authorization credentials are missing or invalid.");
+  writeBullet(
+    doc,
+    "7 — Access Denied: publisher, publisher channel, or publisher source is paused."
+  );
 
   outline.responseStatusItems.forEach((item) => {
     writeSubheading(doc, item.label);

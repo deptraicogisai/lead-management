@@ -29,6 +29,21 @@ import type {
   LeadDetailTab,
 } from "@/lib/lead-detail";
 import { cn } from "@/lib/utils";
+import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
+
+function formatFilterLogDateCell(row: LeadDetailFilterLogRow) {
+  if (row.date) {
+    return formatDateDisplay(row.date);
+  }
+
+  const trimmed = row.dateLabel.trim();
+  if (!trimmed || trimmed === "—") {
+    return trimmed;
+  }
+
+  const slashDate = trimmed.match(/^(\d{2}\/\d{2}\/\d{4})/);
+  return slashDate ? slashDate[1] : trimmed;
+}
 
 const DETAIL_TABS = [
   { id: "lead-body" as const, label: "Lead body", icon: FileText },
@@ -215,7 +230,7 @@ function FilterLogDetailRow({
       )}
     >
       <td className="whitespace-nowrap px-4 py-2.5 align-middle tabular-nums text-slate-700 dark:text-slate-200">
-        {row.dateLabel}
+        {formatFilterLogDateCell(row)}
       </td>
       <td className="w-[11rem] max-w-[11rem] px-4 py-2.5 align-middle text-slate-800 dark:text-slate-100">
         <span className="line-clamp-2 break-words" title={row.buyerLabel}>
@@ -842,7 +857,13 @@ export function LeadDetailPage() {
           ? `${logRow.campaignLabel} | ${activeFilterSection?.label ?? "Processing"} | ${logRow.buyerLabel}`
           : undefined
       }
-      postedAt={logRow?.dateLabel}
+      postedAt={
+        logRow?.date
+          ? formatDateTimeDisplay(logRow.date)
+          : logRow?.dateLabel && logRow.dateLabel !== "—"
+            ? formatDateTimeDisplay(logRow.dateLabel)
+            : undefined
+      }
       buyerStatus={logRow?.status}
       httpStatus={logRow?.httpStatus}
       postLeadUrl={logRow?.postLeadUrl}

@@ -213,6 +213,7 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
   {
     key: "ttl",
     label: "TTL",
+    hint: METRIC_COLUMN_HINTS.ttl,
     sortable: true,
     sortValue: (row) => row.ttl,
     valueColorClass: "text-slate-700 dark:text-slate-200",

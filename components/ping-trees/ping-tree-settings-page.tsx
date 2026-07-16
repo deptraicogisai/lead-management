@@ -11,7 +11,7 @@ import {
   Search,
   Settings2,
 } from "lucide-react";
-import { Input, PrimaryButton, ToggleSwitch, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
+import { Input, PrimaryButton, Select, ToggleSwitch, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import { LoadingOverlay } from "@/components/ui/loading-indicator";
@@ -26,6 +26,12 @@ import {
   type PingTreeRecord,
   sortInactiveCampaignsByBuyerMinPrice,
 } from "@/lib/ping-tree";
+import {
+  DEFAULT_SILENT_POSTING_MODE,
+  SILENT_POSTING_MODES,
+  isSilentPostingMode,
+  type SilentPostingMode,
+} from "@/lib/ping-tree-config";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +116,6 @@ function formatCampaignLabel(card: PingTreeCampaignCard) {
 
 function CampaignNameLabel({
   card,
-  variant,
 }: {
   card: PingTreeCampaignCard;
   variant: "active" | "inactive";
@@ -121,14 +126,11 @@ function CampaignNameLabel({
       target="_blank"
       rel="noopener noreferrer"
       title="Open campaign in new tab"
-      className={cn(
-        "inline-flex min-w-0 max-w-full items-center gap-1 leading-snug text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200",
-        variant === "active" ? "text-sm font-medium" : "text-[13px] font-normal sm:text-sm"
-      )}
+      className="inline-flex min-w-0 max-w-full items-center gap-1 text-sm font-medium leading-snug text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <span className={cn("min-w-0", variant === "inactive" && "truncate")}>{formatCampaignLabel(card)}</span>
+      <span className="min-w-0 break-words">{formatCampaignLabel(card)}</span>
       <ExternalLink size={13} strokeWidth={2.25} className="shrink-0 opacity-70" aria-hidden />
     </a>
   );
@@ -244,7 +246,12 @@ const highlightedCardClassName =
 
 const cardActionsClass = "flex items-center justify-end gap-1";
 const inactiveCardActionsClass =
-  "flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-2.5 py-2 dark:border-slate-800";
+  "flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2.5 dark:border-slate-800";
+
+const inactiveTextActionClass = cn(
+  "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-xs font-medium",
+  greenControlClass
+);
 
 function autoScrollListNearEdge(listElement: HTMLElement | null, clientY: number) {
   if (!listElement) return;
@@ -279,7 +286,7 @@ function DropPlaceholder({ height, tone }: { height: number; tone: "active" | "i
           ? "border-emerald-400 bg-emerald-400/20 dark:border-emerald-400 dark:bg-emerald-400/25"
           : "border-rose-400 bg-rose-400/20 dark:border-rose-400 dark:bg-rose-400/25"
       )}
-      style={{ height: Math.max(height, 56) }}
+      style={{ height: Math.max(height, tone === "inactive" ? 88 : 56) }}
     />
   );
 }
@@ -471,7 +478,7 @@ function InactiveCampaignCard({
       onPointerDown={isGhost ? undefined : onCardPointerDown}
       style={{ touchAction: isGhost ? undefined : "none" }}
       className={cn(
-        "overflow-hidden rounded border bg-white dark:bg-slate-900",
+        "min-h-[5.75rem] overflow-hidden rounded-md border bg-white dark:bg-slate-900",
         isGhost
           ? "cursor-grabbing border-slate-300 shadow-2xl ring-2 ring-slate-400/40 dark:border-slate-500 dark:ring-slate-300/20"
           : "cursor-grab transition-[opacity,transform,background-color,border-color,box-shadow] duration-150 ease-out active:cursor-grabbing",
@@ -479,12 +486,14 @@ function InactiveCampaignCard({
         !isGhost && isHighlighted && highlightedCardClassName
       )}
     >
-      <div className="flex items-start justify-between gap-3 px-2.5 py-2">
-        <div className="min-w-0 flex flex-1 items-center gap-1.5">
+      <div className="flex min-h-[3rem] items-start justify-between gap-3 px-3 py-3">
+        <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
           <StatusBadge status={card.status} compact />
           <CampaignNameLabel card={card} variant="inactive" />
         </div>
-        <p className="shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
+        <p className="shrink-0 pt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          ${card.minPrice.toFixed(2)}
+        </p>
       </div>
 
       <div className={inactiveCardActionsClass} data-no-drag>
@@ -492,7 +501,7 @@ function InactiveCampaignCard({
           type="button"
           disabled={isGhost || !canMoveToTop}
           onClick={isGhost ? undefined : onMoveToTop}
-          className={textActionClass}
+          className={inactiveTextActionClass}
         >
           To the top
         </button>
@@ -500,7 +509,7 @@ function InactiveCampaignCard({
           type="button"
           disabled={isGhost || !canMoveToBottom}
           onClick={isGhost ? undefined : onMoveToBottom}
-          className={textActionClass}
+          className={inactiveTextActionClass}
         >
           To the bottom
         </button>
@@ -511,9 +520,9 @@ function InactiveCampaignCard({
             disabled={isGhost}
             onClick={isGhost ? undefined : onConfigureMock}
             title="Configure test lead mock response"
-            className={iconActionClass}
+            className={cn(iconActionClass, "h-8 w-8")}
           >
-            <Settings2 size={14} />
+            <Settings2 size={15} />
           </button>
         ) : null}
       </div>
@@ -543,6 +552,7 @@ export function PingTreeSettingsPage({
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [silentPostingMode, setSilentPostingMode] = useState<SilentPostingMode>(DEFAULT_SILENT_POSTING_MODE);
   const [testMode, setTestMode] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -705,6 +715,13 @@ export function PingTreeSettingsPage({
       setPingTreeList(data.pingTreeList);
       const sortedInactive = sortInactiveCampaignsByBuyerMinPrice(data.notInPingTree);
       setNotInPingTree(sortedInactive);
+      setSilentPostingMode(
+        data.tree.campaignType === "Silent"
+          ? isSilentPostingMode(data.tree.silentPostingMode)
+            ? data.tree.silentPostingMode
+            : DEFAULT_SILENT_POSTING_MODE
+          : DEFAULT_SILENT_POSTING_MODE
+      );
 
       const activeIds = data.pingTreeList.map((card) => card.id);
       const inactiveIds = sortedInactive.map((card) => card.id);
@@ -890,6 +907,7 @@ export function PingTreeSettingsPage({
             activeCampaignIds: nextActiveIds,
             inactiveCampaignIds: nextInactiveIds,
             campaignPriorities: nextPriorities,
+            ...(tree.campaignType === "Silent" ? { silentPostingMode } : {}),
           }),
         });
 
@@ -907,7 +925,7 @@ export function PingTreeSettingsPage({
         setIsSaving(false);
       }
     },
-    [loadTree, tree, editorTreeUrl]
+    [loadTree, tree, editorTreeUrl, silentPostingMode]
   );
 
   const handleSave = useCallback(() => {
@@ -1350,6 +1368,32 @@ export function PingTreeSettingsPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {tree.campaignType === "Silent" ? (
+              <label
+                htmlFor="silent-posting-mode"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                title="Priority posts campaigns top-to-bottom and stops on Accept. Parallel posts all campaigns at once."
+              >
+                <span className="whitespace-nowrap font-medium">Strategy</span>
+                <Select
+                  id="silent-posting-mode"
+                  className="min-w-[12.5rem] border-0 bg-transparent py-0 shadow-none focus:ring-0 dark:bg-transparent"
+                  value={silentPostingMode}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (!isSilentPostingMode(next)) return;
+                    setSilentPostingMode(next);
+                    setIsDirty(true);
+                  }}
+                >
+                  {SILENT_POSTING_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
             <label
               htmlFor="ping-tree-test-mode"
               className="mr-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
@@ -1381,7 +1425,7 @@ export function PingTreeSettingsPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,1fr)]">
           <div
             ref={activeColumnRef}
             className="flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
@@ -1483,20 +1527,20 @@ export function PingTreeSettingsPage({
               </div>
             </div>
 
-            <div ref={inactiveListRef} className="relative max-h-[min(52vh,28rem)] flex-1 overflow-y-auto p-2 sm:max-h-[72vh]">
+            <div ref={inactiveListRef} className="relative max-h-[min(52vh,28rem)] flex-1 overflow-y-auto p-2.5 sm:max-h-[72vh]">
               {isDragging && inactivePreviewItems ? (
                 inactivePreviewItems.length === 0 ? (
                   <div className="rounded border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
                     Drop here to remove from ping tree
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {inactivePreviewItems.map((item, itemIndex) => {
                       if (item.kind === "placeholder") {
                         return (
                           <DropPlaceholder
                             key={`inactive-placeholder-${itemIndex}`}
-                            height={dragSession?.height ?? 72}
+                            height={dragSession?.height ?? 92}
                             tone="inactive"
                           />
                         );
@@ -1541,9 +1585,9 @@ export function PingTreeSettingsPage({
                 </div>
               ) : (
                 inactiveGroups.map(([buyerLabel, cards]) => (
-                  <div key={buyerLabel} className="mb-3 last:mb-0">
-                    <h4 className="mb-1.5 px-1 text-lg font-bold text-slate-900 sm:text-xl dark:text-slate-100">{buyerLabel}</h4>
-                    <div className="space-y-2">
+                  <div key={buyerLabel} className="mb-3.5 last:mb-0">
+                    <h4 className="mb-2 px-1 text-lg font-bold text-slate-900 sm:text-xl dark:text-slate-100">{buyerLabel}</h4>
+                    <div className="space-y-2.5">
                       {cards.map((card) => {
                         const index = inactiveDisplayOrder.findIndex((item) => item.id === card.id);
                         const position =

@@ -37,6 +37,18 @@ function uniqueKeys(keys: string[]) {
   return Array.from(new Set(keys));
 }
 
+/** Keep only keys that exist in the current catalog; never return an empty selection. */
+export function normalizeVisibleColumnKeys(
+  selected: string[] | null | undefined,
+  allKeys: string[]
+): string[] {
+  if (allKeys.length === 0) return [];
+  if (!selected?.length) return allKeys;
+
+  const valid = uniqueKeys(selected.filter((key) => allKeys.includes(key)));
+  return valid.length > 0 ? valid : allKeys;
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
@@ -61,7 +73,12 @@ export function readVisibleColumnKeys(storageKey: string): StoredColumnVisibilit
 
     // Legacy format: string[]
     if (isStringArray(parsed)) {
-      return { selectedKeys: parsed, knownKeys: parsed };
+      const knownKeys = uniqueKeys(parsed);
+      if (knownKeys.length === 0) return null;
+      return {
+        selectedKeys: normalizeVisibleColumnKeys(parsed, knownKeys),
+        knownKeys,
+      };
     }
 
     if (
@@ -70,10 +87,10 @@ export function readVisibleColumnKeys(storageKey: string): StoredColumnVisibilit
       isStringArray((parsed as StoredColumnVisibility).selectedKeys) &&
       isStringArray((parsed as StoredColumnVisibility).knownKeys)
     ) {
-      return {
-        selectedKeys: (parsed as StoredColumnVisibility).selectedKeys,
-        knownKeys: (parsed as StoredColumnVisibility).knownKeys,
-      };
+      const stored = parsed as StoredColumnVisibility;
+      const knownKeys = uniqueKeys(stored.knownKeys);
+      const selectedKeys = normalizeVisibleColumnKeys(stored.selectedKeys, knownKeys);
+      return { selectedKeys, knownKeys };
     }
 
     return null;
@@ -86,7 +103,12 @@ export function writeVisibleColumnKeys(storageKey: string, value: StoredColumnVi
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(`${STORAGE_PREFIX}${storageKey}`, JSON.stringify(value));
+    const knownKeys = uniqueKeys(value.knownKeys);
+    const selectedKeys = normalizeVisibleColumnKeys(value.selectedKeys, knownKeys);
+    window.localStorage.setItem(
+      `${STORAGE_PREFIX}${storageKey}`,
+      JSON.stringify({ selectedKeys, knownKeys })
+    );
   } catch {
     // Ignore quota / private-mode write failures.
   }
@@ -302,16 +324,18 @@ export function usePersistedVisibleColumnKeys(
     // While dynamic columns are still loading, keep the stored selection intact.
     if (catalogIncomplete) {
       sessionSelectedRef.current = stored?.selectedKeys ?? selectedSource;
-      setVisibleColumnKeysState(nextSelected.filter((key) => allColumnKeys.includes(key)));
+      const visibleNow = normalizeVisibleColumnKeys(nextSelected, allColumnKeys);
+      setVisibleColumnKeysState(visibleNow);
       return;
     }
 
     const nextKnown = uniqueKeys([...priorKnown, ...allColumnKeys]);
+    const resolvedSelected = normalizeVisibleColumnKeys(nextSelected, allColumnKeys);
     knownKeysRef.current = nextKnown;
-    sessionSelectedRef.current = nextSelected;
-    setVisibleColumnKeysState(nextSelected);
+    sessionSelectedRef.current = resolvedSelected;
+    setVisibleColumnKeysState(resolvedSelected);
     writeVisibleColumnKeys(storageKey, {
-      selectedKeys: nextSelected,
+      selectedKeys: resolvedSelected,
       knownKeys: nextKnown,
     });
   }, [allColumnKeys, ready, storageKey]);
@@ -328,12 +352,16 @@ export function usePersistedVisibleColumnKeys(
       // Preserve selections for columns not in the current (incomplete) catalog.
       const available = new Set(allColumnKeys);
       const preservedHidden = (stored?.selectedKeys ?? []).filter((key) => !available.has(key));
-      const nextSelected = uniqueKeys([...keys, ...preservedHidden]);
+      const nextSelected = normalizeVisibleColumnKeys(
+        uniqueKeys([...keys, ...preservedHidden]),
+        uniqueKeys([...allColumnKeys, ...preservedHidden])
+      );
       const nextKnown = uniqueKeys([...priorKnown, ...nextSelected]);
+      const visibleNow = normalizeVisibleColumnKeys(keys, allColumnKeys);
 
       knownKeysRef.current = nextKnown;
       sessionSelectedRef.current = nextSelected;
-      setVisibleColumnKeysState(keys.filter((key) => available.has(key)));
+      setVisibleColumnKeysState(visibleNow);
       writeVisibleColumnKeys(storageKey, {
         selectedKeys: nextSelected,
         knownKeys: nextKnown,
@@ -342,9 +370,14 @@ export function usePersistedVisibleColumnKeys(
     [allColumnKeys, storageKey]
   );
 
+  const effectiveVisibleKeys = useMemo(
+    () => normalizeVisibleColumnKeys(visibleColumnKeys, allColumnKeys),
+    [allColumnKeys, visibleColumnKeys]
+  );
+
   return {
     visibleColumnKeys,
     setVisibleColumnKeys,
-    effectiveVisibleKeys: visibleColumnKeys ?? allColumnKeys,
+    effectiveVisibleKeys,
   };
 }

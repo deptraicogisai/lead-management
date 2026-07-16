@@ -3,6 +3,7 @@ import {
   formatPublisherLeadMoney,
   formatPublisherLeadRedirectDelivery,
   normalizePublisherLeadPingTreeAllocations,
+  resolvePublisherChannelLabel,
   resolvePublisherLeadDetailStatus,
   resolvePublisherLeadMoneyMetrics,
   resolvePublisherRedirectLabel,
@@ -13,7 +14,7 @@ import {
   formatBuyerLeadPrice,
   resolveBuyerLeadMoneyMetrics,
 } from "@/lib/buyer-lead-details";
-import { formatDateTimeDisplay } from "@/lib/date-range";
+import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 import {
   PING_TREE_PROCESSING_TYPES,
@@ -396,7 +397,7 @@ function buildFilterLogRowFromDelivery(
   return {
     id: delivery.id,
     date: delivery.postedAt,
-    dateLabel: formatDateTimeDisplay(delivery.postedAt),
+    dateLabel: formatDateDisplay(delivery.postedAt),
     buyerLabel: formatIndexedLabel(delivery.buyerCompany, delivery.buyerDisplayId),
     campaignId: delivery.campaignId,
     campaignLabel: formatIndexedLabel(delivery.campaignName, delivery.campaignDisplayId),
@@ -704,6 +705,10 @@ export function buildLeadDetailRecord(params: {
   fieldLabelsByName?: Map<string, string>;
   filterLog?: LeadDetailFilterLogEntry[];
   filterProcessing?: LeadDetailFilterProcessingSection[];
+  channelMapping?: {
+    displayId?: number | null;
+    apiName?: string | null;
+  } | null;
 }): LeadDetailRecord {
   const money = resolvePublisherLeadMoneyMetrics({
     soldPrice: params.soldPrice,
@@ -713,9 +718,7 @@ export function buildLeadDetailRecord(params: {
   const redirectLabel = isRedirectCampaign
     ? formatPublisherLeadRedirectDelivery(params.acceptedDelivery)
     : resolvePublisherRedirectLabel(params.redirectConfirmedAt);
-  const channelName =
-    readPayloadString(params.payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
-  const channelId = readPayloadString(params.payload, ["channel_id", "channelId"]) || "2";
+  const publisherChannel = resolvePublisherChannelLabel(params.payload, params.channelMapping);
   const sourceName =
     readPayloadString(params.payload, [
       "source",
@@ -751,7 +754,7 @@ export function buildLeadDetailRecord(params: {
     redirectConfirmed: isLeadRedirectConfirmed({ redirectConfirmedAt: params.redirectConfirmedAt }),
     redirectUrl: params.redirectUrl?.trim() || "",
     publisherLabel: params.publisherLabel,
-    publisherChannel: `[${channelId}] ${channelName}`,
+    publisherChannel,
     publisherSource,
     method,
     buyerLabel: params.buyerLabel?.trim() || "",

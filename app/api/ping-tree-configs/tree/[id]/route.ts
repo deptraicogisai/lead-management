@@ -8,6 +8,11 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { sortInactiveCampaignsByBuyerMinPrice, type PingTreeCampaignCard, type PingTreeRecord } from "@/lib/ping-tree";
 import { normalizeCampaignTestMocks, sanitizeCampaignTestMock } from "@/lib/campaign-test-mock";
+import {
+  DEFAULT_SILENT_POSTING_MODE,
+  isSilentPostingMode,
+  normalizeSilentPostingMode,
+} from "@/lib/ping-tree-config";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,6 +21,7 @@ type ConfigTreeUpdatePayload = {
   inactiveCampaignIds?: string[];
   campaignPriorities?: Record<string, number>;
   campaignTestMocks?: Record<string, unknown | null>;
+  silentPostingMode?: string;
 };
 
 /** Each Ping Tree config keeps its own independent drag-drop arrangement. */
@@ -50,6 +56,7 @@ function toSyntheticTreeRecord(config: {
   displayId?: number | null;
   name?: string;
   processingType?: unknown;
+  silentPostingMode?: unknown;
   activeCampaignIds?: string[];
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -60,6 +67,7 @@ function toSyntheticTreeRecord(config: {
     name: config.name ?? "",
     campaignType: configCampaignType(config.processingType),
     strategy: "Priority",
+    silentPostingMode: normalizeSilentPostingMode(config.silentPostingMode ?? DEFAULT_SILENT_POSTING_MODE),
     activeCampaignIds: config.activeCampaignIds ?? [],
     createdAt: config.createdAt ? new Date(config.createdAt as string).toISOString() : "",
     updatedAt: config.updatedAt ? new Date(config.updatedAt as string).toISOString() : "",
@@ -202,6 +210,10 @@ export async function PATCH(req: Request, context: Params) {
 
       config.set("campaignTestMocks", existing);
       config.markModified("campaignTestMocks");
+    }
+
+    if (configCampaignType(config.processingType) === "Silent" && isSilentPostingMode(body.silentPostingMode)) {
+      config.set("silentPostingMode", body.silentPostingMode);
     }
 
     await config.save();

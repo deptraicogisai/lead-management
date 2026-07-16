@@ -10,6 +10,7 @@ import {
   PingTreeConfigModel,
 } from "@/lib/models/ping-tree-config";
 import {
+  DEFAULT_SILENT_POSTING_MODE,
   isPingTreePostingType,
   isPingTreeProcessingType,
   resolveInitialPingTreePercent,
@@ -107,6 +108,7 @@ export async function POST(req: Request) {
       comment: body.comment?.trim() || "",
       processingType: body.processingType,
       postingType: isPingTreePostingType(body.postingType) ? body.postingType : "Direct Post",
+      silentPostingMode: DEFAULT_SILENT_POSTING_MODE,
       verticalRef: vertical._id,
       percent: resolveInitialPingTreePercent(existingTreeCount),
       status: "Active",

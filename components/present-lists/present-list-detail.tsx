@@ -274,7 +274,7 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
             isRefreshing={isRefreshing}
             loadingMessage="Loading values..."
           >
-            <DataTable columns={columns} rows={values} emptyMessage="No values yet." />
+            <DataTable scrollShell={false} columns={columns} rows={values} emptyMessage="No values yet." />
           </ListTableContainer>
         </div>
 

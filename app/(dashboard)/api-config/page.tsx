@@ -99,11 +99,15 @@ export default function ApiConfigPage() {
       key: "displayId",
       label: "ID",
       sortValue: (row) => row.displayId ?? 0,
+      headerClassName: "w-16 whitespace-nowrap",
+      className: "w-16 whitespace-nowrap align-middle",
       render: (row) => <IdBadge id={row.displayId ?? "-"} />,
     },
     {
       key: "apiName",
       label: "Publisher Channel",
+      headerClassName: "whitespace-nowrap",
+      className: "whitespace-nowrap",
       render: (row) => <span className="font-medium">{row.apiName}</span>,
     },
     {
@@ -132,6 +136,8 @@ export default function ApiConfigPage() {
       key: "actions",
       label: "Actions",
       sortable: false,
+      headerClassName: "whitespace-nowrap",
+      className: "whitespace-nowrap",
       render: (row) => (
         <div className="flex flex-wrap items-center gap-2">
           <TableActionButton icon={Pencil} onClick={() => setEditingRow(row)}>
@@ -190,6 +196,7 @@ export default function ApiConfigPage() {
           skeletonRows={8}
         >
           <DataTable<SellerVertical>
+            scrollShell={false}
             columns={verticalColumns}
             rows={verticalRows}
             emptyMessage="No publisher channels configured for this publisher yet."

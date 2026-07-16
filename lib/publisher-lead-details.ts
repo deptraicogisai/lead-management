@@ -267,13 +267,42 @@ function readPayloadString(payload: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
-/** Shown as Publisher Channel in lead detail lists. */
-export function resolvePublisherChannelLabel(payload: Record<string, unknown> | null | undefined) {
-  if (!payload) return "[2] Organic";
-  const channelName =
-    readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]) || "Organic";
-  const channelId = readPayloadString(payload, ["channel_id", "channelId"]) || "2";
-  return `[${channelId}] ${channelName}`;
+/** Publisher Channel = Vertical Mapping identified by intake API key. */
+export type PublisherChannelMappingInfo = {
+  displayId?: number | null;
+  apiName?: string | null;
+};
+
+export function formatPublisherChannelMappingLabel(
+  mapping: PublisherChannelMappingInfo | null | undefined
+) {
+  const name = mapping?.apiName?.trim() || "";
+  if (!name) return "";
+  const displayId = typeof mapping?.displayId === "number" ? mapping.displayId : null;
+  return displayId != null ? `[${displayId}] ${name}` : name;
+}
+
+/**
+ * Shown as Publisher Channel in lead detail lists.
+ * Prefer the Vertical Mapping matched by API key (`mappingRef`); payload is legacy fallback only.
+ */
+export function resolvePublisherChannelLabel(
+  payload: Record<string, unknown> | null | undefined,
+  mapping?: PublisherChannelMappingInfo | null
+) {
+  const fromMapping = formatPublisherChannelMappingLabel(mapping);
+  if (fromMapping) return fromMapping;
+
+  if (!payload) return "—";
+
+  const channelName = readPayloadString(payload, ["channel", "publisher_channel", "publisherChannel"]);
+  const channelId = readPayloadString(payload, ["channel_id", "channelId"]);
+
+  if (channelName.startsWith("[")) return channelName;
+  if (channelId && channelName) return `[${channelId}] ${channelName}`;
+  if (channelName) return channelName;
+  if (channelId) return `[${channelId}]`;
+  return "—";
 }
 
 /** Posted lead `source` is Publisher Source — only resolve once. */
@@ -522,6 +551,7 @@ export function mapLeadDocToPublisherRow(input: {
   verticalName: string;
   verticalIndex: number;
   mappingLabel?: string;
+  channelMapping?: PublisherChannelMappingInfo | null;
   pingTreeAllocations?: PublisherLeadPingTreeAllocation[];
   acceptedDelivery?: PublisherLeadAcceptedDelivery | null;
   buyerRevenue?: number | null;
@@ -563,7 +593,7 @@ export function mapLeadDocToPublisherRow(input: {
     ref: readPayloadMoney(payload, ["ref", "referral"]),
     agn: readPayloadMoney(payload, ["agn", "agent"]),
     productLabel: formatIndexedLabel(input.verticalName, input.verticalIndex),
-    channelLabel: resolvePublisherChannelLabel(payload),
+    channelLabel: resolvePublisherChannelLabel(payload, input.channelMapping),
     publisherSource: resolvePublisherSourceLabel(payload),
     pingTreeLabel: formatPublisherLeadPingTreeLabel(pingTreeAllocations),
     pingTreeAllocations,

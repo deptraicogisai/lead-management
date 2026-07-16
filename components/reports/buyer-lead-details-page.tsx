@@ -21,6 +21,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import {
   ColumnVisibilitySelect,
+  normalizeVisibleColumnKeys,
   usePersistedVisibleColumnKeys,
 } from "@/components/ui/column-visibility-select";
 import { InfoPopover } from "@/components/ui/info-popover";
@@ -354,27 +355,25 @@ export function BuyerLeadDetailsPage() {
     setIsExporting(true);
     setExportOpen(false);
 
-    const selectedKeys =
-      visibleColumnKeys ??
-      [
-        "postedAt",
-        "postStatus",
-        "displayLeadCode",
-        "productLabel",
-        "buyerLabel",
-        "campaignLabel",
-        "pingTreeLabel",
-        "redirectLabel",
-        "postPrice",
-        "pub",
-        "adm",
-        "ttl",
-        "publisherLabel",
-        "publisherChannel",
-        "publisherSource",
-        "publisherTag",
-        "responseTimeLabel",
-      ];
+    const selectedKeys = normalizeVisibleColumnKeys(visibleColumnKeys, [
+      "postedAt",
+      "postStatus",
+      "displayLeadCode",
+      "productLabel",
+      "buyerLabel",
+      "campaignLabel",
+      "pingTreeLabel",
+      "redirectLabel",
+      "postPrice",
+      "pub",
+      "adm",
+      "ttl",
+      "publisherLabel",
+      "publisherChannel",
+      "publisherSource",
+      "publisherTag",
+      "responseTimeLabel",
+    ]);
 
     try {
       if (mode === "all-pages") {
@@ -510,7 +509,14 @@ export function BuyerLeadDetailsPage() {
       },
       {
         key: "ttl",
-        label: "TTL",
+        label: (
+          <InfoPopover
+            title={METRIC_COLUMN_HINTS.ttl.title}
+            description={METRIC_COLUMN_HINTS.ttl.description}
+          >
+            TTL
+          </InfoPopover>
+        ),
         sortValue: (row) => row.ttl,
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">{row.ttl}</span>
@@ -811,6 +817,7 @@ export function BuyerLeadDetailsPage() {
               rows={rows}
               filterQuery={pageFilter}
               emptyMessage="No buyer deliveries found."
+              stickyHeader
             />
 
             <div className="mt-4">

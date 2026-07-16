@@ -111,6 +111,24 @@ export function formatDateTimeDisplay(value: Date | string) {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
+export function formatDateDisplay(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    if (typeof value === "string") {
+      const slashDate = value.trim().match(/^(\d{2}\/\d{2}\/\d{4})/);
+      if (slashDate) return slashDate[1];
+      return value;
+    }
+    return "";
+  }
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
 export function formatDateRangeDisplay(from: Date, to: Date) {
   return `${formatDateTimeDisplay(from)} - ${formatDateTimeDisplay(to)}`;
 }

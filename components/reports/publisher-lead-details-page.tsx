@@ -20,6 +20,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import {
   ColumnVisibilitySelect,
+  normalizeVisibleColumnKeys,
   usePersistedVisibleColumnKeys,
 } from "@/components/ui/column-visibility-select";
 import { InfoPopover } from "@/components/ui/info-popover";
@@ -348,22 +349,20 @@ export function PublisherLeadDetailsPage() {
     setIsExporting(true);
     setExportOpen(false);
 
-    const selectedKeys =
-      visibleColumnKeys ??
-      [
-        "displayCode",
-        "postedAt",
-        "statusLabel",
-        "publisherLabel",
-        "channelLabel",
-        "publisherSource",
-        "redirectLabel",
-        "publisherPayout",
-        "adm",
-        "ttl",
-        "productLabel",
-        ...fieldColumns.map((field) => `field:${field.fieldName}`),
-      ];
+    const selectedKeys = normalizeVisibleColumnKeys(visibleColumnKeys, [
+      "displayCode",
+      "postedAt",
+      "statusLabel",
+      "publisherLabel",
+      "channelLabel",
+      "publisherSource",
+      "redirectLabel",
+      "publisherPayout",
+      "adm",
+      "ttl",
+      "productLabel",
+      ...fieldColumns.map((field) => `field:${field.fieldName}`),
+    ]);
 
     try {
       if (mode === "all-pages") {
@@ -494,7 +493,14 @@ export function PublisherLeadDetailsPage() {
       },
       {
         key: "ttl",
-        label: "TTL",
+        label: (
+          <InfoPopover
+            title={METRIC_COLUMN_HINTS.ttl.title}
+            description={METRIC_COLUMN_HINTS.ttl.description}
+          >
+            TTL
+          </InfoPopover>
+        ),
         sortValue: (row) => row.ttl,
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">{row.ttl}</span>
@@ -730,6 +736,7 @@ export function PublisherLeadDetailsPage() {
                   selectedRowIds={selectedIds}
                   onToggleRow={toggleRowSelection}
                   onToggleAllRows={toggleAllRows}
+                  stickyHeader
                 />
 
                 <div className="mt-4">

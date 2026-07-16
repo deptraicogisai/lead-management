@@ -4,7 +4,8 @@ import { PingTreeConfigModel } from "@/lib/models/ping-tree-config";
 import { connectToDatabase } from "@/lib/mongodb";
 import { normalizeCampaignTestMocks } from "@/lib/campaign-test-mock";
 import type { PingTreeCampaignType } from "@/lib/ping-tree";
-import type { PingTreeProcessingType } from "@/lib/ping-tree-config";
+import type { PingTreeProcessingType, SilentPostingMode } from "@/lib/ping-tree-config";
+import { normalizeSilentPostingMode } from "@/lib/ping-tree-config";
 import {
   isPublisherDistributionType,
   type PublisherDistributionType,
@@ -30,6 +31,7 @@ export type SelectedPingTreeConfig = {
   name: string;
   displayId: number | null;
   processingType: PingTreeProcessingType;
+  silentPostingMode: SilentPostingMode;
   activeCampaignIds: string[];
   inactiveCampaignIds: string[];
   campaignPriorities: Record<string, number>;
@@ -147,6 +149,7 @@ function toSelectedPingTreeConfig(doc: {
   displayId?: number | null;
   name?: string;
   processingType?: string;
+  silentPostingMode?: string | null;
   activeCampaignIds?: string[];
   inactiveCampaignIds?: string[];
   campaignPriorities?: Record<string, number> | Map<string, number>;
@@ -179,6 +182,7 @@ function toSelectedPingTreeConfig(doc: {
     name: doc.name?.trim() || "Ping Tree",
     displayId: doc.displayId ?? null,
     processingType,
+    silentPostingMode: normalizeSilentPostingMode(doc.silentPostingMode),
     activeCampaignIds: doc.activeCampaignIds ?? [],
     inactiveCampaignIds: doc.inactiveCampaignIds ?? [],
     campaignPriorities: priorities,

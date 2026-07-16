@@ -869,7 +869,7 @@ function SystemBuyerFlow({ log }: { log: MappingTestLeadLogRecord }) {
   return (
     <FlowSection
       title="System → Buyer"
-      description="Redirect API posts Main processing and Silent in parallel (independent tabs). Within Redirect, stop after the first Accept; Silent continues through all active campaigns on its tree. Silent API posts Silent tab only."
+      description="Redirect API posts Main processing and Silent in parallel (independent tabs). Within Redirect, stop after the first Accept. Silent follows the tree Posting Mode: Priority (top-to-bottom, stop on Accept) or Parallel Pings (All Sold). Silent API posts Silent tab only."
     >
       {buyerSnapshot.skipped ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">

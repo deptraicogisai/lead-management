@@ -18,10 +18,15 @@ import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-
 import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
 import { ensureTrafficSourceForLead } from "@/lib/traffic-source-server";
 import { extractSource } from "@/lib/traffic-source";
-import { isTrafficSourceAllowed } from "@/lib/models/traffic-source";
+import { isTrafficSourceAllowed, normalizeTrafficSourceStatus } from "@/lib/models/traffic-source";
+import {
+  isPublisherIntakePaused,
+  PUBLISHER_INTAKE_ACCESS_DENIED_MESSAGES,
+} from "@/lib/publisher-intake-access";
 import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import {
   buildPublisherAcceptedResponse,
+  buildPublisherAccessDeniedResponse,
   buildPublisherErrorResponse,
   buildPublisherRejectedResponse,
 } from "@/lib/publisher-response-status";
@@ -67,6 +72,7 @@ type SellerMapping = {
   sellerRef?: { toString(): string } | string;
   verticalRef?: { toString(): string } | string;
   apiType?: string | null;
+  status?: string | null;
   fields?: MappingApiField[];
   apiRequest?: MappingApiRequest | null;
   timezone?: string | null;
@@ -509,6 +515,62 @@ export async function handleSellerLeadPost(req: Request) {
     }
     sellerRefForLog = seller._id;
 
+    if (isPublisherIntakePaused(seller.status)) {
+      const reasons = [PUBLISHER_INTAKE_ACCESS_DENIED_MESSAGES.publisherPaused];
+      const responsePayload = buildPublisherAccessDeniedResponse(reasons);
+
+      await persistRejectedSellerLead({
+        sellerRef: seller._id,
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        mappingRef: matchedMapping._id as RefValue,
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
+
+      await createSellerIntakeLog({
+        sellerRef: seller._id,
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        endpointUrl,
+        requestPayload: body,
+        responseBody: JSON.stringify(responsePayload),
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
+        deliveryStatus: "fail",
+        httpStatus: 403,
+      });
+
+      return NextResponse.json(responsePayload, { status: 403 });
+    }
+
+    if (isPublisherIntakePaused(matchedMapping.status)) {
+      const reasons = [PUBLISHER_INTAKE_ACCESS_DENIED_MESSAGES.publisherPaused];
+      const responsePayload = buildPublisherAccessDeniedResponse(reasons);
+
+      await persistRejectedSellerLead({
+        sellerRef: seller._id,
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        mappingRef: matchedMapping._id as RefValue,
+        payload,
+        reasons,
+        postedAt,
+        userAgent,
+      });
+
+      await createSellerIntakeLog({
+        sellerRef: seller._id,
+        verticalRef: matchedMapping.verticalRef as RefValue,
+        endpointUrl,
+        requestPayload: body,
+        responseBody: JSON.stringify(responsePayload),
+        errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
+        deliveryStatus: "fail",
+        httpStatus: 403,
+      });
+
+      return NextResponse.json(responsePayload, { status: 403 });
+    }
+
     const verticalRefId = matchedMapping.verticalRef?.toString() ?? "";
     const vertical = verticalRefId && Types.ObjectId.isValid(verticalRefId)
       ? await VerticalModel.findById(verticalRefId).lean()
@@ -525,32 +587,63 @@ export async function handleSellerLeadPost(req: Request) {
           sourceName: source,
         });
 
-        if (trafficSource && !isTrafficSourceAllowed(trafficSource.status)) {
-          const reasons = ["Source is not allowed"];
-          const responsePayload = buildLeadRejectResponse(reasons);
+        if (trafficSource) {
+          const sourceStatus = normalizeTrafficSourceStatus(trafficSource.status);
+          if (sourceStatus === "Paused") {
+            const reasons = [PUBLISHER_INTAKE_ACCESS_DENIED_MESSAGES.publisherSourcePaused];
+            const responsePayload = buildPublisherAccessDeniedResponse(reasons);
 
-          await persistRejectedSellerLead({
-            sellerRef: seller._id,
-            verticalRef: vertical?._id,
-            mappingRef: matchedMapping._id,
-            payload,
-            reasons,
-            postedAt,
-            userAgent,
-          });
+            await persistRejectedSellerLead({
+              sellerRef: seller._id,
+              verticalRef: vertical?._id,
+              mappingRef: matchedMapping._id,
+              payload,
+              reasons,
+              postedAt,
+              userAgent,
+            });
 
-          await createSellerIntakeLog({
-            sellerRef: seller._id,
-            verticalRef: vertical?._id,
-            endpointUrl,
-            requestPayload: body,
-            responseBody: JSON.stringify(responsePayload),
-            errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
-            deliveryStatus: "fail",
-            httpStatus: 400,
-          });
+            await createSellerIntakeLog({
+              sellerRef: seller._id,
+              verticalRef: vertical?._id,
+              endpointUrl,
+              requestPayload: body,
+              responseBody: JSON.stringify(responsePayload),
+              errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
+              deliveryStatus: "fail",
+              httpStatus: 403,
+            });
 
-          return NextResponse.json(responsePayload, { status: 400 });
+            return NextResponse.json(responsePayload, { status: 403 });
+          }
+
+          if (!isTrafficSourceAllowed(trafficSource.status)) {
+            const reasons = ["Source is not allowed"];
+            const responsePayload = buildLeadRejectResponse(reasons);
+
+            await persistRejectedSellerLead({
+              sellerRef: seller._id,
+              verticalRef: vertical?._id,
+              mappingRef: matchedMapping._id,
+              payload,
+              reasons,
+              postedAt,
+              userAgent,
+            });
+
+            await createSellerIntakeLog({
+              sellerRef: seller._id,
+              verticalRef: vertical?._id,
+              endpointUrl,
+              requestPayload: body,
+              responseBody: JSON.stringify(responsePayload),
+              errorMessage: resolvePublisherReasonMessage(responsePayload.reasons as PublisherReasons),
+              deliveryStatus: "fail",
+              httpStatus: 400,
+            });
+
+            return NextResponse.json(responsePayload, { status: 400 });
+          }
         }
       } catch (trafficSourceError) {
         console.error("Failed to ensure traffic source:", trafficSourceError);
