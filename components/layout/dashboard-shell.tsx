@@ -24,27 +24,32 @@ function DashboardScaledShell({ session, children }: { session: AuthSession; chi
 
   return (
     <>
-      {/* Font scale only wraps dashboard chrome — not the settings drawer. */}
-      <div
-        className="dashboard-font-scale min-h-[100dvh] bg-slate-100 dark:bg-slate-950"
-        style={fontScaleFactor === 1 ? undefined : { zoom: fontScaleFactor }}
-        suppressHydrationWarning
-      >
+      <div className="min-h-[100dvh] bg-slate-100 dark:bg-slate-950">
+        {/* Fixed sidebar / mobile nav stay outside zoom — zoom breaks position:fixed layout. */}
         <Sidebar />
         <MobileNavDrawer />
 
-        <main
+        {/* Unzoomed padding matches sidebar width; only page content scales. */}
+        <div
           className={cn(
             "min-h-[100dvh] transition-[padding-left] duration-300 ease-in-out",
             collapsed ? "lg:pl-[4.5rem]" : "lg:pl-64"
           )}
         >
-          <div className="mobile-app-shell">
-            <DashboardChrome session={session} onOpenSettings={openSettings}>
-              {children}
-            </DashboardChrome>
+          <div
+            className="dashboard-font-scale"
+            style={fontScaleFactor === 1 ? undefined : { zoom: fontScaleFactor }}
+            suppressHydrationWarning
+          >
+            <main className="min-h-[100dvh]">
+              <div className="mobile-app-shell">
+                <DashboardChrome session={session} onOpenSettings={openSettings}>
+                  {children}
+                </DashboardChrome>
+              </div>
+            </main>
           </div>
-        </main>
+        </div>
       </div>
 
       <SystemSettingsDrawer open={settingsOpen} onClose={closeSettings} />

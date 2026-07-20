@@ -5,14 +5,25 @@ import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { SidebarNavContent } from "@/components/layout/sidebar-nav-content";
 import { useSidebarLayout } from "@/components/layout/sidebar-layout-context";
+import {
+  getFixedElementFontScaleStyle,
+  getSystemFontScaleFactor,
+  useSystemSettings,
+} from "@/components/settings/system-settings-context";
 import { cn } from "@/lib/utils";
 
 export function MobileNavDrawer() {
   const pathname = usePathname();
   const { mobileOpen, mobileNavShown, closeMobileNav } = useSidebarLayout();
+  const { fontScale } = useSystemSettings();
+  const fontScaleFactor = getSystemFontScaleFactor(fontScale);
   const panelRef = useRef<HTMLElement>(null);
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const panelScaleStyle = getFixedElementFontScaleStyle(fontScaleFactor, {
+    width: "min(88vw, 20rem)",
+    height: "100dvh",
+  });
 
   useEffect(() => {
     closeMobileNav();
@@ -78,8 +89,10 @@ export function MobileNavDrawer() {
 
       <aside
         ref={panelRef}
+        style={panelScaleStyle}
         className={cn(
-          "mobile-nav-panel absolute left-0 top-0 flex h-[100dvh] w-[min(88vw,20rem)] flex-col border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40",
+          "mobile-nav-panel absolute left-0 top-0 flex flex-col border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40",
+          fontScaleFactor === 1 && "h-[100dvh] w-[min(88vw,20rem)]",
           mobileOpen ? "mobile-nav-panel-open" : "mobile-nav-panel-closed"
         )}
       >

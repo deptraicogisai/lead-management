@@ -57,6 +57,23 @@ export function getSystemFontScaleFactor(scale: SystemFontScale) {
   return scale === "default" ? 1 : Number(scale) / 100;
 }
 
+/**
+ * Apply zoom on a `position: fixed` element without breaking layout.
+ * Compensates width/height so the visual box stays the intended size while
+ * typography and spacing inside scale with the font setting.
+ */
+export function getFixedElementFontScaleStyle(
+  factor: number,
+  layout: { width: string; height: string }
+): { zoom: number; width: string; height: string } | undefined {
+  if (factor === 1) return undefined;
+  return {
+    zoom: factor,
+    width: `calc((${layout.width}) / ${factor})`,
+    height: `calc((${layout.height}) / ${factor})`,
+  };
+}
+
 export function resetSystemFontScale() {
   document.documentElement.style.fontSize = "";
   document.documentElement.style.removeProperty("--app-font-scale");

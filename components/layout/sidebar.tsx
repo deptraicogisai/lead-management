@@ -4,19 +4,34 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { SidebarNavContent } from "@/components/layout/sidebar-nav-content";
 import { useSidebarLayout } from "@/components/layout/sidebar-layout-context";
 import { SidebarTooltip } from "@/components/layout/sidebar-tooltip";
+import {
+  getFixedElementFontScaleStyle,
+  getSystemFontScaleFactor,
+  useSystemSettings,
+} from "@/components/settings/system-settings-context";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const { collapsed, toggleCollapsed } = useSidebarLayout();
+  const { fontScale } = useSystemSettings();
   const isLargeScreen = useMediaQuery("(min-width: 1024px)");
   const navCollapsed = collapsed && isLargeScreen;
+  const fontScaleFactor = getSystemFontScaleFactor(fontScale);
+  const layoutWidth = navCollapsed ? "4.5rem" : "16rem";
+  const scaleStyle = getFixedElementFontScaleStyle(fontScaleFactor, {
+    width: layoutWidth,
+    height: "100dvh",
+  });
 
   return (
     <aside
+      style={scaleStyle}
       className={cn(
-        "fixed left-0 top-0 z-20 hidden h-screen flex-col overflow-hidden border-r border-slate-200 bg-white py-5 shadow-sm transition-[width,padding] duration-300 ease-in-out lg:flex dark:border-slate-700 dark:bg-slate-900",
-        navCollapsed ? "w-[4.5rem] px-2" : "w-64 px-3"
+        "fixed left-0 top-0 z-20 hidden flex-col overflow-hidden border-r border-slate-200 bg-white py-5 shadow-sm transition-[width,padding] duration-300 ease-in-out lg:flex dark:border-slate-700 dark:bg-slate-900",
+        fontScaleFactor === 1 && "h-screen",
+        fontScaleFactor === 1 && (navCollapsed ? "w-[4.5rem] px-2" : "w-64 px-3"),
+        fontScaleFactor !== 1 && (navCollapsed ? "px-2" : "px-3")
       )}
     >
       <div className={cn("mb-5 shrink-0", navCollapsed ? "px-0" : "px-1")}>
