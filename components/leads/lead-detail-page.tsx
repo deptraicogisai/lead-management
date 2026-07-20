@@ -21,6 +21,7 @@ import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageSection } from "@/components/ui/state";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
 import type {
   LeadDetailFilterLogRow,
@@ -28,12 +29,13 @@ import type {
   LeadDetailRecord,
   LeadDetailTab,
 } from "@/lib/lead-detail";
+import { formatRedirectClickDateLabel } from "@/lib/lead-detail";
 import { cn } from "@/lib/utils";
 import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
 
-function formatFilterLogDateCell(row: LeadDetailFilterLogRow) {
+function formatFilterLogDateCell(row: LeadDetailFilterLogRow, timeZone: string) {
   if (row.date) {
-    return formatDateDisplay(row.date);
+    return formatDateDisplay(row.date, timeZone);
   }
 
   const trimmed = row.dateLabel.trim();
@@ -212,6 +214,7 @@ function FilterLogDetailRow({
   row: LeadDetailFilterLogRow;
   onOpenLog: (row: LeadDetailFilterLogRow) => void;
 }) {
+  const { timeZone } = useSystemSettings();
   const statusNormalized = row.status.trim().toLowerCase();
   const showMessageIcon =
     statusNormalized.includes("reject") ||
@@ -230,7 +233,7 @@ function FilterLogDetailRow({
       )}
     >
       <td className="whitespace-nowrap px-4 py-2.5 align-middle tabular-nums text-slate-700 dark:text-slate-200">
-        {formatFilterLogDateCell(row)}
+        {formatFilterLogDateCell(row, timeZone)}
       </td>
       <td className="w-[11rem] max-w-[11rem] px-4 py-2.5 align-middle text-slate-800 dark:text-slate-100">
         <span className="line-clamp-2 break-words" title={row.buyerLabel}>
@@ -309,6 +312,7 @@ function FilterLogDetailRow({
 }
 
 export function LeadDetailPage() {
+  const { timeZone } = useSystemSettings();
   const params = useParams<{ id: string }>();
   const leadIdParam = typeof params?.id === "string" ? params.id : "";
   const [lead, setLead] = useState<LeadDetailRecord | null>(null);
@@ -513,7 +517,9 @@ export function LeadDetailPage() {
                   <CopyableValue value={lead.publicLeadId} />
                 </InfoRow>
                 <InfoRow label="ID">{lead.sequenceId}</InfoRow>
-                <InfoRow label="Date">{lead.postedAtLabel}</InfoRow>
+                <InfoRow label="Date">
+                  {formatDateTimeDisplay(lead.postedAt, timeZone)}
+                </InfoRow>
                 <InfoRow label="Product">{lead.productLabel}</InfoRow>
                 <InfoRow label="Status">
                   <StatusBadge status={lead.statusLabel} />
@@ -606,10 +612,12 @@ export function LeadDetailPage() {
                             className="border-t border-slate-200 align-top dark:border-slate-700"
                           >
                             <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
-                              {row.dateLabel}
+                              {formatDateTimeDisplay(row.date, timeZone)}
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
-                              {row.clickDateLabel}
+                              {row.clickDate
+                                ? formatRedirectClickDateLabel(row.clickDate, row.date, timeZone)
+                                : "—"}
                             </td>
                             <td className="px-4 py-3">
                               {row.campaignId ? (
@@ -859,9 +867,9 @@ export function LeadDetailPage() {
       }
       postedAt={
         logRow?.date
-          ? formatDateTimeDisplay(logRow.date)
+          ? formatDateTimeDisplay(logRow.date, timeZone)
           : logRow?.dateLabel && logRow.dateLabel !== "—"
-            ? formatDateTimeDisplay(logRow.dateLabel)
+            ? formatDateTimeDisplay(logRow.dateLabel, timeZone)
             : undefined
       }
       buyerStatus={logRow?.status}

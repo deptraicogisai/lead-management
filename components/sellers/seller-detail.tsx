@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { Contact, CreditCard, Download, Info, Network, Pencil, Settings2, Share2, X } from "lucide-react";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { IdBadge } from "@/components/ui/id-badge";
 import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -319,17 +320,17 @@ export function SellerDetail({ seller }: SellerDetailProps) {
           {renderRow(
             "Status",
             isEditing ? (
-              <select
+              <DropdownSelect
                 value={form.status}
-                onChange={(event) => updateForm("status", event.target.value as SellerDetailRecord["status"])}
+                options={SELLER_STATUS_OPTIONS.map((option) => ({
+                  value: option,
+                  label: option,
+                }))}
+                onChange={(status) =>
+                  updateForm("status", status as SellerDetailRecord["status"])
+                }
                 className={cn(selectClassName, EDIT_FIELD_WIDTH)}
-              >
-                {SELLER_STATUS_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              />
             ) : (
               <StatusBadge status={seller.status} />
             )

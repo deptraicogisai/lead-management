@@ -2,7 +2,6 @@ import {
   buildGeneralFiltersFromVerticalFields,
   defaultCampaignDuplicates,
   isGeneralFilterRangeValid,
-  resolveCampaignTimezone,
   SCHEDULE_DAY_OPTIONS,
   syncGeneralFiltersWithFields as syncGeneralFiltersWithVerticalFields,
   type CampaignDuplicatesSettings,
@@ -19,6 +18,8 @@ import {
   isValueInRangeFilter,
   type FieldOptionLike,
 } from "@/lib/lead-field-value";
+import { resolveCampaignTimezone, resolveIanaTimeZone } from "@/lib/timezones";
+import { getZonedDateTimeParts, getZonedDayRange } from "@/lib/date-range";
 
 export type MappingIntakeSettingsRecord = {
   timezone: string;
@@ -55,15 +56,9 @@ function formatPayloadValueForMessage(value: unknown) {
   return String(value);
 }
 
-const TIMEZONE_IANA_MAP: Record<string, string> = {
-  "New York (EST/EDT)": "America/New_York",
-  "Chicago (CST/CDT)": "America/Chicago",
-  "Denver (MST/MDT)": "America/Denver",
-  "Los Angeles (PST/PDT)": "America/Los_Angeles",
-  "Phoenix (MST)": "America/Phoenix",
-  "Hanoi (ICT)": "Asia/Ho_Chi_Minh",
-  UTC: "UTC",
-};
+function resolveTimezone(timezone: string) {
+  return resolveIanaTimeZone(timezone);
+}
 
 export function buildGeneralFiltersFromMappingFields(fields: MappingFieldDoc[]): CampaignGeneralFilter[] {
   return buildGeneralFiltersFromVerticalFields(
@@ -420,33 +415,8 @@ export async function evaluateDuplicateRules(
   return reasons;
 }
 
-function resolveTimezone(timezone: string) {
-  return TIMEZONE_IANA_MAP[timezone] ?? TIMEZONE_IANA_MAP[resolveCampaignTimezone(timezone)] ?? "UTC";
-}
-
 function getZonedParts(date: Date, timezone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: resolveTimezone(timezone),
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-
-  const parts = formatter.formatToParts(date);
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-
-  return {
-    dayLabel: lookup.weekday ?? "Mon",
-    hour: lookup.hour ?? "00",
-    minute: lookup.minute ?? "00",
-    year: lookup.year ?? "1970",
-    month: lookup.month ?? "01",
-    day: lookup.day ?? "01",
-  };
+  return getZonedDateTimeParts(date, resolveTimezone(timezone));
 }
 
 function scheduleRuleTimeToMinutes(hour: string, minute: string) {
@@ -462,23 +432,7 @@ function ruleMatchesNow(rule: CampaignScheduleRule, dayLabel: string, minutesNow
   return minutesNow >= start && minutesNow <= end;
 }
 
-function getStartOfZonedDay(date: Date, timezone: string) {
-  const parts = getZonedParts(date, timezone);
-  const iso = `${parts.year}-${parts.month}-${parts.day}T00:00:00`;
-  const utcGuess = new Date(iso);
-  const offsetFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: resolveTimezone(timezone),
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const midnightParts = offsetFormatter.formatToParts(utcGuess);
-  const lookup = Object.fromEntries(midnightParts.map((part) => [part.type, part.value]));
-  const hour = Number(lookup.hour ?? 0);
-  const minute = Number(lookup.minute ?? 0);
-  return new Date(utcGuess.getTime() - (hour * 60 + minute) * 60_000);
-}
-
+/** `to` is exclusive (next local midnight in the schedule timezone). */
 type LeadCountFn = (mappingId: string, from: Date, to: Date, validationStatus?: "success") => Promise<number>;
 
 export async function evaluateScheduleRules(
@@ -491,7 +445,13 @@ export async function evaluateScheduleRules(
   const activeRules = settings.scheduleRules.filter((rule) => rule.active);
   if (activeRules.length === 0) return reasons;
 
-  const zoned = getZonedParts(postedAt, settings.timezone);
+  const timezone = resolveTimezone(settings.timezone);
+  const zoned = getZonedParts(postedAt, timezone);
+  if (!zoned) {
+    reasons.push(`Schedule rejected. Unable to evaluate current time in timezone ${timezone}.`);
+    return reasons;
+  }
+
   const minutesNow = scheduleRuleTimeToMinutes(zoned.hour, zoned.minute);
   const matchingRules = activeRules.filter((rule) => ruleMatchesNow(rule, zoned.dayLabel, minutesNow));
 
@@ -502,12 +462,17 @@ export async function evaluateScheduleRules(
   const postRules = activeRules.filter((rule) => rule.action === "Post");
   if (postRules.length > 0 && !matchingRules.some((rule) => rule.action === "Post")) {
     reasons.push(
-      `Schedule rejected. Current time (${zoned.dayLabel} ${zoned.hour}:${zoned.minute}, ${settings.timezone}) is outside the allowed posting schedule.`
+      `Schedule rejected. Current time (${zoned.dayLabel} ${zoned.hour}:${zoned.minute}, ${timezone}) is outside the allowed posting schedule.`
     );
   }
 
-  const dayStart = getStartOfZonedDay(postedAt, settings.timezone);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const dayRange = getZonedDayRange(postedAt, timezone);
+  if (!dayRange) {
+    reasons.push(`Schedule rejected. Unable to resolve the current day boundary in timezone ${timezone}.`);
+    return reasons;
+  }
+
+  const { start: dayStart, endExclusive: dayEnd } = dayRange;
 
   for (const rule of matchingRules.filter((item) => item.action === "Post")) {
     if (rule.dailyPostLeadsLimit != null && rule.dailyPostLeadsLimit >= 0) {

@@ -9,6 +9,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
 import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { formatDateTimeDisplay } from "@/lib/date-range";
 import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
 import { toast } from "@/lib/toast";
@@ -46,6 +47,7 @@ function formatRequestType(value: LogRow["requestType"]) {
 }
 
 export default function LogsPage() {
+  const { timeZone } = useSystemSettings();
   const [rows, setRows] = useState<LogRow[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -217,7 +219,7 @@ export default function LogsPage() {
       sortValue: (row) => new Date(row.createdAt).getTime(),
       render: (row) => (
         <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">
-          {formatDateTimeDisplay(row.createdAt)}
+          {formatDateTimeDisplay(row.createdAt, timeZone)}
         </span>
       ),
     },
@@ -330,7 +332,9 @@ export default function LogsPage() {
             ? `${formatRequestType(selectedLog.requestType)} | ${selectedLog.sellerName || "—"} | ${selectedLog.verticalName || "—"}`
             : undefined
         }
-        postedAt={selectedLog ? formatDateTimeDisplay(selectedLog.createdAt) : undefined}
+        postedAt={
+          selectedLog ? formatDateTimeDisplay(selectedLog.createdAt, timeZone) : undefined
+        }
         deliveryStatus={selectedLog?.deliveryStatus}
         httpStatus={selectedLog?.httpStatus}
         postLeadUrl={selectedLog?.postLeadUrl}

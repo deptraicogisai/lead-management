@@ -4,6 +4,8 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CancelButton, PrimaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   DATE_RANGE_PRESETS,
   endOfDay,
@@ -13,11 +15,13 @@ import {
   getMonthLabel,
   isDateInRange,
   isSameDay,
-  parseDateRangeStrings,
+  hasExplicitTimeZone,
+  parseDateTimeInTimeZone,
   parseDateTimeValue,
-  resolveDateRangePreset,
+  resolveDateRangePresetInTimeZone,
   startOfDay,
-  toDateRangeStrings,
+  toTimeZoneDateRangeStrings,
+  toTimeZoneWallClockDate,
   type DateRangePreset,
   type DateRangeStrings,
 } from "@/lib/date-range";
@@ -39,8 +43,43 @@ type DraftRange = {
 
 const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-function buildDraft(value: DateRangeStrings, preset: DateRangePreset = "today"): DraftRange {
-  const parsed = parseDateRangeStrings(value) ?? resolveDateRangePreset("today");
+function parsePickerWallClock(value: string, timeZone: string) {
+  if (!value.trim()) return null;
+
+  // Explicit UTC/offset values are converted into the selected zone's wall clock.
+  if (hasExplicitTimeZone(value)) {
+    const instant = parseDateTimeValue(value);
+    return instant ? toTimeZoneWallClockDate(instant, timeZone) : null;
+  }
+
+  // Timezone-less values are already civil wall-clock fields for the selected zone.
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,3}))?$/);
+  if (!match) return null;
+
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6] ?? 0),
+    Number((match[7] ?? "0").padEnd(3, "0"))
+  );
+}
+
+function buildDraft(
+  value: DateRangeStrings,
+  timeZone: string,
+  preset: DateRangePreset = "today"
+): DraftRange {
+  const parsedFrom = parsePickerWallClock(value.from, timeZone);
+  const parsedTo = parsePickerWallClock(value.to, timeZone);
+  const parsed =
+    parsedFrom && parsedTo
+      ? { from: parsedFrom, to: parsedTo }
+      : resolveDateRangePresetInTimeZone("today", timeZone);
   return {
     preset,
     from: parsed.from,
@@ -72,41 +111,38 @@ function TimeSelects({
     <div className="space-y-1">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
       <div className="flex items-center gap-1">
-        <select
-          value={date.getHours()}
-          onChange={(event) => updatePart("hours", event.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
-        >
-          {Array.from({ length: 24 }, (_, hour) => (
-            <option key={hour} value={hour}>
-              {hour}
-            </option>
-          ))}
-        </select>
+        <DropdownSelect
+          value={String(date.getHours())}
+          options={Array.from({ length: 24 }, (_, hour) => ({
+            value: String(hour),
+            label: String(hour),
+          }))}
+          onChange={(value) => updatePart("hours", value)}
+          size="compact"
+          className="w-[4.25rem]"
+        />
         <span className="text-xs text-slate-400">:</span>
-        <select
-          value={date.getMinutes()}
-          onChange={(event) => updatePart("minutes", event.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
-        >
-          {Array.from({ length: 60 }, (_, minute) => (
-            <option key={minute} value={minute}>
-              {String(minute).padStart(2, "0")}
-            </option>
-          ))}
-        </select>
+        <DropdownSelect
+          value={String(date.getMinutes())}
+          options={Array.from({ length: 60 }, (_, minute) => ({
+            value: String(minute),
+            label: String(minute).padStart(2, "0"),
+          }))}
+          onChange={(value) => updatePart("minutes", value)}
+          size="compact"
+          className="w-[4.25rem]"
+        />
         <span className="text-xs text-slate-400">:</span>
-        <select
-          value={date.getSeconds()}
-          onChange={(event) => updatePart("seconds", event.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
-        >
-          {Array.from({ length: 60 }, (_, second) => (
-            <option key={second} value={second}>
-              {String(second).padStart(2, "0")}
-            </option>
-          ))}
-        </select>
+        <DropdownSelect
+          value={String(date.getSeconds())}
+          options={Array.from({ length: 60 }, (_, second) => ({
+            value: String(second),
+            label: String(second).padStart(2, "0"),
+          }))}
+          onChange={(value) => updatePart("seconds", value)}
+          size="compact"
+          className="w-[4.25rem]"
+        />
       </div>
     </div>
   );
@@ -170,16 +206,22 @@ function MonthGrid({
 }
 
 export function DateRangePicker({ id, value, onChange, className }: DateRangePickerProps) {
+  const { timeZone } = useSystemSettings();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<DraftRange>(() => buildDraft(value, "today"));
+  const [draft, setDraft] = useState<DraftRange>(() => buildDraft(value, timeZone, "today"));
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const previousTimeZoneRef = useRef(timeZone);
 
-  const parsedValue = useMemo(() => parseDateRangeStrings(value), [value]);
+  const parsedValue = useMemo(() => {
+    const from = parseDateTimeInTimeZone(value.from, timeZone);
+    const to = parseDateTimeInTimeZone(value.to, timeZone);
+    return from && to ? { from, to } : null;
+  }, [timeZone, value]);
   const displayLabel = parsedValue
-    ? formatDateRangeDisplay(parsedValue.from, parsedValue.to)
+    ? formatDateRangeDisplay(parsedValue.from, parsedValue.to, timeZone)
     : "Select date range";
 
   const rightMonth = useMemo(
@@ -195,12 +237,27 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
       }
 
       setOpen(false);
-      setDraft(buildDraft(value, draft.preset));
+      setDraft(buildDraft(value, timeZone, draft.preset));
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [draft.preset, value]);
+  }, [draft.preset, timeZone, value]);
+
+  useEffect(() => {
+    const previousTimeZone = previousTimeZoneRef.current;
+    previousTimeZoneRef.current = timeZone;
+    if (!value.from || !value.to) return;
+
+    const fromWallClock = parsePickerWallClock(value.from, previousTimeZone);
+    const toWallClock = parsePickerWallClock(value.to, previousTimeZone);
+    if (!fromWallClock || !toWallClock) return;
+
+    const normalized = toTimeZoneDateRangeStrings(fromWallClock, toWallClock, timeZone);
+    if (normalized.from !== value.from || normalized.to !== value.to) {
+      onChange(normalized);
+    }
+  }, [onChange, timeZone, value]);
 
   useEffect(() => {
     if (!open) {
@@ -236,12 +293,12 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
   }, [open]);
 
   const openPicker = () => {
-    setDraft(buildDraft(value, draft.preset));
+    setDraft(buildDraft(value, timeZone, draft.preset));
     setOpen(true);
   };
 
   const applyPreset = (preset: DateRangePreset) => {
-    const range = resolveDateRangePreset(preset);
+    const range = resolveDateRangePresetInTimeZone(preset, timeZone);
     setDraft({
       preset,
       from: range.from,
@@ -298,12 +355,12 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
   };
 
   const handleApply = () => {
-    onChange(toDateRangeStrings(draft.from, draft.to));
+    onChange(toTimeZoneDateRangeStrings(draft.from, draft.to, timeZone));
     setOpen(false);
   };
 
   const handleCancel = () => {
-    setDraft(buildDraft(value, draft.preset));
+    setDraft(buildDraft(value, timeZone, draft.preset));
     setOpen(false);
   };
 

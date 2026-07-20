@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
@@ -579,17 +580,13 @@ export default function IndustryFieldsPage() {
         renderFieldCell(
           row,
           <span className="text-slate-700 dark:text-slate-200">{formatVerticalFieldTypeLabel(row.type)}</span>,
-          <select
+          <DropdownSelect
             value={(editDraft?.type ?? row.type).toLowerCase()}
-            onChange={(event) => updateEditDraft({ type: event.target.value })}
+            options={dataTypeOptions}
+            onChange={(type) => updateEditDraft({ type })}
+            size="compact"
             className={inlineSelectClass}
-          >
-            {dataTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          />
         ),
     },
     {
@@ -599,14 +596,16 @@ export default function IndustryFieldsPage() {
         renderFieldCell(
           row,
           <span className="text-slate-700 dark:text-slate-200">{row.required ? "Yes" : "No"}</span>,
-          <select
+          <DropdownSelect
             value={editDraft?.required ? "yes" : "no"}
-            onChange={(event) => updateEditDraft({ required: event.target.value === "yes" })}
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ]}
+            onChange={(required) => updateEditDraft({ required: required === "yes" })}
+            size="compact"
             className={inlineSelectClass}
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
+          />
         ),
     },
     {
@@ -616,14 +615,18 @@ export default function IndustryFieldsPage() {
         renderFieldCell(
           row,
           <span className="text-slate-700 dark:text-slate-200">{row.displayArrayMapping ? "Yes" : "No"}</span>,
-          <select
+          <DropdownSelect
             value={editDraft?.displayArrayMapping ? "yes" : "no"}
-            onChange={(event) => updateEditDraft({ displayArrayMapping: event.target.value === "yes" })}
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ]}
+            onChange={(displayArrayMapping) =>
+              updateEditDraft({ displayArrayMapping: displayArrayMapping === "yes" })
+            }
+            size="compact"
             className={inlineSelectClass}
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
+          />
         ),
     },
     {
@@ -633,17 +636,18 @@ export default function IndustryFieldsPage() {
         renderFieldCell(
           row,
           <span className="text-slate-700 dark:text-slate-200">{row.dataTypeFilter ?? "-"}</span>,
-          <select
+          <DropdownSelect
             value={editDraft?.dataTypeFilter ?? ""}
-            onChange={(event) => updateEditDraft({ dataTypeFilter: event.target.value || null })}
+            options={VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => ({
+              value: option,
+              label: option || "-",
+            }))}
+            onChange={(dataTypeFilter) =>
+              updateEditDraft({ dataTypeFilter: dataTypeFilter || null })
+            }
+            size="compact"
             className={inlineSelectClass}
-          >
-            {VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => (
-              <option key={option || "none"} value={option}>
-                {option || "-"}
-              </option>
-            ))}
-          </select>
+          />
         ),
     },
     {
@@ -951,77 +955,72 @@ export default function IndustryFieldsPage() {
 
           <div>
             <FieldLabel htmlFor="create-data-type" label="Data Type" />
-            <select
+            <DropdownSelect
               id="create-data-type"
               value={createDraft.type.toLowerCase()}
-              onChange={(event) => updateCreateDraft({ type: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              {dataTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={dataTypeOptions}
+              onChange={(type) => updateCreateDraft({ type })}
+            />
           </div>
 
           <div>
             <FieldLabel htmlFor="create-required" label="Required" />
-            <select
+            <DropdownSelect
               id="create-required"
               value={createDraft.required ? "yes" : "no"}
-              onChange={(event) => updateCreateDraft({ required: event.target.value === "yes" })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
+              options={[
+                { value: "no", label: "No" },
+                { value: "yes", label: "Yes" },
+              ]}
+              onChange={(required) => updateCreateDraft({ required: required === "yes" })}
+            />
           </div>
 
           <div>
             <FieldLabel htmlFor="create-display-array" label="Display Array Mapping" />
-            <select
+            <DropdownSelect
               id="create-display-array"
               value={createDraft.displayArrayMapping ? "yes" : "no"}
-              onChange={(event) => updateCreateDraft({ displayArrayMapping: event.target.value === "yes" })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
+              options={[
+                { value: "no", label: "No" },
+                { value: "yes", label: "Yes" },
+              ]}
+              onChange={(displayArrayMapping) =>
+                updateCreateDraft({ displayArrayMapping: displayArrayMapping === "yes" })
+              }
+            />
           </div>
 
           <div>
             <FieldLabel htmlFor="create-data-type-filter" label="Data Type Filter" />
-            <select
+            <DropdownSelect
               id="create-data-type-filter"
               value={createDraft.dataTypeFilter}
-              onChange={(event) => updateCreateDraft({ dataTypeFilter: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              {VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => (
-                <option key={option || "none"} value={option}>
-                  {option || "-"}
-                </option>
-              ))}
-            </select>
+              options={VERTICAL_DATA_TYPE_FILTER_OPTIONS.map((option) => ({
+                value: option,
+                label: option || "-",
+              }))}
+              onChange={(dataTypeFilter) => updateCreateDraft({ dataTypeFilter })}
+            />
           </div>
 
           {createDraft.type.trim().toLowerCase() === "email" ? (
             <>
               <div>
                 <FieldLabel htmlFor="create-email-duplicate-mode" label="Email Duplicate Rule" />
-                <select
+                <DropdownSelect
                   id="create-email-duplicate-mode"
                   value={createDraft.emailDuplicateMode}
-                  onChange={(event) =>
-                    updateCreateDraft({ emailDuplicateMode: event.target.value as "days" | "forever" })
+                  options={[
+                    { value: "days", label: "Unique within days" },
+                    { value: "forever", label: "Unique forever" },
+                  ]}
+                  onChange={(emailDuplicateMode) =>
+                    updateCreateDraft({
+                      emailDuplicateMode: emailDuplicateMode as "days" | "forever",
+                    })
                   }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                >
-                  <option value="days">Unique within days</option>
-                  <option value="forever">Unique forever</option>
-                </select>
+                />
               </div>
 
               {createDraft.emailDuplicateMode === "days" ? (

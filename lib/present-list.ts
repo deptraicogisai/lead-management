@@ -29,20 +29,20 @@ export type PresentListRecord = {
 export const PRESENT_LIST_TYPE_OPTIONS: PresentListType[] = ["PL", "DNPL"];
 export const PRESENT_LIST_EXPIRATION_OPTIONS = ["No expiration", "30 days", "60 days", "90 days", "180 days", "365 days"];
 
-const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-export function formatPresentListDateTime(value?: Date | string | null) {
+export function formatPresentListDateTime(value?: Date | string | null, timeZone?: string) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  const month = monthNames[date.getMonth()];
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${month} ${day} ${hours}:${minutes}:${seconds}`;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
 }
 
 type PresentListDoc = {

@@ -55,7 +55,7 @@ const campaignSchema = new Schema(
       configValues: { type: Schema.Types.Mixed, default: {} },
     },
     campaignType: { type: String, enum: ["Redirect", "Silent"], required: true },
-    timezone: { type: String, required: true, trim: true, default: "New York (EST/EDT)" },
+    timezone: { type: String, required: true, trim: true, default: "America/New_York" },
     minPrice: { type: Number, required: true, default: 0 },
     duplicates: { type: campaignDuplicatesSchema, default: () => ({}) },
     generalFilters: { type: [campaignGeneralFilterSchema], default: [] },

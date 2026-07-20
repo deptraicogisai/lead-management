@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { Modal } from "@/components/ui/modal";
 import { PrimaryButton } from "@/components/ui/form-controls";
 import {
@@ -86,18 +87,31 @@ export function CampaignScheduleRuleModal({ open, onClose, onSave, initialRule }
 
         <div>
           <FieldLabel htmlFor="schedule-action" label="Action" />
-          <select id="schedule-action" value={draft.action} onChange={(e) => setDraft((current) => ({ ...current, action: e.target.value as typeof draft.action }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            {SCHEDULE_ACTION_OPTIONS.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
+          <DropdownSelect
+            id="schedule-action"
+            value={draft.action}
+            options={SCHEDULE_ACTION_OPTIONS.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+            onChange={(action) =>
+              setDraft((current) => ({
+                ...current,
+                action: action as typeof current.action,
+              }))
+            }
+          />
         </div>
 
         <div>
           <FieldLabel htmlFor="schedule-method" label="Schedule Method" />
-          <select id="schedule-method" value={draft.scheduleMethod} disabled className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-            <option value="Days">Days</option>
-          </select>
+          <DropdownSelect
+            id="schedule-method"
+            value={draft.scheduleMethod}
+            options={[{ value: "Days", label: "Days" }]}
+            onChange={() => undefined}
+            disabled
+          />
         </div>
 
         <div className="md:col-span-2">
@@ -127,32 +141,42 @@ export function CampaignScheduleRuleModal({ open, onClose, onSave, initialRule }
         <div>
           <FieldLabel htmlFor="schedule-start-hour" label="Start time" />
           <div className="grid grid-cols-2 gap-2">
-            <select id="schedule-start-hour" value={draft.startHour} onChange={(e) => setDraft((current) => ({ ...current, startHour: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-              {hourOptions.map((hour) => (
-                <option key={`start-hour-${hour}`} value={hour}>{hour}</option>
-              ))}
-            </select>
-            <select value={draft.startMinute} onChange={(e) => setDraft((current) => ({ ...current, startMinute: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-              {minuteOptions.map((minute) => (
-                <option key={`start-minute-${minute}`} value={minute}>{minute}</option>
-              ))}
-            </select>
+            <DropdownSelect
+              id="schedule-start-hour"
+              value={draft.startHour}
+              options={hourOptions.map((hour) => ({ value: hour, label: hour }))}
+              onChange={(startHour) =>
+                setDraft((current) => ({ ...current, startHour }))
+              }
+            />
+            <DropdownSelect
+              value={draft.startMinute}
+              options={minuteOptions.map((minute) => ({ value: minute, label: minute }))}
+              onChange={(startMinute) =>
+                setDraft((current) => ({ ...current, startMinute }))
+              }
+            />
           </div>
         </div>
 
         <div>
           <FieldLabel htmlFor="schedule-end-hour" label="End time" />
           <div className="grid grid-cols-2 gap-2">
-            <select id="schedule-end-hour" value={draft.endHour} onChange={(e) => setDraft((current) => ({ ...current, endHour: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-              {hourOptions.map((hour) => (
-                <option key={`end-hour-${hour}`} value={hour}>{hour}</option>
-              ))}
-            </select>
-            <select value={draft.endMinute} onChange={(e) => setDraft((current) => ({ ...current, endMinute: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-              {minuteOptions.map((minute) => (
-                <option key={`end-minute-${minute}`} value={minute}>{minute}</option>
-              ))}
-            </select>
+            <DropdownSelect
+              id="schedule-end-hour"
+              value={draft.endHour}
+              options={hourOptions.map((hour) => ({ value: hour, label: hour }))}
+              onChange={(endHour) =>
+                setDraft((current) => ({ ...current, endHour }))
+              }
+            />
+            <DropdownSelect
+              value={draft.endMinute}
+              options={minuteOptions.map((minute) => ({ value: minute, label: minute }))}
+              onChange={(endMinute) =>
+                setDraft((current) => ({ ...current, endMinute }))
+              }
+            />
           </div>
         </div>
 

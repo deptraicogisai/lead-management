@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { BuyerAddModal } from "@/components/buyers/buyer-add-modal";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   AddNewButton,
   CancelButton,
@@ -27,7 +28,7 @@ import {
   SearchFilterPanel,
   SearchFilterSelect,
 } from "@/components/ui/search-filter-layout";
-import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
+import { buildEmptySearchDateRange, parseDateTimeInTimeZone } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
@@ -54,6 +55,7 @@ type BuyerListResponse = {
 const emptyDateRange = buildEmptySearchDateRange();
 
 export default function BuyersPage() {
+  const { timeZone } = useSystemSettings();
   const router = useRouter();
   const [buyerRows, setBuyerRows] = useState<BuyerListRecord[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
@@ -105,8 +107,8 @@ export default function BuyersPage() {
   }, [page, pageSize, reloadKey]);
 
   const filteredRows = useMemo(() => {
-    const fromDate = parseDateTimeValue(appliedFilters.dateFrom);
-    const toDate = parseDateTimeValue(appliedFilters.dateTo);
+    const fromDate = parseDateTimeInTimeZone(appliedFilters.dateFrom, timeZone);
+    const toDate = parseDateTimeInTimeZone(appliedFilters.dateTo, timeZone);
 
     return buyerRows.filter((row) => {
       const matchesAgent =
@@ -125,7 +127,7 @@ export default function BuyersPage() {
 
       return matchesAgent && matchesDateFrom && matchesDateTo && matchesTableFilter;
     });
-  }, [buyerRows, appliedFilters, tableFilter]);
+  }, [buyerRows, appliedFilters, tableFilter, timeZone]);
 
   const handleSearch = () => {
     setAppliedFilters({
@@ -308,7 +310,11 @@ export default function BuyersPage() {
       key: "createdAt",
       label: "Created",
       sortValue: (row) => (row.createdAt ? new Date(row.createdAt).getTime() : 0),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-xs">
+          {formatBuyerCreated(row.createdAt, timeZone)}
+        </span>
+      ),
     },
     {
       key: "status",

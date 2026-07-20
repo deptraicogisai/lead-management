@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
 import {
@@ -537,18 +538,16 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
           )}
           {renderDetailRow(
             "Status",
-            <select
+            <DropdownSelect
               id="buyer-status"
               value={status}
-              onChange={(event) => setStatus(event.target.value as BuyerStatus)}
+              options={BUYER_STATUS_DETAIL_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+              onChange={(nextStatus) => setStatus(nextStatus as BuyerStatus)}
               className={selectClassName}
-            >
-              {BUYER_STATUS_DETAIL_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            />
           )}
           {renderDetailRow(
             "Lead API",
@@ -626,32 +625,29 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                   </span>
                 ))}
 
-                <select
+                <DropdownSelect
                   id="buyer-available-integrations"
                   value={integrationPickerValue}
-                  onChange={(event) => {
-                    const value = event.target.value;
+                  options={availableIntegrationOptions.map((option) => ({
+                    value: option.id,
+                    label: option.label,
+                  }))}
+                  onChange={(value) => {
                     setIntegrationPickerValue(value);
                     addIntegration(value);
                   }}
-                  disabled={isLoadingIntegrations || availableIntegrationOptions.length === 0}
-                  className="min-w-[12rem] flex-1 border-0 bg-transparent py-1.5 text-sm text-slate-800 outline-none dark:text-slate-50"
-                >
-                  <option value="">
-                    {isLoadingIntegrations
+                  placeholder={
+                    isLoadingIntegrations
                       ? "Loading integrations..."
                       : availableIntegrationOptions.length === 0
                         ? selectedIntegrations.length > 0
                           ? ""
                           : "No integrations available"
-                        : "Select integration"}
-                  </option>
-                  {availableIntegrationOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                        : "Select integration"
+                  }
+                  disabled={isLoadingIntegrations || availableIntegrationOptions.length === 0}
+                  className="min-w-[12rem] flex-1"
+                />
               </div>
             </div>
           )}

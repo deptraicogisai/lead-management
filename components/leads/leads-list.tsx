@@ -9,6 +9,7 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { formatDateTimeDisplay } from "@/lib/date-range";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -50,6 +51,7 @@ function formatRawData(rawData: string) {
 }
 
 export function LeadsList() {
+  const { timeZone } = useSystemSettings();
   const [rows, setRows] = useState<LeadRow[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -101,7 +103,9 @@ export function LeadsList() {
       label: "Posted At",
       sortValue: (row) => new Date(row.postedAt).getTime(),
       render: (row) => (
-        <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">{row.postedAt ? formatDateTimeDisplay(row.postedAt) : ""}</span>
+        <span className="whitespace-nowrap text-xs text-slate-600 dark:text-slate-300">
+          {row.postedAt ? formatDateTimeDisplay(row.postedAt, timeZone) : ""}
+        </span>
       ),
     },
     {

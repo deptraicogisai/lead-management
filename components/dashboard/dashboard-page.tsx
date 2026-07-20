@@ -90,7 +90,7 @@ export function DashboardPageContent() {
 
       <DashboardActivityBar segments={data.activity} />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="space-y-4">
         <DashboardLineChart chart={data.publisherChart} />
         <DashboardLineChart chart={data.buyerChart} />
       </div>

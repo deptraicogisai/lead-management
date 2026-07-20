@@ -15,16 +15,18 @@ import { toast } from "@/lib/toast";
 import { FieldLabel, PrimaryButton, primaryButtonClassName, Checkbox } from "@/components/ui/form-controls";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import {
   DUPLICATE_METHOD_OPTIONS,
   DUPLICATE_PERIOD_OPTIONS,
-  TIMEZONE_OPTIONS,
   findScheduleRuleOverlap,
   getScheduleRuleOverlapMessage,
   groupGeneralFiltersForDisplay,
   normalizeGeneralFiltersForStorage,
   patchGeneralFilter,
   patchMultiSelectFilterPairEnabled,
+  resolveSelectableTimeZone,
   validateGeneralFilters,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
@@ -276,35 +278,34 @@ export function MappingIntakeSettingsTabs({
           </p>
           <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-duplicate-method" label="Duplicate Method" />
-            <select
+            <DropdownSelect
               id="mapping-duplicate-method"
               value={duplicatesForm.duplicateMethod}
-              onChange={(event) =>
-                setDuplicatesForm({ ...duplicatesForm, duplicateMethod: event.target.value as typeof duplicatesForm.duplicateMethod })
+              options={DUPLICATE_METHOD_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+              onChange={(duplicateMethod) =>
+                setDuplicatesForm({
+                  ...duplicatesForm,
+                  duplicateMethod: duplicateMethod as typeof duplicatesForm.duplicateMethod,
+                })
               }
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            >
-              {DUPLICATE_METHOD_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-duplicate-posted" label="Duplicate Posted" />
-            <select
+            <DropdownSelect
               id="mapping-duplicate-posted"
               value={duplicatesForm.duplicatePosted}
-              onChange={(event) => setDuplicatesForm({ ...duplicatesForm, duplicatePosted: event.target.value })}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            >
-              {DUPLICATE_PERIOD_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              options={DUPLICATE_PERIOD_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+              onChange={(duplicatePosted) =>
+                setDuplicatesForm({ ...duplicatesForm, duplicatePosted })
+              }
+            />
           </div>
           <div className="flex justify-end">
             <PrimaryButton
@@ -372,22 +373,14 @@ export function MappingIntakeSettingsTabs({
         <div className="space-y-4">
           <div className="grid max-w-md gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
             <FieldLabel htmlFor="mapping-timezone" label="Timezone" />
-            <select
+            <TimezoneSelect
               id="mapping-timezone"
-              value={settings.timezone}
-              onChange={(event) => {
-                const timezone = event.target.value;
+              value={resolveSelectableTimeZone(settings.timezone)}
+              onChange={(timezone) => {
                 setSettings({ ...settings, timezone });
                 void saveSection("schedule", { scheduleRules: settings.scheduleRules, timezone }, "Timezone saved successfully.");
               }}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            >
-              {TIMEZONE_OPTIONS.map((timezone) => (
-                <option key={timezone} value={timezone}>
-                  {timezone}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">

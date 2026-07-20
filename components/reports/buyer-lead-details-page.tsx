@@ -31,6 +31,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatusMultiSelect } from "@/components/ui/status-multi-select";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
 import { REPORT_PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import { downloadCsv } from "@/lib/csv-export";
@@ -40,6 +41,7 @@ import { useListLoadState } from "@/lib/use-list-load-state";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { getStatusBadgePresentation } from "@/lib/status-badge";
 import { publisherCellLinkClassName } from "@/lib/typography";
+import { parseDateTimeInTimeZone } from "@/lib/date-range";
 import {
   fetchPublisherChannelSourceOptions,
   serializeCommaSeparatedFilter,
@@ -47,7 +49,7 @@ import {
 } from "@/lib/publisher-channel-source-filters";
 import { cn } from "@/lib/utils";
 import {
-  defaultBuyerLeadDetailsFilters,
+  createDefaultBuyerLeadDetailsFilters,
   formatBuyerLeadTableTime,
   formatBuyerLeadTime,
   parseBuyerLeadDetailsFiltersFromSearchParams,
@@ -102,20 +104,24 @@ function RedirectCell({
   );
 }
 
-function buildDefaultFilters(searchParams?: Pick<URLSearchParams, "get">): BuyerLeadDetailsFilters {
+function buildDefaultFilters(
+  timeZone: string,
+  searchParams?: Pick<URLSearchParams, "get">
+): BuyerLeadDetailsFilters {
   return {
-    ...defaultBuyerLeadDetailsFilters,
+    ...createDefaultBuyerLeadDetailsFilters(timeZone),
     ...(searchParams ? parseBuyerLeadDetailsFiltersFromSearchParams(searchParams) : {}),
   };
 }
 
 export function BuyerLeadDetailsPage() {
   const searchParams = useSearchParams();
+  const { timeZone } = useSystemSettings();
   const [draftFilters, setDraftFilters] = useState<BuyerLeadDetailsFilters>(() =>
-    buildDefaultFilters(searchParams)
+    buildDefaultFilters(timeZone, searchParams)
   );
   const [appliedFilters, setAppliedFilters] = useState<BuyerLeadDetailsFilters>(() =>
-    buildDefaultFilters(searchParams)
+    buildDefaultFilters(timeZone, searchParams)
   );
   const [rows, setRows] = useState<BuyerLeadDetailsRow[]>([]);
   const [products, setProducts] = useState<FilterOption[]>([]);
@@ -183,8 +189,10 @@ export function BuyerLeadDetailsPage() {
       });
 
       if (filters.leadId.trim()) params.set("leadId", filters.leadId.trim());
-      if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
-      if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+      const dateFrom = parseDateTimeInTimeZone(filters.dateFrom, timeZone);
+      const dateTo = parseDateTimeInTimeZone(filters.dateTo, timeZone);
+      if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
+      if (dateTo) params.set("dateTo", dateTo.toISOString());
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
       const channelFilter = serializeCommaSeparatedFilter(filters.publisherChannel);
@@ -201,7 +209,7 @@ export function BuyerLeadDetailsPage() {
 
       return params.toString();
     },
-    []
+    [timeZone]
   );
 
   const loadRows = useCallback(
@@ -286,7 +294,7 @@ export function BuyerLeadDetailsPage() {
   };
 
   const handleClearAll = () => {
-    const defaults = buildDefaultFilters();
+    const defaults = buildDefaultFilters(timeZone);
     const firstProductId = products[0]?.id ?? "";
     const nextFilters = { ...defaults, productId: firstProductId };
     setDraftFilters(nextFilters);
@@ -301,7 +309,11 @@ export function BuyerLeadDetailsPage() {
       label: string;
       value: (row: BuyerLeadDetailsRow) => string;
     }> = [
-      { key: "postedAt", label: "Date", value: (row) => formatBuyerLeadTableTime(row.postedAt) },
+      {
+        key: "postedAt",
+        label: "Date",
+        value: (row) => formatBuyerLeadTableTime(row.postedAt, timeZone),
+      },
       { key: "postStatus", label: "Status", value: (row) => row.postStatus },
       { key: "displayLeadCode", label: "Lead ID", value: (row) => row.displayLeadCode },
       { key: "productLabel", label: "Product", value: (row) => row.productLabel },
@@ -401,7 +413,7 @@ export function BuyerLeadDetailsPage() {
         sortValue: (row) => new Date(row.postedAt).getTime(),
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
-            {formatBuyerLeadTableTime(row.postedAt)}
+            {formatBuyerLeadTableTime(row.postedAt, timeZone)}
           </span>
         ),
       },
@@ -562,7 +574,7 @@ export function BuyerLeadDetailsPage() {
         ),
       },
     ],
-    []
+    [timeZone]
   );
 
   const columnOptions = useMemo(
@@ -847,7 +859,7 @@ export function BuyerLeadDetailsPage() {
             ? `${viewRow.campaignLabel || "Campaign"} | ${viewRow.pingTreeName || viewRow.pingTreeType} | ${viewRow.buyerLabel || "Buyer"}`
             : undefined
         }
-        postedAt={viewRow ? formatBuyerLeadTime(viewRow.postedAt) : undefined}
+        postedAt={viewRow ? formatBuyerLeadTime(viewRow.postedAt, timeZone) : undefined}
         buyerStatus={viewRow?.postStatus}
         httpStatus={viewRow?.httpStatus}
         postLeadUrl={viewRow?.postLeadUrl}

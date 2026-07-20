@@ -77,6 +77,16 @@ html.dark body {
   color: #e2e8f0;
 }
 
+:root {
+  --app-font-scale: 1;
+}
+
+/* Login always uses the browser/default root size, even if a stale inline
+   font-size was left on <html> from a previous dashboard session. */
+html:has(.login-animate-shell) {
+  font-size: 100% !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -551,6 +561,57 @@ select:disabled {
 .dark .sidebar-nav-scroll::-webkit-scrollbar-thumb:hover,
 .dark .mobile-nav-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgb(100 116 139 / 0.85);
+}
+
+@keyframes dashboard-period-content-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dashboard-period-row-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.dashboard-period-result {
+  animation: dashboard-period-content-in 180ms ease-out both;
+}
+
+.dashboard-period-result tbody tr {
+  animation: dashboard-period-row-in 160ms ease-out both;
+}
+
+.dashboard-period-result tbody tr:nth-child(2) {
+  animation-delay: 20ms;
+}
+
+.dashboard-period-result tbody tr:nth-child(3) {
+  animation-delay: 35ms;
+}
+
+.dashboard-period-result tbody tr:nth-child(4) {
+  animation-delay: 50ms;
+}
+
+.dashboard-period-result tbody tr:nth-child(5) {
+  animation-delay: 65ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-period-result,
+  .dashboard-period-result tbody tr {
+    animation: none;
+  }
 }
 
 .mobile-safe-top {

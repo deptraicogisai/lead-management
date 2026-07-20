@@ -9,16 +9,24 @@ export type PublisherPerformanceFilters = {
   tableSearch: string;
 };
 
-const defaultDateRange = buildDefaultLeadDetailsDateRange();
+export function createDefaultPublisherPerformanceFilters(
+  timeZone: string
+): PublisherPerformanceFilters {
+  const defaultDateRange = buildDefaultLeadDetailsDateRange(timeZone);
+  return {
+    dateFrom: defaultDateRange.from,
+    dateTo: defaultDateRange.to,
+    productId: "",
+    publisherId: "",
+    publisherTag: "",
+    tableSearch: "",
+  };
+}
 
-export const defaultPublisherPerformanceFilters: PublisherPerformanceFilters = {
-  dateFrom: defaultDateRange.from,
-  dateTo: defaultDateRange.to,
-  productId: "",
-  publisherId: "",
-  publisherTag: "",
-  tableSearch: "",
-};
+/** @deprecated Prefer createDefaultPublisherPerformanceFilters(timeZone). */
+export const defaultPublisherPerformanceFilters = createDefaultPublisherPerformanceFilters(
+  "America/New_York"
+);
 
 /** Aggregated metrics for a single publisher (or the totals row). */
 export type PublisherPerformanceMetrics = {

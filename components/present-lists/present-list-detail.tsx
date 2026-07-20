@@ -6,6 +6,7 @@ import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
 import { IconActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import {
   SEARCH_FILTER_CONTROL_CLASS,
@@ -40,6 +41,7 @@ function formatDateInputValue(value: string | null) {
 }
 
 export function PresentListDetail({ listId }: PresentListDetailProps) {
+  const { timeZone } = useSystemSettings();
   const [list, setList] = useState<PresentListRecord | null>(null);
   useBreadcrumbLabel(list?.name ?? null);
   const [values, setValues] = useState<PresentListValueRecord[]>([]);
@@ -158,11 +160,16 @@ export function PresentListDetail({ listId }: PresentListDetailProps) {
 
   const columns: Column<PresentListValueRecord>[] = [
     { key: "value", label: "Value", render: (row) => row.value },
-    { key: "created", label: "Created Date", render: (row) => formatPresentListDateTime(row.createdAt) },
+    {
+      key: "created",
+      label: "Created Date",
+      render: (row) => formatPresentListDateTime(row.createdAt, timeZone),
+    },
     {
       key: "expiration",
       label: "Expiration Date",
-      render: (row) => (row.expirationDate ? formatPresentListDateTime(row.expirationDate) : "-"),
+      render: (row) =>
+        row.expirationDate ? formatPresentListDateTime(row.expirationDate, timeZone) : "-",
     },
     {
       key: "actions",

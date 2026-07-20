@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { resolveCampaignTimezone, type CampaignScheduleRule } from "@/lib/campaign";
+import { getTimezoneOptionLabel, type CampaignScheduleRule } from "@/lib/campaign";
 import {
   formatCalendarHeading,
   formatScheduleActionLabel,
@@ -10,6 +10,7 @@ import {
   formatScheduleTimeRange,
   getMonthGridDates,
   getRulesForDate,
+  getScheduleCalendarToday,
   getWeekDates,
   isSameCalendarDay,
   shiftCalendarDate,
@@ -35,7 +36,9 @@ function ScheduleRuleBlock({
       <p className="font-semibold uppercase">
         {formatScheduleActionLabel(rule.action)} {formatScheduleTimeRange(rule)}
       </p>
-      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{resolveCampaignTimezone(timezone)}</p>
+      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+        {getTimezoneOptionLabel(timezone, true)}
+      </p>
       <p>Sold cap: {formatScheduleCap(rule.dailySoldLeadsLimit)}</p>
       <p>Send cap: {formatScheduleCap(rule.dailyPostLeadsLimit)}</p>
     </div>
@@ -46,16 +49,18 @@ function CalendarDayCell({
   date,
   rules,
   timezone,
+  today,
   muted,
 }: {
   date: Date;
   rules: CampaignScheduleRule[];
   timezone: string;
+  today: Date;
   muted?: boolean;
 }) {
   const dayRules = getRulesForDate(rules, date);
   const hasRules = dayRules.length > 0;
-  const isToday = isSameCalendarDay(date, new Date());
+  const isToday = isSameCalendarDay(date, today);
 
   return (
     <div
@@ -94,17 +99,17 @@ function CalendarDayCell({
 
 export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCalendarProps) {
   const [view, setView] = useState<ScheduleCalendarView>("week");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => getScheduleCalendarToday(timezone));
 
   const heading = useMemo(() => formatCalendarHeading(currentDate, view), [currentDate, view]);
 
   const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
   const monthDates = useMemo(() => getMonthGridDates(currentDate), [currentDate]);
   const currentMonth = currentDate.getMonth();
-  const today = new Date();
+  const today = useMemo(() => getScheduleCalendarToday(timezone), [timezone]);
 
   const navigate = (direction: -1 | 0 | 1) => {
-    setCurrentDate(shiftCalendarDate(currentDate, view, direction));
+    setCurrentDate(shiftCalendarDate(currentDate, view, direction, timezone));
   };
 
   return (
@@ -159,7 +164,7 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
 
       {view === "day" ? (
         <div className="p-4">
-          <CalendarDayCell date={currentDate} rules={rules} timezone={timezone} />
+          <CalendarDayCell date={currentDate} rules={rules} timezone={timezone} today={today} />
         </div>
       ) : null}
 
@@ -185,7 +190,7 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
           </div>
           <div className="grid grid-cols-7">
             {weekDates.map((date) => (
-              <CalendarDayCell key={date.toISOString()} date={date} rules={rules} timezone={timezone} />
+              <CalendarDayCell key={date.toISOString()} date={date} rules={rules} timezone={timezone} today={today} />
             ))}
           </div>
         </div>
@@ -217,6 +222,7 @@ export function CampaignScheduleCalendar({ rules, timezone }: CampaignScheduleCa
                 date={date}
                 rules={rules}
                 timezone={timezone}
+                today={today}
                 muted={date.getMonth() !== currentMonth}
               />
             ))}

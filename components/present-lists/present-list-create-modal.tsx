@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CancelButton, FieldLabel, FormError, Input, PrimaryButton, cancelButtonClassName } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import {
@@ -182,79 +183,76 @@ export function PresentListCreateModal({
               className="cursor-not-allowed bg-slate-100 dark:bg-slate-800/80"
             />
           ) : (
-            <select
+            <DropdownSelect
               id="pl-product"
               value={form.verticalId}
-              onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value, applyToField: "" }))}
+              options={verticalOptions.map((option) => ({
+                value: option.id,
+                label: option.label,
+              }))}
+              onChange={(verticalId) =>
+                setForm((current) => ({ ...current, verticalId, applyToField: "" }))
+              }
+              placeholder="Please select"
               className={cn(
                 "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
                 Boolean(errors.verticalId) && fieldErrorBorderClassName
               )}
-            >
-              <option value="">Please select</option>
-              {verticalOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </div>
         <div>
           <FieldLabel htmlFor="pl-field" label="Apply To Field" />
           <FormError error={errors.applyToField} />
-          <select
+          <DropdownSelect
             id="pl-field"
             value={form.applyToField}
-            onChange={(e) => setForm((c) => ({ ...c, applyToField: e.target.value }))}
+            options={fieldOptions.map((field) => ({
+              value: field.fieldName,
+              label: field.fieldName,
+            }))}
+            onChange={(applyToField) =>
+              setForm((current) => ({ ...current, applyToField }))
+            }
+            placeholder="Please select"
             disabled={!verticalId}
             className={cn(
               "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:disabled:bg-slate-800/80",
               Boolean(errors.applyToField) && fieldErrorBorderClassName
             )}
-          >
-            <option value="">Please select</option>
-            {fieldOptions.map((field) => (
-              <option key={field.id} value={field.fieldName}>
-                {field.fieldName}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         <div>
           <FieldLabel htmlFor="pl-expiration" label="Default Expiration Period" />
-          <select
+          <DropdownSelect
             id="pl-expiration"
             value={form.defaultExpirationPeriod}
-            onChange={(e) => setForm((c) => ({ ...c, defaultExpirationPeriod: e.target.value }))}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-          >
-            {PRESENT_LIST_EXPIRATION_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            options={PRESENT_LIST_EXPIRATION_OPTIONS.map((option) => ({
+              value: option,
+              label: option,
+            }))}
+            onChange={(defaultExpirationPeriod) =>
+              setForm((current) => ({ ...current, defaultExpirationPeriod }))
+            }
+          />
         </div>
         <div>
           <FieldLabel htmlFor="pl-type" label="List Type" />
           <FormError error={errors.listType} />
-          <select
+          <DropdownSelect
             id="pl-type"
             value={form.listType}
-            onChange={(e) => setForm((c) => ({ ...c, listType: e.target.value }))}
+            options={PRESENT_LIST_TYPE_OPTIONS.map((type) => ({
+              value: type,
+              label: type,
+            }))}
+            onChange={(listType) => setForm((current) => ({ ...current, listType }))}
+            placeholder="Please select"
             className={cn(
               "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
               Boolean(errors.listType) && fieldErrorBorderClassName
             )}
-          >
-            <option value="">Please select</option>
-            {PRESENT_LIST_TYPE_OPTIONS.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         {isEditing ? (
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">

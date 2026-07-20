@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import {
   SearchableMultiSelect,
@@ -157,17 +158,15 @@ export function MappingRevShareSettingsTab({ sellerId, mappingId }: MappingRevSh
           </span>
         </label>
 
-        <select
+        <DropdownSelect
           value={settings.model}
-          onChange={(event) => updateModel(event.target.value as RevShareModelType)}
+          options={REV_SHARE_MODEL_OPTIONS.map((option) => ({
+            value: option,
+            label: formatRevShareModelLabel(option),
+          }))}
+          onChange={(model) => updateModel(model as RevShareModelType)}
           className={selectClassName}
-        >
-          {REV_SHARE_MODEL_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {formatRevShareModelLabel(option)}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       {settings.model === "static-percent" ? (

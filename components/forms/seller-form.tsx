@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import type { Seller } from "@/lib/mock-data";
 import { TagSuggestInput } from "@/components/ui/tag-suggest-input";
 import { FieldLabel, FormError, Input, PrimaryButton, CancelButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { normalizePublisherTag } from "@/lib/publisher-tag";
 
 const SELLER_STATUS_DETAIL_OPTIONS: Seller["status"][] = ["Active", "Inactive", "Deleted"];
@@ -131,18 +132,17 @@ export function SellerForm({ initialValues, isEditing = false, onSubmitSeller, o
 
       <div>
         <FieldLabel htmlFor="seller-status" label="Publisher Status" />
-        <select
+        <DropdownSelect
           id="seller-status"
           value={form.status}
-          onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as Seller["status"] }))}
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-        >
-          {SELLER_STATUS_DETAIL_OPTIONS.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
+          options={SELLER_STATUS_DETAIL_OPTIONS.map((status) => ({
+            value: status,
+            label: status,
+          }))}
+          onChange={(status) =>
+            setForm((previous) => ({ ...previous, status: status as Seller["status"] }))
+          }
+        />
       </div>
 
       <div className="flex items-center justify-end gap-3">

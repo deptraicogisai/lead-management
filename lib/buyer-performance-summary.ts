@@ -14,16 +14,20 @@ export type BuyerPerformanceFilters = {
   tableSearch: string;
 };
 
-const defaultDateRange = buildDefaultLeadDetailsDateRange();
+export function createDefaultBuyerPerformanceFilters(timeZone: string): BuyerPerformanceFilters {
+  const defaultDateRange = buildDefaultLeadDetailsDateRange(timeZone);
+  return {
+    dateFrom: defaultDateRange.from,
+    dateTo: defaultDateRange.to,
+    productId: "",
+    buyerId: "",
+    publisherId: "",
+    tableSearch: "",
+  };
+}
 
-export const defaultBuyerPerformanceFilters: BuyerPerformanceFilters = {
-  dateFrom: defaultDateRange.from,
-  dateTo: defaultDateRange.to,
-  productId: "",
-  buyerId: "",
-  publisherId: "",
-  tableSearch: "",
-};
+/** @deprecated Prefer createDefaultBuyerPerformanceFilters(timeZone). */
+export const defaultBuyerPerformanceFilters = createDefaultBuyerPerformanceFilters("America/New_York");
 
 export type BuyerPerformanceMetrics = {
   post: number;

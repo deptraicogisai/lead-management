@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,13 +14,36 @@ type ModalProps = {
   actions?: ReactNode;
   onClose?: () => void;
   panelClassName?: string;
+  className?: string;
+  disablePortal?: boolean;
 };
 
-export function Modal({ open, title, description, children, actions, onClose, panelClassName }: ModalProps) {
-  if (!open) return null;
+export function Modal({
+  open,
+  title,
+  description,
+  children,
+  actions,
+  onClose,
+  panelClassName,
+  className,
+  disablePortal = false,
+}: ModalProps) {
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-slate-950/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:py-6">
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!open || (!disablePortal && !mounted)) return null;
+
+  const content = (
+    <div
+      className={cn(
+        "animate-fade-in fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-slate-950/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:py-6",
+        className
+      )}
+    >
       <div
         className={cn(
           "animate-scale-in flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl",
@@ -57,4 +82,7 @@ export function Modal({ open, title, description, children, actions, onClose, pa
       </div>
     </div>
   );
+
+  if (disablePortal) return content;
+  return createPortal(content, document.body);
 }

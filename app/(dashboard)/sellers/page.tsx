@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SellerForm } from "@/components/forms/seller-form";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   AddNewButton,
   CancelButton,
@@ -24,7 +25,7 @@ import {
   SearchFilterGrid,
   SearchFilterPanel,
 } from "@/components/ui/search-filter-layout";
-import { buildEmptySearchDateRange, parseDateTimeValue } from "@/lib/date-range";
+import { buildEmptySearchDateRange, parseDateTimeInTimeZone } from "@/lib/date-range";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
@@ -60,6 +61,7 @@ function sellerDetailHref(row: Seller) {
 }
 
 export default function SellersPage() {
+  const { timeZone } = useSystemSettings();
   const [sellerRows, setSellerRows] = useState<Seller[]>([]);
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -120,8 +122,8 @@ export default function SellersPage() {
   }, [page, pageSize, reloadKey, appliedFilters.nameEmail, appliedFilters.statusFilter]);
 
   const filteredRows = useMemo(() => {
-    const fromDate = parseDateTimeValue(appliedFilters.dateFrom);
-    const toDate = parseDateTimeValue(appliedFilters.dateTo);
+    const fromDate = parseDateTimeInTimeZone(appliedFilters.dateFrom, timeZone);
+    const toDate = parseDateTimeInTimeZone(appliedFilters.dateTo, timeZone);
 
     return sellerRows.filter((row) => {
       const matchesStatus =
@@ -151,7 +153,7 @@ export default function SellersPage() {
 
       return matchesStatus && matchesNameEmail && matchesDateFrom && matchesDateTo && matchesTableFilter;
     });
-  }, [sellerRows, appliedFilters, tableFilter]);
+  }, [sellerRows, appliedFilters, tableFilter, timeZone]);
 
   const handleSearch = () => {
     setAppliedFilters({
@@ -277,7 +279,11 @@ export default function SellersPage() {
       key: "createdAt",
       label: "Created",
       sortValue: (row) => (row.createdAt ? new Date(row.createdAt).getTime() : 0),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatBuyerCreated(row.createdAt)}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-xs">
+          {formatBuyerCreated(row.createdAt, timeZone)}
+        </span>
+      ),
     },
     {
       key: "status",

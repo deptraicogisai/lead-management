@@ -13,6 +13,7 @@ import {
 import { ChevronDown, Download } from "lucide-react";
 import { SearchButton } from "@/components/ui/action-buttons";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { FieldLabel } from "@/components/ui/form-controls";
 import {
   SEARCH_FILTER_DATE_RANGE_CLASS,
@@ -38,9 +39,10 @@ import { filterRecordsByQuery } from "@/lib/table-filter";
 import { sortTableRows, type SortDirection, type TableSortState } from "@/lib/table-sort";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
+import { parseDateTimeInTimeZone } from "@/lib/date-range";
 import { cn } from "@/lib/utils";
 import {
-  defaultPublisherPerformanceFilters,
+  createDefaultPublisherPerformanceFilters,
   emptyPublisherPerformanceMetrics,
   formatPerformanceCount,
   formatPerformanceMoney,
@@ -81,8 +83,8 @@ type PublisherPerformanceResponse = {
   };
 };
 
-function buildDefaultFilters(): PublisherPerformanceFilters {
-  return { ...defaultPublisherPerformanceFilters };
+function buildDefaultFilters(timeZone: string): PublisherPerformanceFilters {
+  return createDefaultPublisherPerformanceFilters(timeZone);
 }
 
 type SummaryColumn = {
@@ -260,8 +262,13 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
 ];
 
 export function PublisherPerformanceSummaryPage() {
-  const [draftFilters, setDraftFilters] = useState<PublisherPerformanceFilters>(() => buildDefaultFilters());
-  const [appliedFilters, setAppliedFilters] = useState<PublisherPerformanceFilters>(() => buildDefaultFilters());
+  const { timeZone } = useSystemSettings();
+  const [draftFilters, setDraftFilters] = useState<PublisherPerformanceFilters>(() =>
+    buildDefaultFilters(timeZone)
+  );
+  const [appliedFilters, setAppliedFilters] = useState<PublisherPerformanceFilters>(() =>
+    buildDefaultFilters(timeZone)
+  );
   const [rows, setRows] = useState<PublisherPerformanceRow[]>([]);
   const [totals, setTotals] = useState<PublisherPerformanceMetrics>(() => emptyPublisherPerformanceMetrics());
   const [products, setProducts] = useState<FilterOption[]>([]);
@@ -289,8 +296,10 @@ export function PublisherPerformanceSummaryPage() {
         pageSize: String(nextPageSize),
       });
 
-      if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
-      if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+      const dateFrom = parseDateTimeInTimeZone(filters.dateFrom, timeZone);
+      const dateTo = parseDateTimeInTimeZone(filters.dateTo, timeZone);
+      if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
+      if (dateTo) params.set("dateTo", dateTo.toISOString());
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
       if (filters.publisherTag) params.set("publisherTag", filters.publisherTag);
@@ -298,7 +307,7 @@ export function PublisherPerformanceSummaryPage() {
 
       return params.toString();
     },
-    []
+    [timeZone]
   );
 
   const loadRows = useCallback(
@@ -365,7 +374,7 @@ export function PublisherPerformanceSummaryPage() {
   };
 
   const handleClearAll = () => {
-    const defaults = buildDefaultFilters();
+    const defaults = buildDefaultFilters(timeZone);
     setDraftFilters(defaults);
     setAppliedFilters(defaults);
     setPage(1);

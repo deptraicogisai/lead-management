@@ -42,18 +42,20 @@ import {
   DUPLICATE_METHOD_OPTIONS,
   DUPLICATE_PERIOD_OPTIONS,
   SCHEDULE_DAY_OPTIONS,
-  TIMEZONE_OPTIONS,
   findScheduleRuleOverlap,
   getScheduleRuleOverlapMessage,
   groupGeneralFiltersForDisplay,
   normalizeGeneralFiltersForStorage,
   patchGeneralFilter,
   patchMultiSelectFilterPairEnabled,
+  resolveSelectableTimeZone,
   syncGeneralFiltersWithFields,
   validateGeneralFilters,
   type CampaignRecord,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import {
   buildIntegrationConfigDefaults,
   collectIntegrationConfigFieldErrors,
@@ -573,19 +575,25 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               </div>
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-type" label="Campaign Type" />
-                <select id="detail-type" value={generalForm.campaignType} onChange={(e) => setGeneralForm((c) => ({ ...c, campaignType: e.target.value as CampaignRecord["campaignType"] }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                  {CAMPAIGN_TYPE_OPTIONS.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+                <DropdownSelect
+                  id="detail-type"
+                  value={generalForm.campaignType}
+                  options={CAMPAIGN_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))}
+                  onChange={(campaignType) =>
+                    setGeneralForm((current) => ({
+                      ...current,
+                      campaignType: campaignType as CampaignRecord["campaignType"],
+                    }))
+                  }
+                />
               </div>
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-timezone" label="Timezone" />
-                <select id="detail-timezone" value={generalForm.timezone} onChange={(e) => setGeneralForm((c) => ({ ...c, timezone: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                  {TIMEZONE_OPTIONS.map((timezone) => (
-                    <option key={timezone} value={timezone}>{timezone}</option>
-                  ))}
-                </select>
+                <TimezoneSelect
+                  id="detail-timezone"
+                  value={resolveSelectableTimeZone(generalForm.timezone)}
+                  onChange={(timezone) => setGeneralForm((current) => ({ ...current, timezone }))}
+                />
               </div>
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-min-price" label="MinPrice" />
@@ -593,11 +601,20 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
               </div>
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-status" label="Status" />
-                <select id="detail-status" value={generalForm.status} onChange={(e) => setGeneralForm((c) => ({ ...c, status: e.target.value as CampaignRecord["status"] }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                  {CAMPAIGN_STATUS_DETAIL_OPTIONS.map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
+                <DropdownSelect
+                  id="detail-status"
+                  value={generalForm.status}
+                  options={CAMPAIGN_STATUS_DETAIL_OPTIONS.map((status) => ({
+                    value: status,
+                    label: status,
+                  }))}
+                  onChange={(status) =>
+                    setGeneralForm((current) => ({
+                      ...current,
+                      status: status as CampaignRecord["status"],
+                    }))
+                  }
+                />
               </div>
             </div>
 
@@ -639,19 +656,34 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Campaign Duplicates</h3>
             <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
               <FieldLabel htmlFor="duplicate-method" label="Duplicate Method" />
-              <select id="duplicate-method" value={duplicatesForm.duplicateMethod} onChange={(e) => setDuplicatesForm({ ...duplicatesForm, duplicateMethod: e.target.value as typeof duplicatesForm.duplicateMethod })} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                {DUPLICATE_METHOD_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              <DropdownSelect
+                id="duplicate-method"
+                value={duplicatesForm.duplicateMethod}
+                options={DUPLICATE_METHOD_OPTIONS.map((option) => ({
+                  value: option,
+                  label: option,
+                }))}
+                onChange={(duplicateMethod) =>
+                  setDuplicatesForm({
+                    ...duplicatesForm,
+                    duplicateMethod: duplicateMethod as typeof duplicatesForm.duplicateMethod,
+                  })
+                }
+              />
             </div>
             <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
               <FieldLabel htmlFor="duplicate-posted" label="Duplicate Posted" />
-              <select id="duplicate-posted" value={duplicatesForm.duplicatePosted} onChange={(e) => setDuplicatesForm({ ...duplicatesForm, duplicatePosted: e.target.value })} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800">
-                {DUPLICATE_PERIOD_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              <DropdownSelect
+                id="duplicate-posted"
+                value={duplicatesForm.duplicatePosted}
+                options={DUPLICATE_PERIOD_OPTIONS.map((option) => ({
+                  value: option,
+                  label: option,
+                }))}
+                onChange={(duplicatePosted) =>
+                  setDuplicatesForm({ ...duplicatesForm, duplicatePosted })
+                }
+              />
             </div>
             <PrimaryButton
               type="button"
@@ -879,23 +911,21 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                   <div>
                     <FormError error={integrationSelectError} />
                     <div className="flex min-w-0 items-center gap-2">
-                    <select
+                    <DropdownSelect
                       id="integration-select"
                       value={integrationForm.integrationId}
-                      onChange={(e) => handleIntegrationChange(e.target.value)}
+                      options={availableBuyerIntegrations.map((item) => ({
+                        value: item.id,
+                        label: `[${item.displayId}] ${item.name} (${item.productLabel})`,
+                      }))}
+                      onChange={handleIntegrationChange}
+                      placeholder="Please select integration"
                       className={cn(
                         "min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800",
                         Boolean(integrationSelectError) &&
                           "animate-field-invalid border-red-400 focus:border-red-500 dark:border-red-500/70"
                       )}
-                    >
-                      <option value="">Please select integration</option>
-                      {availableBuyerIntegrations.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          [{item.displayId}] {item.name} ({item.productLabel})
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <Link
                       href={`/buyers/${encodeURIComponent(campaign.buyerId)}?tab=integrations`}
                       title="Integration Link"

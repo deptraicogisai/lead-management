@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { CancelButton, FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import { Modal } from "@/components/ui/modal";
-import { CAMPAIGN_TYPE_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/campaign";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
+import { CAMPAIGN_TYPE_OPTIONS } from "@/lib/campaign";
 import type { CampaignExportPayload } from "@/lib/campaign-export";
 import { parseCampaignImportSchema } from "@/lib/campaign-import";
 import { cn } from "@/lib/utils";
@@ -168,11 +170,15 @@ export function CampaignCreateModal({
         <FormError error={errors.form} />
         <div>
           <FieldLabel htmlFor="campaign-create-type" label="Type" />
-          <select
+          <DropdownSelect
             id="campaign-create-type"
             value={createType}
-            onChange={(event) => {
-              const nextType = event.target.value as CampaignCreateType;
+            options={[
+              { value: "new", label: "New" },
+              { value: "import", label: "Import" },
+            ]}
+            onChange={(value) => {
+              const nextType = value as CampaignCreateType;
               setCreateType(nextType);
               setErrors((current) => ({ ...current, schemaFile: "" }));
               if (nextType === "new") {
@@ -181,10 +187,7 @@ export function CampaignCreateModal({
               }
             }}
             className={formSelectClassName}
-          >
-            <option value="new">New</option>
-            <option value="import">Import</option>
-          </select>
+          />
         </div>
 
         {createType === "new" ? (
@@ -202,70 +205,54 @@ export function CampaignCreateModal({
             <div>
               <FieldLabel htmlFor="campaign-product" label="Product" />
               <FormError error={errors.verticalId} />
-              <select
+              <DropdownSelect
                 id="campaign-product"
                 value={form.verticalId}
-                onChange={(e) => setForm((c) => ({ ...c, verticalId: e.target.value }))}
+                options={verticalOptions.map((option) => ({
+                  value: option.id,
+                  label: option.label,
+                }))}
+                onChange={(verticalId) => setForm((current) => ({ ...current, verticalId }))}
+                placeholder="Please select product"
                 className={cn(formSelectClassName, Boolean(errors.verticalId) && fieldErrorBorderClassName)}
-              >
-                <option value="">Please select product</option>
-                {verticalOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
               <FormError error={errors.buyerId} />
-              <select
+              <DropdownSelect
                 id="campaign-buyer"
                 value={form.buyerId}
-                onChange={(e) => setForm((c) => ({ ...c, buyerId: e.target.value }))}
+                options={buyerOptions.map((option) => ({
+                  value: option.id,
+                  label: option.label,
+                }))}
+                onChange={(buyerId) => setForm((current) => ({ ...current, buyerId }))}
+                placeholder="Please select buyer"
                 className={cn(formSelectClassName, Boolean(errors.buyerId) && fieldErrorBorderClassName)}
-              >
-                <option value="">Please select buyer</option>
-                {buyerOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-type" label="Campaign type" />
               <FormError error={errors.campaignType} />
-              <select
+              <DropdownSelect
                 id="campaign-type"
                 value={form.campaignType}
-                onChange={(e) => setForm((c) => ({ ...c, campaignType: e.target.value }))}
+                options={CAMPAIGN_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))}
+                onChange={(campaignType) => setForm((current) => ({ ...current, campaignType }))}
+                placeholder="Please select Campaign type"
                 className={cn(formSelectClassName, Boolean(errors.campaignType) && fieldErrorBorderClassName)}
-              >
-                <option value="">Please select Campaign type</option>
-                {CAMPAIGN_TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
               <FormError error={errors.timezone} />
-              <select
+              <TimezoneSelect
                 id="campaign-timezone"
                 value={form.timezone}
-                onChange={(e) => setForm((c) => ({ ...c, timezone: e.target.value }))}
+                onChange={(timezone) => setForm((current) => ({ ...current, timezone }))}
                 className={cn(formSelectClassName, Boolean(errors.timezone) && fieldErrorBorderClassName)}
-              >
-                <option value="">Please select timezone</option>
-                {TIMEZONE_OPTIONS.map((timezone) => (
-                  <option key={timezone} value={timezone}>
-                    {timezone}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { ChevronDown, Download } from "lucide-react";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { FieldLabel } from "@/components/ui/form-controls";
 import {
   SEARCH_FILTER_DATE_RANGE_CLASS,
@@ -37,8 +38,9 @@ import { sortTableRows, type SortDirection, type TableSortState } from "@/lib/ta
 import { useListLoadState } from "@/lib/use-list-load-state";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
+import { parseDateTimeInTimeZone } from "@/lib/date-range";
 import {
-  defaultBuyerPerformanceFilters,
+  createDefaultBuyerPerformanceFilters,
   emptyBuyerPerformanceMetrics,
   formatPerformanceCount,
   formatPerformanceMoney,
@@ -78,8 +80,8 @@ type BuyerPerformanceResponse = {
 
 const ALL_OPTION = [{ value: "", label: "All" }];
 
-function buildDefaultFilters(): BuyerPerformanceFilters {
-  return { ...defaultBuyerPerformanceFilters };
+function buildDefaultFilters(timeZone: string): BuyerPerformanceFilters {
+  return createDefaultBuyerPerformanceFilters(timeZone);
 }
 
 type SummaryColumn = {
@@ -256,8 +258,13 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
 ];
 
 export function BuyerPerformanceSummaryPage() {
-  const [draftFilters, setDraftFilters] = useState<BuyerPerformanceFilters>(() => buildDefaultFilters());
-  const [appliedFilters, setAppliedFilters] = useState<BuyerPerformanceFilters>(() => buildDefaultFilters());
+  const { timeZone } = useSystemSettings();
+  const [draftFilters, setDraftFilters] = useState<BuyerPerformanceFilters>(() =>
+    buildDefaultFilters(timeZone)
+  );
+  const [appliedFilters, setAppliedFilters] = useState<BuyerPerformanceFilters>(() =>
+    buildDefaultFilters(timeZone)
+  );
   const [rows, setRows] = useState<BuyerPerformanceRow[]>([]);
   const [totals, setTotals] = useState<BuyerPerformanceMetrics>(() => emptyBuyerPerformanceMetrics());
   const [products, setProducts] = useState<FilterOption[]>([]);
@@ -285,8 +292,10 @@ export function BuyerPerformanceSummaryPage() {
         pageSize: String(nextPageSize),
       });
 
-      if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
-      if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+      const dateFrom = parseDateTimeInTimeZone(filters.dateFrom, timeZone);
+      const dateTo = parseDateTimeInTimeZone(filters.dateTo, timeZone);
+      if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
+      if (dateTo) params.set("dateTo", dateTo.toISOString());
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.buyerId) params.set("buyerId", filters.buyerId);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
@@ -294,7 +303,7 @@ export function BuyerPerformanceSummaryPage() {
 
       return params.toString();
     },
-    []
+    [timeZone]
   );
 
   const loadRows = useCallback(
@@ -361,7 +370,7 @@ export function BuyerPerformanceSummaryPage() {
   };
 
   const handleClearAll = () => {
-    const defaults = buildDefaultFilters();
+    const defaults = buildDefaultFilters(timeZone);
     setDraftFilters(defaults);
     setAppliedFilters(defaults);
     setPage(1);

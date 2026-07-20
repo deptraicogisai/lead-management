@@ -1,6 +1,7 @@
 "use client";
 
 import { FieldLabel, FormError, Input } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { DEFAULT_POST_TIMEOUT_SECONDS } from "@/lib/campaign-integration-config";
 import type { IntegrationBuilderConfigField } from "@/lib/integration-builder";
 import { cn } from "@/lib/utils";
@@ -27,16 +28,17 @@ function renderFieldControl(
 
   if (field.type === "boolean") {
     return (
-      <select
+      <DropdownSelect
         id={inputId}
         value={value}
-        onChange={(event) => onChange(field.variableName, event.target.value)}
+        options={[
+          { value: "true", label: "true" },
+          { value: "false", label: "false" },
+        ]}
+        onChange={(nextValue) => onChange(field.variableName, nextValue)}
+        placeholder="Select..."
         className={cn(selectClassName, invalid && fieldErrorBorderClassName)}
-      >
-        <option value="">Select...</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
+      />
     );
   }
 

@@ -106,23 +106,31 @@ export type PublisherLeadDetailsFilters = {
   tableSearch: string;
 };
 
-const defaultDateRange = buildDefaultLeadDetailsDateRange();
+export function createDefaultPublisherLeadDetailsFilters(
+  timeZone: string
+): PublisherLeadDetailsFilters {
+  const defaultDateRange = buildDefaultLeadDetailsDateRange(timeZone);
+  return {
+    leadId: "",
+    dateFrom: defaultDateRange.from,
+    dateTo: defaultDateRange.to,
+    productId: "",
+    method: "All",
+    status: "All",
+    publisherId: "",
+    publisherChannel: [],
+    publisherSource: [],
+    publisherTags: "",
+    redirectStatus: "All",
+    leadScope: "",
+    tableSearch: "",
+  };
+}
 
-export const defaultPublisherLeadDetailsFilters: PublisherLeadDetailsFilters = {
-  leadId: "",
-  dateFrom: defaultDateRange.from,
-  dateTo: defaultDateRange.to,
-  productId: "",
-  method: "All",
-  status: "All",
-  publisherId: "",
-  publisherChannel: [],
-  publisherSource: [],
-  publisherTags: "",
-  redirectStatus: "All",
-  leadScope: "",
-  tableSearch: "",
-};
+/** @deprecated Prefer createDefaultPublisherLeadDetailsFilters(timeZone). */
+export const defaultPublisherLeadDetailsFilters = createDefaultPublisherLeadDetailsFilters(
+  "America/New_York"
+);
 
 export function isPublisherLeadScope(value: string | null | undefined): value is PublisherLeadScope {
   return value === "post" || value === "lead" || value === "sold" || value === "reject";

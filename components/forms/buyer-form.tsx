@@ -5,6 +5,7 @@ import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api
 import { type BuyerCreatePayload } from "@/lib/buyer";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { FieldLabel, FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 
 type BuyerFormProps = {
   isSaving?: boolean;
@@ -96,17 +97,17 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
 
       <div>
         <FieldLabel htmlFor="buyer-status" label="Buyer Status" />
-        <select
+        <DropdownSelect
           id="buyer-status"
           value={form.status}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, status: event.target.value as BuyerCreatePayload["status"] }))
+          options={[
+            { value: "Active", label: "Active" },
+            { value: "Inactive", label: "Inactive" },
+          ]}
+          onChange={(status) =>
+            setForm((current) => ({ ...current, status: status as BuyerCreatePayload["status"] }))
           }
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-        >
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-        </select>
+        />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/40">

@@ -9,6 +9,7 @@ import type { AuthSession } from "@/lib/auth";
 type DashboardChromeProps = {
   session: AuthSession;
   children: ReactNode;
+  onOpenSettings: () => void;
 };
 
 function HeaderFallback() {
@@ -19,11 +20,11 @@ function HeaderFallback() {
   );
 }
 
-export function DashboardChrome({ session, children }: DashboardChromeProps) {
+export function DashboardChrome({ session, children, onOpenSettings }: DashboardChromeProps) {
   return (
     <BreadcrumbProvider>
       <Suspense fallback={<HeaderFallback />}>
-        <Header session={session} />
+        <Header session={session} onOpenSettings={onOpenSettings} />
       </Suspense>
       <div className="mobile-page-content">{children}</div>
       <ToastProvider />

@@ -106,7 +106,7 @@ const verticalMappingSchema = new Schema(
     status: { type: String, enum: ["Active", "Inactive", "Deleted"], default: "Active" },
     fields: { type: [mappingFieldSchema], default: [] },
     apiRequest: { type: apiRequestSchema, required: false },
-    timezone: { type: String, trim: true, default: "New York (EST/EDT)" },
+    timezone: { type: String, trim: true, default: "America/New_York" },
     duplicates: { type: mappingDuplicatesSchema, default: () => ({}) },
     revShare: { type: mappingRevShareSchema, default: () => ({}) },
     generalFilters: { type: [mappingGeneralFilterSchema], default: [] },

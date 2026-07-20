@@ -1,6 +1,10 @@
-import { Check, ChevronDown } from "lucide-react";
+"use client";
+
+import { Check } from "lucide-react";
 import {
+  Children,
   forwardRef,
+  isValidElement,
   type ButtonHTMLAttributes,
   type ChangeEvent,
   type InputHTMLAttributes,
@@ -8,6 +12,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import type { LucideIcon } from "lucide-react";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { formatDecimalInputDisplayValue, sanitizeNumberInputValue } from "@/lib/decimal-input";
 import { cn } from "@/lib/utils";
 import {
@@ -153,34 +158,52 @@ export const Input = forwardRef<
   );
 });
 
-export const Select = forwardRef<
-  HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }
->(function Select({ className, disabled, invalid, children, ...restProps }, ref) {
+export function Select({
+  className,
+  disabled,
+  invalid,
+  children,
+  value,
+  defaultValue,
+  onChange,
+  id,
+}: SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
+  const options = Children.toArray(children).flatMap((child) => {
+    if (!isValidElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>(child)) return [];
+    if (child.type !== "option") return [];
+
+    const optionValue = String(child.props.value ?? "");
+    const optionLabel = Children.toArray(child.props.children)
+      .map((part) => (typeof part === "string" || typeof part === "number" ? String(part) : ""))
+      .join("");
+
+    return [{ value: optionValue, label: optionLabel, disabled: child.props.disabled }];
+  });
+  const selectedValue = Array.isArray(value)
+    ? String(value[0] ?? "")
+    : String(value ?? defaultValue ?? "");
+
   return (
-    <div className="relative">
-      <select
-        ref={ref}
-        disabled={disabled}
-        aria-invalid={invalid || undefined}
-        {...restProps}
-        className={cn(
-          fieldControlClassName,
-          "appearance-none px-3 py-2.5 pr-10",
-          disabled && fieldControlDisabledClassName,
-          invalid && fieldInvalidClassName,
-          className
-        )}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        size={16}
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-      />
-    </div>
+    <DropdownSelect
+      id={id}
+      value={selectedValue}
+      options={options}
+      onChange={(nextValue) =>
+        onChange?.({
+          target: { value: nextValue },
+          currentTarget: { value: nextValue },
+        } as ChangeEvent<HTMLSelectElement>)
+      }
+      disabled={disabled}
+      className={cn(
+        fieldControlClassName,
+        disabled && fieldControlDisabledClassName,
+        invalid && fieldInvalidClassName,
+        className
+      )}
+    />
   );
-});
+}
 
 type CheckboxProps = {
   checked: boolean;

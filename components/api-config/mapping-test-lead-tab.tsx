@@ -8,6 +8,7 @@ import { InlineLoading, SectionLoading } from "@/components/ui/loading-indicator
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
 import { formatDateTimeDisplay } from "@/lib/date-range";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { formatLeadRejectResponseBody, formatBuyerPostResponseBody } from "@/lib/mapping-lead-validation";
 import {
   buildSystemBuyerValidationStep,
@@ -326,23 +327,13 @@ function getLogModeLabel(log: MappingTestLeadLogRecord) {
   return log.leadSaved ? "Save lead" : "Save requested";
 }
 
-function padLogDatePart(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function formatLogTimestamp(iso: string) {
-  const date = new Date(iso);
-  const day = padLogDatePart(date.getDate());
-  const month = padLogDatePart(date.getMonth() + 1);
-  const year = date.getFullYear();
-  const hours = padLogDatePart(date.getHours());
-  const minutes = padLogDatePart(date.getMinutes());
-  const seconds = padLogDatePart(date.getSeconds());
-
+function formatLogTimestamp(iso: string, timeZone: string) {
+  const full = formatDateTimeDisplay(iso, timeZone);
+  const [date, time] = full.split(" ");
   return {
-    date: `${day}/${month}/${year}`,
-    time: `${hours}:${minutes}:${seconds}`,
-    full: `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`,
+    date: date ?? "-",
+    time: time ?? "",
+    full,
   };
 }
 
@@ -355,6 +346,7 @@ function TestLeadLogHistory({
   selectedLogId: string | null;
   onSelect: (logId: string) => void;
 }) {
+  const { timeZone } = useSystemSettings();
   const [searchQuery, setSearchQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<LogResultFilter>("all");
   const [page, setPage] = useState(1);
@@ -368,7 +360,7 @@ function TestLeadLogHistory({
 
       if (!normalizedQuery) return true;
 
-      const timestamp = formatLogTimestamp(log.submittedAt);
+      const timestamp = formatLogTimestamp(log.submittedAt, timeZone);
       const searchable = [
         timestamp.date,
         timestamp.time,
@@ -387,7 +379,7 @@ function TestLeadLogHistory({
       const rightTime = new Date(right.submittedAt).getTime();
       return rightTime - leftTime;
     });
-  }, [logs, resultFilter, searchQuery]);
+  }, [logs, resultFilter, searchQuery, timeZone]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / LOG_HISTORY_PAGE_SIZE));
   const currentPage = filteredLogs.length > 0 ? Math.min(page, totalPages) : 1;
@@ -459,7 +451,7 @@ function TestLeadLogHistory({
             {paginatedLogs.map((log) => {
               const isSelected = log.id === selectedLogId;
               const isSuccess = isLogHttpSuccess(log);
-              const timestamp = formatLogTimestamp(log.submittedAt);
+              const timestamp = formatLogTimestamp(log.submittedAt, timeZone);
 
               return (
                 <li key={log.id}>
@@ -610,14 +602,18 @@ function resolveBuyerAttemptLogId(attempt: BuyerPostAttemptSnapshot, index: numb
   return attempt.logId?.trim() || String(index + 1).padStart(3, "0");
 }
 
-function formatBuyerAttemptPostedDate(attempt: BuyerPostAttemptSnapshot, fallbackIso: string) {
+function formatBuyerAttemptPostedDate(
+  attempt: BuyerPostAttemptSnapshot,
+  fallbackIso: string,
+  timeZone: string
+) {
   const iso = attempt.postedAt ?? fallbackIso;
   if (!iso) return "-";
 
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "-";
 
-  return formatDateTimeDisplay(date);
+  return formatDateTimeDisplay(date, timeZone);
 }
 
 function buildCompactBuyerAttemptResponse(attempt: BuyerPostAttemptSnapshot) {
@@ -674,6 +670,7 @@ function SystemBuyerAttemptModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const { timeZone } = useSystemSettings();
   if (!attempt) return null;
 
   const responseSuccess = attempt.buyerStatus === "Accept";
@@ -693,7 +690,7 @@ function SystemBuyerAttemptModal({
     <Modal
       open={open}
       title={`Buyer Post Log ${resolveBuyerAttemptLogId(attempt, (attempt.campaignOrder ?? 1) - 1)}`}
-      description={`${attempt.campaignName} | ${attempt.buyerCompany} | ${attempt.pingTreeType ?? "Redirect"} | ${formatBuyerAttemptPostedDate(attempt, fallbackPostedAt)}`}
+      description={`${attempt.campaignName} | ${attempt.buyerCompany} | ${attempt.pingTreeType ?? "Redirect"} | ${formatBuyerAttemptPostedDate(attempt, fallbackPostedAt, timeZone)}`}
       onClose={onClose}
       panelClassName="max-w-4xl"
     >
@@ -746,16 +743,20 @@ function isBuyerAttemptPending(attempt: BuyerPostAttemptView) {
   return attempt.queueState === "processing" || attempt.queueState === "waiting";
 }
 
-function formatBuyerAttemptPostedDateForGrid(attempt: BuyerPostAttemptView) {
+function formatBuyerAttemptPostedDateForGrid(attempt: BuyerPostAttemptView, timeZone: string) {
   if (attempt.queueState === "waiting") return "";
 
   if (attempt.queueState === "processing") {
     if (!attempt.processingStartedAt) return "";
-    return formatBuyerAttemptPostedDate({ ...attempt, postedAt: attempt.processingStartedAt }, "");
+    return formatBuyerAttemptPostedDate(
+      { ...attempt, postedAt: attempt.processingStartedAt },
+      "",
+      timeZone
+    );
   }
 
   if (attempt.postedAt) {
-    return formatBuyerAttemptPostedDate(attempt, "");
+    return formatBuyerAttemptPostedDate(attempt, "", timeZone);
   }
 
   return "";
@@ -774,6 +775,7 @@ function SystemBuyerAttemptsGrid({
   submittedAt: string;
   onViewLog: (attempt: BuyerPostAttemptSnapshot) => void;
 }) {
+  const { timeZone } = useSystemSettings();
   if (attempts.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-600 dark:text-slate-400">
@@ -832,7 +834,7 @@ function SystemBuyerAttemptsGrid({
                 </div>
               </td>
               <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                {formatBuyerAttemptPostedDateForGrid(attempt)}
+                {formatBuyerAttemptPostedDateForGrid(attempt, timeZone)}
               </td>
               <td className="px-4 py-3">
                 <button
@@ -906,6 +908,7 @@ function SystemBuyerFlow({ log }: { log: MappingTestLeadLogRecord }) {
 }
 
 function TestLeadLogDetail({ log, endpointUrl }: { log: MappingTestLeadLogRecord; endpointUrl: string }) {
+  const { timeZone } = useSystemSettings();
   const publisherSnapshot = resolvePublisherLogSnapshot(log);
   const buyerSnapshot = resolveBuyerLogSnapshot(log);
   const publisherSuccess = publisherSnapshot.passed;
@@ -921,7 +924,7 @@ function TestLeadLogDetail({ log, endpointUrl }: { log: MappingTestLeadLogRecord
         )}
       >
         <p className="font-medium text-slate-800 dark:text-slate-100">
-          Submitted: {formatLogTimestamp(log.submittedAt).full}
+          Submitted: {formatLogTimestamp(log.submittedAt, timeZone).full}
         </p>
         <p className="mt-2 flex flex-wrap items-center gap-2 text-slate-700 dark:text-slate-200">
           <span>Publisher:</span>

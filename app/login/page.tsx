@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ShieldCheck, Workflow, Zap } from "lucide-react";
 import { LoginBrandMark } from "@/components/branding/login-brand-mark";
+import { LoginFontScaleGuard } from "@/components/branding/login-font-scale-guard";
 import { LoginForm } from "@/components/forms/login-form";
 import { AUTH_COOKIE_NAME, decodeAuthSession } from "@/lib/auth";
 import { resolvePostLoginPath } from "@/lib/auth-return-url";
@@ -52,6 +53,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-3 py-4 dark:bg-slate-950 sm:px-6 sm:py-8 lg:px-8">
+      <LoginFontScaleGuard />
       <div className="login-animate-shell mx-auto grid w-full max-w-6xl overflow-hidden rounded-[24px] border border-slate-800 bg-white shadow-2xl sm:rounded-[32px] dark:border-slate-700 dark:bg-slate-900 lg:min-h-[calc(100dvh-4rem)] lg:grid-cols-[1.15fr_0.85fr]">
         <section className="relative hidden flex-col justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-blue-900 p-8 text-white lg:flex sm:p-10 lg:p-12">
           <div>

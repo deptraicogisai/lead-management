@@ -220,7 +220,7 @@ export async function validateCampaignLeadIntake(params: {
       const campaignObjectId = new Types.ObjectId(campaignId);
       const filter: Record<string, unknown> = {
         campaignRef: campaignObjectId,
-        postedAt: { $gte: from, $lte: to },
+        postedAt: { $gte: from, $lt: to },
       };
 
       if (validationStatus === "success") {

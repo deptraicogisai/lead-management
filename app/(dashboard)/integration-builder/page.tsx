@@ -12,6 +12,8 @@ import {
   TableActionLink,
 } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { IdBadge } from "@/components/ui/id-badge";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
 import {
@@ -62,6 +64,7 @@ const fieldErrorBorderClassName =
   "animate-field-invalid border-red-400 focus:border-red-500 focus:ring-red-100 dark:border-red-500/70 dark:focus:border-red-500";
 
 export default function IntegrationBuilderPage() {
+  const { timeZone } = useSystemSettings();
   const [records, setRecords] = useState<IntegrationBuilderRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
@@ -231,13 +234,21 @@ export default function IntegrationBuilderPage() {
       key: "createdAt",
       label: "Created",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTimeDisplay(row.createdAt)}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-xs">
+          {formatDateTimeDisplay(row.createdAt, timeZone)}
+        </span>
+      ),
     },
     {
       key: "updatedAt",
       label: "Updated",
       sortValue: (row) => new Date(row.updatedAt).getTime(),
-      render: (row) => <span className="whitespace-nowrap text-xs">{formatDateTimeDisplay(row.updatedAt)}</span>,
+      render: (row) => (
+        <span className="whitespace-nowrap text-xs">
+          {formatDateTimeDisplay(row.updatedAt, timeZone)}
+        </span>
+      ),
     },
     {
       key: "actions",
@@ -668,11 +679,15 @@ export default function IntegrationBuilderPage() {
           <FormError error={addFormErrors.form} />
           <div>
             <FieldLabel htmlFor="integration-builder-type" label="Type" />
-            <select
+            <DropdownSelect
               id="integration-builder-type"
               value={addForm.type}
-              onChange={(event) => {
-                const nextType = event.target.value as IntegrationBuilderCreateType;
+              options={[
+                { value: "new", label: "New" },
+                { value: "import", label: "Import" },
+              ]}
+              onChange={(value) => {
+                const nextType = value as IntegrationBuilderCreateType;
                 setAddForm((current) => ({ ...current, type: nextType }));
                 setAddFormErrors((current) => ({ ...current, schemaFile: "" }));
 
@@ -682,10 +697,7 @@ export default function IntegrationBuilderPage() {
                 }
               }}
               className={addFormSelectClassName}
-            >
-              <option value="new">New</option>
-              <option value="import">Import</option>
-            </select>
+            />
           </div>
 
           {addForm.type === "new" ? (
@@ -705,19 +717,19 @@ export default function IntegrationBuilderPage() {
               <div>
                 <FieldLabel htmlFor="integration-builder-product" label="Product" />
                 <FormError error={addFormErrors.verticalId} />
-                <select
+                <DropdownSelect
                   id="integration-builder-product"
                   value={addForm.verticalId}
-                  onChange={(event) => setAddForm((current) => ({ ...current, verticalId: event.target.value }))}
+                  options={verticalOptions.map((vertical, index) => ({
+                    value: vertical.id,
+                    label: `[${index + 1}] ${vertical.name}`,
+                  }))}
+                  onChange={(verticalId) =>
+                    setAddForm((current) => ({ ...current, verticalId }))
+                  }
+                  placeholder={isLoadingVerticals ? "Loading verticals..." : "Please select product"}
                   className={cn(addFormSelectClassName, Boolean(addFormErrors.verticalId) && fieldErrorBorderClassName)}
-                >
-                  <option value="">{isLoadingVerticals ? "Loading verticals..." : "Please select product"}</option>
-                  {verticalOptions.map((vertical, index) => (
-                    <option key={vertical.id} value={vertical.id}>
-                      [{index + 1}] {vertical.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </>
           ) : null}

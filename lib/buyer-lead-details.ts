@@ -73,24 +73,28 @@ export type BuyerLeadDetailsFilters = {
   tableSearch: string;
 };
 
-const defaultDateRange = buildDefaultLeadDetailsDateRange();
+export function createDefaultBuyerLeadDetailsFilters(timeZone: string): BuyerLeadDetailsFilters {
+  const defaultDateRange = buildDefaultLeadDetailsDateRange(timeZone);
+  return {
+    leadId: "",
+    dateFrom: defaultDateRange.from,
+    dateTo: defaultDateRange.to,
+    productId: "",
+    publisherId: "",
+    publisherChannel: [],
+    publisherSource: [],
+    buyerId: "",
+    campaignId: "",
+    pingTreeId: "",
+    redirectStatus: "All",
+    publisherTag: "",
+    status: "All",
+    tableSearch: "",
+  };
+}
 
-export const defaultBuyerLeadDetailsFilters: BuyerLeadDetailsFilters = {
-  leadId: "",
-  dateFrom: defaultDateRange.from,
-  dateTo: defaultDateRange.to,
-  productId: "",
-  publisherId: "",
-  publisherChannel: [],
-  publisherSource: [],
-  buyerId: "",
-  campaignId: "",
-  pingTreeId: "",
-  redirectStatus: "All",
-  publisherTag: "",
-  status: "All",
-  tableSearch: "",
-};
+/** @deprecated Prefer createDefaultBuyerLeadDetailsFilters(timeZone). */
+export const defaultBuyerLeadDetailsFilters = createDefaultBuyerLeadDetailsFilters("America/New_York");
 
 export { BUYER_LEAD_DETAILS_STATUS_OPTIONS };
 

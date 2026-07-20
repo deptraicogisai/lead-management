@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Download, RotateCcw } from "lucide-react";
 import { CampaignCreateModal } from "@/components/campaigns/campaign-create-modal";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   AddNewButton,
   CancelButton,
@@ -25,7 +26,7 @@ import {
   SearchFilterPanel,
   SearchFilterSelect,
 } from "@/components/ui/search-filter-layout";
-import { buildEmptySearchDateRange } from "@/lib/date-range";
+import { buildEmptySearchDateRange, parseDateTimeInTimeZone } from "@/lib/date-range";
 import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
@@ -38,6 +39,7 @@ import {
   CAMPAIGN_STATUS_FILTER_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
   formatCampaignDateTime,
+  getTimezoneOptionLabel,
   type CampaignListRecord,
   type CampaignRecord,
 } from "@/lib/campaign";
@@ -92,7 +94,12 @@ function createDefaultCampaignFilters() {
 
 type CampaignFilters = ReturnType<typeof createDefaultCampaignFilters>;
 
-function buildCampaignQuery(filters: CampaignFilters, page: number, pageSize: number) {
+function buildCampaignQuery(
+  filters: CampaignFilters,
+  page: number,
+  pageSize: number,
+  timeZone: string
+) {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
@@ -104,8 +111,10 @@ function buildCampaignQuery(filters: CampaignFilters, page: number, pageSize: nu
   if (filters.productId) params.set("productId", filters.productId);
   if (filters.buyerId) params.set("buyerId", filters.buyerId);
   if (filters.type !== "All") params.set("type", filters.type);
-  if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
-  if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+  const dateFrom = parseDateTimeInTimeZone(filters.dateFrom, timeZone);
+  const dateTo = parseDateTimeInTimeZone(filters.dateTo, timeZone);
+  if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
+  if (dateTo) params.set("dateTo", dateTo.toISOString());
 
   return params.toString();
 }
@@ -123,7 +132,7 @@ const CAMPAIGN_EXPORT_HEADERS = [
   "Created",
 ] as const;
 
-function buildCampaignExportMatrix(items: CampaignListRecord[]) {
+function buildCampaignExportMatrix(items: CampaignListRecord[], timeZone: string) {
   return items.map((row) => [
     String(row.displayId),
     row.name,
@@ -134,11 +143,12 @@ function buildCampaignExportMatrix(items: CampaignListRecord[]) {
     row.timezone,
     row.buyerLabel,
     row.campaignType,
-    formatCampaignDateTime(row.createdAt),
+    formatCampaignDateTime(row.createdAt, timeZone),
   ]);
 }
 
 export function CampaignsPage() {
+  const { timeZone } = useSystemSettings();
   const [rows, setRows] = useState<CampaignListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
   const [buyerOptions, setBuyerOptions] = useState<BuyerOption[]>([]);
@@ -203,7 +213,7 @@ export function CampaignsPage() {
     beginLoad();
 
     try {
-      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, page, pageSize)}`, {
+      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, page, pageSize, timeZone)}`, {
         cache: "no-store",
       });
       if (!response.ok) return;
@@ -215,7 +225,7 @@ export function CampaignsPage() {
     } finally {
       endLoad();
     }
-  }, [appliedFilters, beginLoad, endLoad, page, pageSize]);
+  }, [appliedFilters, beginLoad, endLoad, page, pageSize, timeZone]);
 
   useEffect(() => {
     void fetchCampaigns();
@@ -246,7 +256,9 @@ export function CampaignsPage() {
     const allRows: CampaignListRecord[] = [];
 
     for (let nextPage = 1; nextPage <= pages; nextPage += 1) {
-      const response = await fetch(`/api/campaigns?${buildCampaignQuery(appliedFilters, nextPage, maxPageSize)}`);
+      const response = await fetch(
+        `/api/campaigns?${buildCampaignQuery(appliedFilters, nextPage, maxPageSize, timeZone)}`
+      );
       if (!response.ok) {
         throw new Error("Failed to export all campaigns.");
       }
@@ -256,7 +268,7 @@ export function CampaignsPage() {
     }
 
     return allRows;
-  }, [appliedFilters, totalItems]);
+  }, [appliedFilters, timeZone, totalItems]);
 
   const handleExportRecord = async (row: CampaignListRecord) => {
     setExportingId(row.id);
@@ -345,7 +357,7 @@ export function CampaignsPage() {
         downloadCsv(
           "campaigns-all.csv",
           [...CAMPAIGN_EXPORT_HEADERS],
-          buildCampaignExportMatrix(allRows)
+          buildCampaignExportMatrix(allRows, timeZone)
         );
         return;
       }
@@ -353,7 +365,7 @@ export function CampaignsPage() {
       downloadCsv(
         "campaigns-current-page.csv",
         [...CAMPAIGN_EXPORT_HEADERS],
-        buildCampaignExportMatrix(filteredRows)
+        buildCampaignExportMatrix(filteredRows, timeZone)
       );
     } catch {
       toast.error("Failed to export campaigns.", "Export");
@@ -502,14 +514,14 @@ export function CampaignsPage() {
       render: (row) => <span>${row.minPrice.toFixed(2)}</span>,
     },
     { key: "integration", label: "Integration", sortValue: (row) => row.integrationLabel, render: (row) => row.integrationLabel },
-    { key: "timezone", label: "Timezone", render: (row) => row.timezone },
+    { key: "timezone", label: "Timezone", render: (row) => getTimezoneOptionLabel(row.timezone, true) },
     { key: "buyer", label: "Buyer", sortValue: (row) => row.buyerLabel, render: (row) => row.buyerLabel },
     { key: "type", label: "Campaign Type", sortValue: (row) => row.campaignType, render: (row) => row.campaignType },
     {
       key: "created",
       label: "Created",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => formatCampaignDateTime(row.createdAt),
+      render: (row) => formatCampaignDateTime(row.createdAt, timeZone),
     },
     {
       key: "actions",

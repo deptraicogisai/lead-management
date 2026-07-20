@@ -1,12 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { ChevronDown, LogOut, Menu, Settings, X } from "lucide-react";
+import { ChevronDown, Clock3, LogOut, Menu, Settings, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs, MobilePageTitle } from "@/components/layout/breadcrumbs";
 import { useBreadcrumbOverride } from "@/components/layout/breadcrumb-context";
 import { useSidebarLayout } from "@/components/layout/sidebar-layout-context";
+import {
+  getSystemTimeZoneHeaderLabel,
+  useSystemSettings,
+} from "@/components/settings/system-settings-context";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { AuthSession } from "@/lib/auth";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
@@ -14,17 +17,20 @@ import { cn } from "@/lib/utils";
 
 type HeaderProps = {
   session: AuthSession;
+  onOpenSettings: () => void;
 };
 
-export function Header({ session }: HeaderProps) {
+export function Header({ session, onOpenSettings }: HeaderProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const overrideLabel = useBreadcrumbOverride();
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
   const { mobileOpen, openMobileNav, closeMobileNav } = useSidebarLayout();
+  const { timeZone } = useSystemSettings();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [clockNow, setClockNow] = useState(() => new Date());
 
   const { items } = useMemo(
     () =>
@@ -39,8 +45,32 @@ export function Header({ session }: HeaderProps) {
     return new Intl.DateTimeFormat("en", {
       dateStyle: "medium",
       timeStyle: "short",
+      timeZone,
     }).format(new Date(session.loginAt));
-  }, [session.loginAt]);
+  }, [session.loginAt, timeZone]);
+
+  const systemTimeLabel = useMemo(() => {
+    const date = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(clockNow);
+    const time = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).format(clockNow);
+    return `${getSystemTimeZoneHeaderLabel(timeZone)} - ${date}, ${time}`;
+  }, [clockNow, timeZone]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setIsMenuOpen(false);
@@ -124,7 +154,25 @@ export function Header({ session }: HeaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <div
+            className="hidden max-w-[32rem] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 lg:flex dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            title={systemTimeLabel}
+          >
+            <Clock3 size={15} className="shrink-0 text-blue-500" />
+            <span className="truncate tabular-nums" suppressHydrationWarning>
+              {systemTimeLabel}
+            </span>
+          </div>
           <ThemeToggle />
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-blue-600 active:scale-95 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-blue-300"
+            aria-label="Open system settings"
+            title="Settings"
+          >
+            <Settings size={19} />
+          </button>
 
           <div ref={menuRef} className="relative">
             <button
@@ -152,15 +200,6 @@ export function Header({ session }: HeaderProps) {
                     <p>Signed in: {loginTime}</p>
                   </div>
                 </div>
-
-                <Link
-                  href="/settings"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="mt-3 flex min-h-[44px] w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition active:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:active:bg-slate-800"
-                >
-                  <Settings size={16} />
-                  Settings
-                </Link>
 
                 <button
                   type="button"

@@ -130,27 +130,14 @@ export const DUPLICATE_METHOD_OPTIONS: DuplicateMethod[] = ["Email", "SSN + Emai
 export const SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export const SCHEDULE_ACTION_OPTIONS: ScheduleAction[] = ["Post", "Do not post"];
 
-export const TIMEZONE_OPTIONS = [
-  "New York (EST/EDT)",
-  "Chicago (CST/CDT)",
-  "Denver (MST/MDT)",
-  "Los Angeles (PST/PDT)",
-  "Phoenix (MST)",
-  "Hanoi (ICT)",
-  "UTC",
-] as const;
-
-export const DEFAULT_CAMPAIGN_TIMEZONE = TIMEZONE_OPTIONS[0];
-
-const LEGACY_TIMEZONE_ALIASES: Record<string, (typeof TIMEZONE_OPTIONS)[number]> = {
-  "EST/EDT": "New York (EST/EDT)",
-};
-
-export function resolveCampaignTimezone(timezone?: string | null) {
-  const value = timezone?.trim();
-  if (!value) return DEFAULT_CAMPAIGN_TIMEZONE;
-  return LEGACY_TIMEZONE_ALIASES[value] ?? value;
-}
+export {
+  DEFAULT_CAMPAIGN_TIMEZONE,
+  TIMEZONE_OPTIONS,
+  getTimezoneOptionLabel,
+  resolveCampaignTimezone,
+  resolveSelectableTimeZone,
+} from "@/lib/timezones";
+import { resolveCampaignTimezone } from "@/lib/timezones";
 
 export const DUPLICATE_PERIOD_OPTIONS = [
   "OFF",
@@ -163,12 +150,12 @@ export const DUPLICATE_PERIOD_OPTIONS = [
   "365 days",
 ];
 
-export function formatCampaignDateTime(value?: Date | string | null) {
+export function formatCampaignDateTime(value?: Date | string | null, timeZone?: string) {
   if (!value) return "-";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  return formatDateTimeDisplay(date);
+  return formatDateTimeDisplay(date, timeZone);
 }
 
 export function buildHourOptions() {

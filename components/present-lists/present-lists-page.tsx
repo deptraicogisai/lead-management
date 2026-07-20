@@ -6,6 +6,7 @@ import { Plus, Pencil } from "lucide-react";
 import { PresentListCreateModal } from "@/components/present-lists/present-list-create-modal";
 import { AddNewButton, DetailNameLink, IconActionButton } from "@/components/ui/action-buttons";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { FieldLabel, Input } from "@/components/ui/form-controls";
 import {
   SEARCH_FILTER_CONTROL_CLASS,
@@ -36,6 +37,7 @@ type PresentListResponse = {
 };
 
 export function PresentListsPage() {
+  const { timeZone } = useSystemSettings();
   const [rows, setRows] = useState<PresentListRecord[]>([]);
   const [verticalOptions, setVerticalOptions] = useState<VerticalOption[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
@@ -112,12 +114,12 @@ export function PresentListsPage() {
       key: "created",
       label: "Creation Time",
       sortValue: (row) => new Date(row.createdAt).getTime(),
-      render: (row) => formatPresentListDateTime(row.createdAt) },
+      render: (row) => formatPresentListDateTime(row.createdAt, timeZone) },
     {
       key: "updated",
       label: "Last Update Time",
       sortValue: (row) => new Date(row.updatedAt).getTime(),
-      render: (row) => formatPresentListDateTime(row.updatedAt) },
+      render: (row) => formatPresentListDateTime(row.updatedAt, timeZone) },
     {
       key: "actions",
       label: "Actions",

@@ -9,6 +9,7 @@ import { IdBadge } from "@/components/ui/id-badge";
 import { Modal } from "@/components/ui/modal";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { TestLeadFieldControl } from "@/components/test-lead/test-lead-field-control";
 import type { StatusBadgeVariant } from "@/lib/status-badge";
 import { toast } from "@/lib/toast";
@@ -22,6 +23,7 @@ import {
   validateTestLeadForm,
 } from "@/lib/mapping-test-lead";
 import { cn } from "@/lib/utils";
+import { formatDateTimeDisplay } from "@/lib/date-range";
 
 type TestLeadView = "form" | "log";
 type LogDetailTab = "response" | "request" | "lead";
@@ -37,23 +39,13 @@ type CampaignTestLeadTabProps = {
   integrationLabel: string;
 };
 
-function padLogDatePart(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function formatLogTimestamp(iso: string) {
-  const date = new Date(iso);
-  const day = padLogDatePart(date.getDate());
-  const month = padLogDatePart(date.getMonth() + 1);
-  const year = date.getFullYear();
-  const hours = padLogDatePart(date.getHours());
-  const minutes = padLogDatePart(date.getMinutes());
-  const seconds = padLogDatePart(date.getSeconds());
-
+function formatLogTimestamp(iso: string, timeZone: string) {
+  const full = formatDateTimeDisplay(iso, timeZone);
+  const [date, time] = full.split(" ");
   return {
-    date: `${day}/${month}/${year}`,
-    time: `${hours}:${minutes}:${seconds}`,
-    full: `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`,
+    date: date ?? "-",
+    time: time ?? "",
+    full,
   };
 }
 
@@ -208,8 +200,9 @@ function ResponseDetailPanel({ log }: { log: CampaignTestLeadLogRecord }) {
 }
 
 function RequestDetailPanel({ log }: { log: CampaignTestLeadLogRecord }) {
+  const { timeZone } = useSystemSettings();
   const request = log.buyerRequest;
-  const timestamp = formatLogTimestamp(log.submittedAt).full;
+  const timestamp = formatLogTimestamp(log.submittedAt, timeZone).full;
 
   return (
     <div className="space-y-5">
@@ -319,6 +312,7 @@ function TestLeadLogHistory({
   logs: CampaignTestLeadLogRecord[];
   onOpenLog: (logId: string) => void;
 }) {
+  const { timeZone } = useSystemSettings();
   if (logs.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-600 dark:text-slate-300">
@@ -345,7 +339,7 @@ function TestLeadLogHistory({
       >
         <tbody>
           {logs.map((log, index) => {
-            const timestamp = formatLogTimestamp(log.submittedAt);
+            const timestamp = formatLogTimestamp(log.submittedAt, timeZone);
             const displayId = resolveLogDisplayId(log, index, logs.length);
 
             return (

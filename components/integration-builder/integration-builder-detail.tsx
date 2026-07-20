@@ -17,9 +17,11 @@ import {
 } from "lucide-react";
 import { TwigTemplateInput } from "@/components/integration-builder/twig-template-input";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { ComingSoonButton } from "@/components/ui/action-buttons";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
 import { FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { toast } from "@/lib/toast";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
@@ -43,6 +45,7 @@ import {
 } from "@/lib/vertical-field";
 import { cn } from "@/lib/utils";
 import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload, buildTwigConfigFieldsFromIntegration } from "@/lib/twig-template";
+import { formatDateDisplay } from "@/lib/date-range";
 
 function RequestMappingCollapsible({ open, children }: { open: boolean; children: ReactNode }) {
   return (
@@ -306,17 +309,13 @@ function buildRowsFromSample(sample: unknown) {
   throw new Error("Sample JSON must be an object or array.");
 }
 
-function formatBuilderDate(value?: string) {
+function formatBuilderDate(value?: string, timeZone?: string) {
   if (!value) return "";
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-
-  return `${day}/${month}/${year}`;
+  return formatDateDisplay(date, timeZone);
 }
 
 type IntegrationBuilderDetailProps = {
@@ -358,6 +357,7 @@ function ArrayMappingCollapsible({ open, children }: { open: boolean; children: 
 }
 
 export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailProps) {
+  const { timeZone } = useSystemSettings();
   const [activeTabId, setActiveTabId] = useState<(typeof builderTabs)[number]["id"]>("general");
   const [showHeaders, setShowHeaders] = useState(true);
   const [showData, setShowData] = useState(true);
@@ -998,22 +998,21 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
           )}
           {renderGeneralRow(
             "Date updated:",
-            <p className="py-2.5 text-slate-800 dark:text-slate-100">{formatBuilderDate(dateUpdated)}</p>
+            <p className="py-2.5 text-slate-800 dark:text-slate-100">
+              {formatBuilderDate(dateUpdated, timeZone)}
+            </p>
           )}
           {renderGeneralRow(
             "Status:",
-            <select
+            <DropdownSelect
               id="builder-general-status"
               value={generalStatus}
-              onChange={(event) => setGeneralStatus(event.target.value as IntegrationBuilderStatus)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              {INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+              options={INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS.map((status) => ({
+                value: status,
+                label: status,
+              }))}
+              onChange={(status) => setGeneralStatus(status as IntegrationBuilderStatus)}
+            />
           )}
           <div className="flex flex-col gap-2 pt-6 sm:flex-row">
             <div className="hidden shrink-0 sm:block sm:w-52 sm:pr-6" aria-hidden />
@@ -1098,28 +1097,29 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                   </div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200 md:sr-only">Type</label>
-                    <select
+                    <DropdownSelect
                       value={row.type}
-                      onChange={(event) => updateConfigFieldRow(row.id, "type", event.target.value)}
+                      options={CONFIG_FIELD_TYPES.map((type) => ({
+                        value: type,
+                        label: type,
+                      }))}
+                      onChange={(type) => updateConfigFieldRow(row.id, "type", type)}
                       className={selectControlClassName}
-                    >
-                      {CONFIG_FIELD_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200 md:sr-only">Required</label>
-                    <select
+                    <DropdownSelect
                       value={row.required ? "true" : "false"}
-                      onChange={(event) => updateConfigFieldRow(row.id, "required", event.target.value === "true")}
+                      options={[
+                        { value: "true", label: "true" },
+                        { value: "false", label: "false" },
+                      ]}
+                      onChange={(required) =>
+                        updateConfigFieldRow(row.id, "required", required === "true")
+                      }
                       className={selectControlClassName}
-                    >
-                      <option value="true">true</option>
-                      <option value="false">false</option>
-                    </select>
+                    />
                   </div>
                   <div className="flex items-end md:items-center">
                     <button
@@ -1258,14 +1258,15 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
           <div className="space-y-5 p-5">
             <div className="max-w-xs">
               <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Data Type</label>
-              <select
+              <DropdownSelect
                 value={responseDataType}
-                onChange={(event) => setResponseDataType(event.target.value)}
+                options={[
+                  { value: "JSON", label: "JSON" },
+                  { value: "XML", label: "XML" },
+                ]}
+                onChange={setResponseDataType}
                 className={selectControlClassName}
-              >
-                <option value="JSON">JSON</option>
-                <option value="XML">XML</option>
-              </select>
+              />
             </div>
 
             <div className="space-y-4">
@@ -1313,28 +1314,25 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Method Type</label>
-              <select
+              <DropdownSelect
                 value={methodType}
-                onChange={(event) => setMethodType(event.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-              >
-                <option value="POST">POST</option>
-                <option value="PUT">PUT</option>
-                <option value="PATCH">PATCH</option>
-                <option value="GET">GET</option>
-              </select>
+                options={["POST", "PUT", "PATCH", "GET"].map((method) => ({
+                  value: method,
+                  label: method,
+                }))}
+                onChange={setMethodType}
+              />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Data Type</label>
-              <select
+              <DropdownSelect
                 value={dataType}
-                onChange={(event) => setDataType(event.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-              >
-                <option value="JSON">JSON</option>
-                <option value="FORM-DATA">FORM-DATA</option>
-                <option value="XML">XML</option>
-              </select>
+                options={["JSON", "FORM-DATA", "XML"].map((type) => ({
+                  value: type,
+                  label: type,
+                }))}
+                onChange={setDataType}
+              />
             </div>
           </div>
 
@@ -1444,14 +1442,15 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
 
                   <div className="flex items-center gap-3">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Type</label>
-                    <select
+                    <DropdownSelect
                       value={payloadType}
-                      onChange={(event) => setPayloadType(event.target.value)}
-                      className="min-w-44 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                    >
-                      <option value="Object">Object</option>
-                      <option value="Array">Array</option>
-                    </select>
+                      options={[
+                        { value: "Object", label: "Object" },
+                        { value: "Array", label: "Array" },
+                      ]}
+                      onChange={setPayloadType}
+                      className="min-w-44"
+                    />
                   </div>
                 </div>
 
@@ -1474,18 +1473,13 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                         onChange={(event) => updateRequestDataRow(row.id, "name", event.target.value)}
                         placeholder="buyer_field_name"
                       />
-                      <select
+                      <DropdownSelect
                         value={row.type}
-                        onChange={(event) => updateRequestDataRow(row.id, "type", event.target.value)}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                      >
-                        <option value="String">String</option>
-                        <option value="Number">Number</option>
-                        <option value="Boolean">Boolean</option>
-                        <option value="Object">Object</option>
-                        <option value="Array">Array</option>
-                        <option value="Null">Null</option>
-                      </select>
+                        options={["String", "Number", "Boolean", "Object", "Array", "Null"].map(
+                          (type) => ({ value: type, label: type })
+                        )}
+                        onChange={(type) => updateRequestDataRow(row.id, "type", type)}
+                      />
                       <TwigTemplateInput
                         value={row.value}
                         onChange={(nextValue) => updateRequestDataRow(row.id, "value", nextValue)}
@@ -1602,22 +1596,21 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             <label htmlFor="array-mapping-variable" className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
               Variables
             </label>
-            <select
+            <DropdownSelect
               id="array-mapping-variable"
               value={selectedArrayVariable}
-              onChange={(event) => {
-                setSelectedArrayVariable(event.target.value);
+              options={availableVariables.map((field) => ({
+                value: field.fieldName,
+                label: field.description
+                  ? `${field.description} (${field.fieldName})`
+                  : field.fieldName,
+              }))}
+              onChange={(variable) => {
+                setSelectedArrayVariable(variable);
                 if (arrayMappingAddError) setArrayMappingAddError("");
               }}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-            >
-              <option value="">Please choose variable</option>
-              {availableVariables.map((field) => (
-                <option key={field.fieldName} value={field.fieldName}>
-                  {field.description ? `${field.description} (${field.fieldName})` : field.fieldName}
-                </option>
-              ))}
-            </select>
+              placeholder="Please choose variable"
+            />
             <PrimaryButton
               type="button"
               disabled={!selectedArrayVariable || availableVariables.length === 0}

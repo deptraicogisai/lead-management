@@ -45,7 +45,7 @@ const MENU_GAP = 4;
 const MENU_MIN_WIDTH = 448;
 const VIEWPORT_PADDING = 8;
 const SEARCH_HEADER_HEIGHT = 52;
-const ESTIMATED_ITEM_HEIGHT = 44;
+const ESTIMATED_ITEM_HEIGHT = 36;
 
 export function SearchableMultiSelect({
   id,

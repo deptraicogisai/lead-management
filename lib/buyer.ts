@@ -81,12 +81,12 @@ export function resolveManagerOption(managerId: string) {
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function formatBuyerCreated(value?: Date | string | null) {
+export function formatBuyerCreated(value?: Date | string | null, timeZone?: string) {
   if (!value) return "-";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  return formatDateTimeDisplay(date);
+  return formatDateTimeDisplay(date, timeZone);
 }
 
 export function formatLastTraffic(value?: Date | string | null) {

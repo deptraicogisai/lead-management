@@ -192,9 +192,13 @@ export function formatRedirectDurationSeconds(fromIso: string, toIso: string) {
   return Math.round((to - from) / 1000);
 }
 
-export function formatRedirectClickDateLabel(clickIso: string, createdIso: string) {
+export function formatRedirectClickDateLabel(
+  clickIso: string,
+  createdIso: string,
+  timeZone?: string
+) {
   if (!clickIso) return "—";
-  const base = formatDateTimeDisplay(clickIso);
+  const base = formatDateTimeDisplay(clickIso, timeZone);
   const seconds = formatRedirectDurationSeconds(createdIso, clickIso);
   if (seconds == null) return base;
   return `${base} ( ${seconds} s )`;

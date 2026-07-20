@@ -1,4 +1,5 @@
 import type { CampaignScheduleRule } from "@/lib/campaign";
+import { toTimeZoneWallClockDate } from "@/lib/date-range";
 
 const JS_DAY_TO_ABBREV = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -54,6 +55,12 @@ export function startOfDay(date: Date) {
   return next;
 }
 
+/** Civil "today" in the schedule entity timezone (year/month/day as local Date for calendar math). */
+export function getScheduleCalendarToday(timeZone: string) {
+  const wallClock = toTimeZoneWallClockDate(new Date(), timeZone);
+  return startOfDay(wallClock ?? new Date());
+}
+
 export function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -89,9 +96,14 @@ export function isSameCalendarDay(left: Date, right: Date) {
   );
 }
 
-export function shiftCalendarDate(date: Date, view: ScheduleCalendarView, direction: -1 | 0 | 1) {
+export function shiftCalendarDate(
+  date: Date,
+  view: ScheduleCalendarView,
+  direction: -1 | 0 | 1,
+  timeZone?: string
+) {
   if (direction === 0) {
-    return startOfDay(new Date());
+    return timeZone ? getScheduleCalendarToday(timeZone) : startOfDay(new Date());
   }
 
   const next = new Date(date);

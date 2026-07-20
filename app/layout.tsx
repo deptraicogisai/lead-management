@@ -44,6 +44,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
                     : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
                   document.documentElement.classList.toggle("dark", theme === "dark");
                   document.documentElement.dataset.theme = theme;
+                  // Font scale is applied only inside the authenticated dashboard
+                  // (SystemSettingsProvider). Do not touch html font-size here so
+                  // /login and other public pages always stay at the default size.
                 } catch (error) {}
               })();
             `,

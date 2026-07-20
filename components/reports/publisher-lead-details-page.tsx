@@ -33,7 +33,7 @@ import { downloadCsv } from "@/lib/csv-export";
 import { filterRowsByQuery } from "@/lib/table-filter";
 import { useListLoadState } from "@/lib/use-list-load-state";
 import {
-  defaultPublisherLeadDetailsFilters,
+  createDefaultPublisherLeadDetailsFilters,
   formatPayloadFieldValue,
   formatPublisherLeadTableTime,
   formatPublisherLeadTime,
@@ -44,6 +44,8 @@ import {
 } from "@/lib/publisher-lead-details";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatusMultiSelect } from "@/components/ui/status-multi-select";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
+import { parseDateTimeInTimeZone } from "@/lib/date-range";
 import { getStatusBadgePresentation } from "@/lib/status-badge";
 import { toolbarPrimaryButtonClassName } from "@/lib/button-styles";
 import {
@@ -101,20 +103,24 @@ function RedirectCell({
   );
 }
 
-function buildDefaultFilters(searchParams?: Pick<URLSearchParams, "get">): PublisherLeadDetailsFilters {
+function buildDefaultFilters(
+  timeZone: string,
+  searchParams?: Pick<URLSearchParams, "get">
+): PublisherLeadDetailsFilters {
   return {
-    ...defaultPublisherLeadDetailsFilters,
+    ...createDefaultPublisherLeadDetailsFilters(timeZone),
     ...(searchParams ? parsePublisherLeadDetailsFiltersFromSearchParams(searchParams) : {}),
   };
 }
 
 export function PublisherLeadDetailsPage() {
   const searchParams = useSearchParams();
+  const { timeZone } = useSystemSettings();
   const [draftFilters, setDraftFilters] = useState<PublisherLeadDetailsFilters>(() =>
-    buildDefaultFilters(searchParams)
+    buildDefaultFilters(timeZone, searchParams)
   );
   const [appliedFilters, setAppliedFilters] = useState<PublisherLeadDetailsFilters>(() =>
-    buildDefaultFilters(searchParams)
+    buildDefaultFilters(timeZone, searchParams)
   );
   const [rows, setRows] = useState<PublisherLeadDetailsRow[]>([]);
   const [fieldColumns, setFieldColumns] = useState<PublisherLeadFieldColumn[]>([]);
@@ -179,8 +185,10 @@ export function PublisherLeadDetailsPage() {
       });
 
       if (filters.leadId.trim()) params.set("leadId", filters.leadId.trim());
-      if (filters.dateFrom) params.set("dateFrom", new Date(filters.dateFrom).toISOString());
-      if (filters.dateTo) params.set("dateTo", new Date(filters.dateTo).toISOString());
+      const dateFrom = parseDateTimeInTimeZone(filters.dateFrom, timeZone);
+      const dateTo = parseDateTimeInTimeZone(filters.dateTo, timeZone);
+      if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
+      if (dateTo) params.set("dateTo", dateTo.toISOString());
       if (filters.productId) params.set("productId", filters.productId);
       if (filters.status !== "All") params.set("status", filters.status);
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
@@ -194,7 +202,7 @@ export function PublisherLeadDetailsPage() {
 
       return params.toString();
     },
-    []
+    [timeZone]
   );
 
   const loadRows = useCallback(
@@ -275,7 +283,7 @@ export function PublisherLeadDetailsPage() {
   };
 
   const handleClearAll = () => {
-    const defaults = buildDefaultFilters();
+    const defaults = buildDefaultFilters(timeZone);
     const firstProductId = products[0]?.id ?? "";
     const nextFilters = { ...defaults, productId: firstProductId };
     setDraftFilters(nextFilters);
@@ -295,7 +303,11 @@ export function PublisherLeadDetailsPage() {
       value: (row: PublisherLeadDetailsRow) => string;
     }> = [
       { key: "displayCode", label: "ID", value: (row) => row.displayCode },
-      { key: "postedAt", label: "Date", value: (row) => formatPublisherLeadTime(row.postedAt) },
+      {
+        key: "postedAt",
+        label: "Date",
+        value: (row) => formatPublisherLeadTime(row.postedAt, timeZone),
+      },
       { key: "statusLabel", label: "Status", value: (row) => row.statusLabel },
       { key: "publisherLabel", label: "Publisher", value: (row) => row.publisherLabel },
       { key: "channelLabel", label: "Publisher Channel", value: (row) => row.channelLabel },
@@ -416,7 +428,7 @@ export function PublisherLeadDetailsPage() {
         sortValue: (row) => new Date(row.postedAt).getTime(),
         render: (row) => (
           <span className="whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-200">
-            {formatPublisherLeadTableTime(row.postedAt)}
+            {formatPublisherLeadTableTime(row.postedAt, timeZone)}
           </span>
         ),
       },
@@ -524,7 +536,7 @@ export function PublisherLeadDetailsPage() {
     }));
 
     return [...systemColumns, ...dynamicFieldColumns];
-  }, [fieldColumns]);
+  }, [fieldColumns, timeZone]);
 
   const columnOptions = useMemo(
     () =>
