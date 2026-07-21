@@ -32,6 +32,7 @@ export type ApiFieldConfig = {
 
 export type Vertical = {
   id: string;
+  displayId?: number;
   name: string;
   description: string;
   status?: "Active" | "Deleted";

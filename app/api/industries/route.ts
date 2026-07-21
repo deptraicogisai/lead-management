@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { normalizeSearchParam, parsePageParam, parsePageSizeParam } from "@/lib/pagination";
-import { sortNewestFirst } from "@/lib/list-sort";
+import { resolveNewestFirstDisplayId, sortNewestFirst } from "@/lib/list-sort";
 import { buildMongoStatusFilter, mergeMongoFilters } from "@/lib/soft-delete";
 
 type VerticalPayload = {
@@ -11,27 +11,31 @@ type VerticalPayload = {
   status?: "Active" | "Deleted";
 };
 
-function toVerticalResponse(doc: {
-  _id?: { toString(): string };
-  name: string;
-  description: string;
-  status?: string | null;
-  fields?: Array<{
+function toVerticalResponse(
+  doc: {
     _id?: { toString(): string };
-    fieldName: string;
+    name: string;
     description: string;
-    type: string;
-    required: boolean;
-    format?: string | null;
-    emailDuplicateRule?: {
-      mode?: "days" | "forever" | null;
-      days?: number | null;
-    } | null;
-    ignoreValues?: string[] | null;
-  }>;
-}) {
+    status?: string | null;
+    fields?: Array<{
+      _id?: { toString(): string };
+      fieldName: string;
+      description: string;
+      type: string;
+      required: boolean;
+      format?: string | null;
+      emailDuplicateRule?: {
+        mode?: "days" | "forever" | null;
+        days?: number | null;
+      } | null;
+      ignoreValues?: string[] | null;
+    }>;
+  },
+  options?: { displayId?: number }
+) {
   return {
     id: doc._id?.toString() ?? "",
+    displayId: options?.displayId,
     name: doc.name,
     description: doc.description,
     status: doc.status === "Deleted" ? "Deleted" : "Active",
@@ -79,18 +83,26 @@ export async function GET(req: Request) {
     await ensureVerticalCollectionMigrated();
     if (!hasListParams) {
       const verticals = await VerticalModel.find().sort(sortNewestFirst).lean();
-      return NextResponse.json(verticals.map((vertical) => toVerticalResponse(vertical)));
+      const totalItems = verticals.length;
+      return NextResponse.json(
+        verticals.map((vertical, index) =>
+          toVerticalResponse(vertical, { displayId: resolveNewestFirstDisplayId(totalItems, 0, index) })
+        )
+      );
     }
 
     const totalItems = await VerticalModel.countDocuments(filter);
+    const skip = (page - 1) * pageSize;
     const verticals = await VerticalModel.find(filter)
       .sort(sortNewestFirst)
-      .skip((page - 1) * pageSize)
+      .skip(skip)
       .limit(pageSize)
       .lean();
 
     return NextResponse.json({
-      items: verticals.map((vertical) => toVerticalResponse(vertical)),
+      items: verticals.map((vertical, index) =>
+        toVerticalResponse(vertical, { displayId: resolveNewestFirstDisplayId(totalItems, skip, index) })
+      ),
       page,
       pageSize,
       totalItems,
@@ -115,7 +127,11 @@ export async function POST(req: Request) {
       description: body.description.trim(),
     });
 
-    return NextResponse.json(toVerticalResponse(vertical), { status: 201 });
+    const totalItems = await VerticalModel.countDocuments(buildMongoStatusFilter("All"));
+    return NextResponse.json(
+      toVerticalResponse(vertical, { displayId: resolveNewestFirstDisplayId(totalItems, 0, 0) }),
+      { status: 201 }
+    );
   } catch {
     return NextResponse.json({ message: "Failed to create vertical." }, { status: 500 });
   }

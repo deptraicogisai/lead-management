@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { IndustryForm } from "@/components/forms/industry-form";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { IdBadge } from "@/components/ui/id-badge";
 import { ListTableToolbar } from "@/components/ui/list-table-toolbar";
 import { Modal } from "@/components/ui/modal";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -119,6 +120,21 @@ export default function IndustriesPage() {
   };
 
   const columns: Column<Vertical>[] = [
+    {
+      key: "id",
+      label: "ID",
+      sortValue: (row) => row.displayId ?? 0,
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => openEditModal(row.id)}
+          className="group inline-flex"
+          aria-label={`Edit vertical ${row.displayId ?? row.name}`}
+        >
+          <IdBadge id={row.displayId ?? "-"} interactive />
+        </button>
+      ),
+    },
     { key: "name", label: "Vertical Name" },
     { key: "description", label: "Description" },
     {
