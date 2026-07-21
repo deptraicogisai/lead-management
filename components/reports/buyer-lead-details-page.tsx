@@ -204,7 +204,7 @@ export function BuyerLeadDetailsPage() {
       if (filters.pingTreeId) params.set("pingTreeId", filters.pingTreeId);
       if (filters.redirectStatus !== "All") params.set("redirectStatus", filters.redirectStatus);
       if (filters.publisherTag) params.set("publisherTag", filters.publisherTag);
-      if (filters.status !== "All") params.set("status", filters.status);
+      if (filters.status.length > 0) params.set("status", filters.status.join(","));
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
 
       return params.toString();
@@ -753,13 +753,19 @@ export function BuyerLeadDetailsPage() {
               options={publisherTagOptions}
             />
 
-            <SearchFilterSelect
-              id="buyer-lead-status"
-              label="Status"
-              value={draftFilters.status}
-              onChange={(value) => updateDraft({ status: value })}
-              options={BUYER_LEAD_DETAILS_STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
-            />
+            <SearchFilterField>
+              <FieldLabel htmlFor="buyer-lead-status" label="Status" />
+              <StatusMultiSelect
+                id="buyer-lead-status"
+                options={BUYER_LEAD_DETAILS_STATUS_OPTIONS.filter((option) => option !== "All").map(
+                  (option) => ({ value: option, label: option })
+                )}
+                selected={draftFilters.status}
+                onChange={(selected) => updateDraft({ status: selected })}
+                placeholder="All"
+                summaryThreshold={3}
+              />
+            </SearchFilterField>
           </SearchFilterGrid>
 
           <SearchFilterActions onSearch={handleSearch} onClear={handleClearAll} />

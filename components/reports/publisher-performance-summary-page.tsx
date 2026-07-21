@@ -104,7 +104,6 @@ type SummaryColumn = {
 
 const PERFORMANCE_METRIC_COLORS = {
   post: "text-slate-800 dark:text-slate-100",
-  lead: "text-emerald-600 dark:text-emerald-400",
   sold: "text-slate-400 dark:text-slate-500",
   reject: "text-amber-600 dark:text-amber-400",
   redirect: redirectMetricColorClassName,
@@ -122,18 +121,6 @@ const SUMMARY_COLUMNS: SummaryColumn[] = [
     render: (row) => formatPerformanceCount(row.post),
     renderTotal: (totals) => formatPerformanceCount(totals.post),
     csv: (metrics) => String(metrics.post),
-  },
-  {
-    key: "lead",
-    label: "Lead",
-    align: "right",
-    sortable: true,
-    sortValue: (row) => row.lead,
-    valueColorClass: PERFORMANCE_METRIC_COLORS.lead,
-    linkMetric: "lead",
-    render: (row) => formatPerformanceCount(row.lead),
-    renderTotal: (totals) => formatPerformanceCount(totals.lead),
-    csv: (metrics) => String(metrics.lead),
   },
   {
     key: "sold",

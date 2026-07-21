@@ -38,6 +38,7 @@ import {
   formatPublisherLeadTableTime,
   formatPublisherLeadTime,
   parsePublisherLeadDetailsFiltersFromSearchParams,
+  PUBLISHER_LEAD_DETAILS_STATUS_OPTIONS,
   type PublisherLeadDetailsFilters,
   type PublisherLeadDetailsRow,
   type PublisherLeadFieldColumn,
@@ -73,7 +74,7 @@ type PublisherLeadDetailsResponse = {
   };
 };
 
-const STATUS_OPTIONS = ["All", "Sold", "Intake Reject", "Reject", "Post Error", "Test"];
+const STATUS_OPTIONS = [...PUBLISHER_LEAD_DETAILS_STATUS_OPTIONS];
 const METHOD_OPTIONS = ["All"];
 const REDIRECT_STATUS_OPTIONS = ["All", "Redirected", "Not Redirected"];
 
@@ -190,13 +191,14 @@ export function PublisherLeadDetailsPage() {
       if (dateFrom) params.set("dateFrom", dateFrom.toISOString());
       if (dateTo) params.set("dateTo", dateTo.toISOString());
       if (filters.productId) params.set("productId", filters.productId);
-      if (filters.status !== "All") params.set("status", filters.status);
+      if (filters.status.length > 0) params.set("status", filters.status.join(","));
       if (filters.publisherId) params.set("publisherId", filters.publisherId);
       const channelFilter = serializeCommaSeparatedFilter(filters.publisherChannel);
       if (channelFilter) params.set("publisherChannel", channelFilter);
       const sourceFilter = serializeCommaSeparatedFilter(filters.publisherSource);
       if (sourceFilter) params.set("publisherSource", sourceFilter);
-      if (filters.leadScope) params.set("leadScope", filters.leadScope);
+      // Prefer explicit status multi-select over leadScope from performance summary drill-down.
+      if (filters.leadScope && filters.status.length === 0) params.set("leadScope", filters.leadScope);
       if (filters.redirectStatus !== "All") params.set("redirectStatus", filters.redirectStatus);
       if (filters.tableSearch.trim()) params.set("tableSearch", filters.tableSearch.trim());
 
@@ -607,13 +609,17 @@ export function PublisherLeadDetailsPage() {
                   options={METHOD_OPTIONS.map((option) => ({ value: option, label: option }))}
                 />
 
-                <SearchFilterSelect
-                  id="status"
-                  label="Status"
-                  value={draftFilters.status}
-                  onChange={(value) => updateDraft({ status: value })}
-                  options={STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
-                />
+                <SearchFilterField>
+                  <FieldLabel htmlFor="status" label="Status" />
+                  <StatusMultiSelect
+                    id="status"
+                    options={STATUS_OPTIONS.map((option) => ({ value: option, label: option }))}
+                    selected={draftFilters.status}
+                    onChange={(selected) => updateDraft({ status: selected, leadScope: "" })}
+                    placeholder="All"
+                    summaryThreshold={3}
+                  />
+                </SearchFilterField>
 
                 <SearchFilterSelect
                   id="publisher"

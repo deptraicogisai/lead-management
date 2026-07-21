@@ -112,7 +112,15 @@ function buildDeliveryMatch(params: BuyerLeadQueryParams) {
   }
 
   if (params.status && params.status !== "All") {
-    andConditions.push({ buyerStatus: params.status });
+    const statuses = params.status
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (statuses.length === 1) {
+      andConditions.push({ buyerStatus: statuses[0] });
+    } else if (statuses.length > 1) {
+      andConditions.push({ buyerStatus: { $in: statuses } });
+    }
   }
 
   if (params.dateFrom || params.dateTo) {

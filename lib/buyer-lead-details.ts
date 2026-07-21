@@ -1,5 +1,5 @@
 import { buildDefaultLeadDetailsDateRange, formatDateTimeDisplay } from "@/lib/date-range";
-import { BUYER_LEAD_DETAILS_STATUS_OPTIONS } from "@/lib/buyer-lead-status";
+import { BUYER_LEAD_DETAILS_STATUS_OPTIONS, BUYER_LEAD_REJECT_GROUP_STATUSES } from "@/lib/buyer-lead-status";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 import {
@@ -69,7 +69,8 @@ export type BuyerLeadDetailsFilters = {
   pingTreeId: string;
   redirectStatus: string;
   publisherTag: string;
-  status: string;
+  /** Empty = All. Multiple selected statuses are OR-matched. */
+  status: string[];
   tableSearch: string;
 };
 
@@ -88,7 +89,7 @@ export function createDefaultBuyerLeadDetailsFilters(timeZone: string): BuyerLea
     pingTreeId: "",
     redirectStatus: "All",
     publisherTag: "",
-    status: "All",
+    status: [],
     tableSearch: "",
   };
 }
@@ -96,7 +97,7 @@ export function createDefaultBuyerLeadDetailsFilters(timeZone: string): BuyerLea
 /** @deprecated Prefer createDefaultBuyerLeadDetailsFilters(timeZone). */
 export const defaultBuyerLeadDetailsFilters = createDefaultBuyerLeadDetailsFilters("America/New_York");
 
-export { BUYER_LEAD_DETAILS_STATUS_OPTIONS };
+export { BUYER_LEAD_DETAILS_STATUS_OPTIONS, BUYER_LEAD_REJECT_GROUP_STATUSES };
 
 export function parseBuyerLeadDetailsFiltersFromSearchParams(
   searchParams: Pick<URLSearchParams, "get">
@@ -112,7 +113,12 @@ export function parseBuyerLeadDetailsFiltersFromSearchParams(
   if (productId) partial.productId = productId;
   if (dateFrom) partial.dateFrom = new Date(dateFrom).toISOString();
   if (dateTo) partial.dateTo = new Date(dateTo).toISOString();
-  if (status) partial.status = status;
+  if (status && status !== "All") {
+    partial.status = status
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
 
   return partial;
 }
@@ -333,7 +339,7 @@ export function buildBuyerLeadDetailsHref(params: {
   if (params.scope === "accept") {
     search.set("status", "Accept");
   } else if (params.scope === "reject") {
-    search.set("status", "Reject");
+    search.set("status", BUYER_LEAD_REJECT_GROUP_STATUSES.join(","));
   } else if (params.scope === "timeout") {
     search.set("status", "Timeout");
   } else if (params.scope === "error") {

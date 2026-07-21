@@ -90,13 +90,32 @@ export function formatPublisherLeadRedirectDelivery(delivery?: PublisherLeadAcce
 
 export type PublisherLeadScope = "post" | "lead" | "sold" | "reject";
 
+export const PUBLISHER_LEAD_DETAILS_STATUS_OPTIONS = [
+  "Sold",
+  "Intake Reject",
+  "Reject",
+  "Post Error",
+  "Test",
+] as const;
+
+export type PublisherLeadDetailsStatus = (typeof PUBLISHER_LEAD_DETAILS_STATUS_OPTIONS)[number];
+
+/** Statuses selected when drilling into Reject from Publisher Performance Summary. */
+export const PUBLISHER_LEAD_REJECT_GROUP_STATUSES: PublisherLeadDetailsStatus[] = [
+  "Intake Reject",
+  "Reject",
+  "Post Error",
+  "Test",
+];
+
 export type PublisherLeadDetailsFilters = {
   leadId: string;
   dateFrom: string;
   dateTo: string;
   productId: string;
   method: string;
-  status: string;
+  /** Empty = All. Multiple selected statuses are OR-matched. */
+  status: string[];
   publisherId: string;
   publisherChannel: string[];
   publisherSource: string[];
@@ -116,7 +135,7 @@ export function createDefaultPublisherLeadDetailsFilters(
     dateTo: defaultDateRange.to,
     productId: "",
     method: "All",
-    status: "All",
+    status: [],
     publisherId: "",
     publisherChannel: [],
     publisherSource: [],
@@ -156,8 +175,18 @@ export function parsePublisherLeadDetailsFiltersFromSearchParams(
   const leadScope = searchParams.get("leadScope")?.trim().toLowerCase() ?? "";
   if (isPublisherLeadScope(leadScope)) {
     patch.leadScope = leadScope;
-    patch.status =
-      leadScope === "sold" ? "Sold" : leadScope === "reject" ? "Reject" : "All";
+  }
+
+  const status = searchParams.get("status")?.trim();
+  if (status && status !== "All") {
+    patch.status = status
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } else if (leadScope === "sold") {
+    patch.status = ["Sold"];
+  } else if (leadScope === "reject") {
+    patch.status = [...PUBLISHER_LEAD_REJECT_GROUP_STATUSES];
   }
 
   const redirectStatus = searchParams.get("redirectStatus")?.trim();
@@ -181,6 +210,11 @@ export function buildPublisherLeadDetailsHref(params: {
 
   if (params.leadScope) {
     search.set("leadScope", params.leadScope);
+    if (params.leadScope === "sold") {
+      search.set("status", "Sold");
+    } else if (params.leadScope === "reject") {
+      search.set("status", PUBLISHER_LEAD_REJECT_GROUP_STATUSES.join(","));
+    }
   }
   if (params.redirectStatus) {
     search.set("redirectStatus", params.redirectStatus);

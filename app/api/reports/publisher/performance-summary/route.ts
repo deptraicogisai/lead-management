@@ -268,7 +268,12 @@ export async function GET(req: Request) {
         if (typeof lead.soldPrice === "number" && Number.isFinite(lead.soldPrice)) {
           accumulator.pub += lead.soldPrice;
         }
-      } else if (lead.publisherStatus === "Reject" || lead.publisherStatus === "Post Error") {
+      } else if (
+        lead.validationStatus === "fail" ||
+        lead.publisherStatus === "Reject" ||
+        lead.publisherStatus === "Post Error" ||
+        lead.publisherStatus === "Test"
+      ) {
         accumulator.reject += 1;
       }
 

@@ -92,6 +92,45 @@ function buildLeadIdCondition(leadId: string) {
   };
 }
 
+function buildPublisherStatusCondition(statusLabel: string): Record<string, unknown> | null {
+  const normalizedStatus = statusLabel.trim().toLowerCase();
+  if (!normalizedStatus || normalizedStatus === "all") return null;
+
+  if (normalizedStatus === "sold" || normalizedStatus === "accepted") {
+    return { validationStatus: "success", publisherStatus: "Sold" };
+  }
+  if (normalizedStatus === "intake reject") {
+    return { validationStatus: "fail" };
+  }
+  if (normalizedStatus === "reject") {
+    return { validationStatus: "success", publisherStatus: "Reject" };
+  }
+  if (normalizedStatus === "post error") {
+    return { validationStatus: "success", publisherStatus: "Post Error" };
+  }
+  if (normalizedStatus === "test") {
+    return {
+      $or: [{ publisherStatus: "Test" }, { isTestLead: true }],
+    };
+  }
+  if (normalizedStatus === "new") {
+    return {
+      $and: [
+        { validationStatus: "success" },
+        {
+          $or: [
+            { publisherStatus: { $exists: false } },
+            { publisherStatus: null },
+            { publisherStatus: { $nin: ["Sold", "Reject", "Post Error", "Test"] } },
+          ],
+        },
+      ],
+    };
+  }
+
+  return null;
+}
+
 function buildMongoFilter(params: {
   leadId: string;
   dateFrom: Date | null;
@@ -116,31 +155,27 @@ function buildMongoFilter(params: {
   } else if (normalizedScope === "sold") {
     andConditions.push({ publisherStatus: "Sold" });
   } else if (normalizedScope === "reject") {
-    andConditions.push({ publisherStatus: { $in: ["Reject", "Post Error"] } });
+    // Intake Reject + Reject + Post Error + Test
+    andConditions.push({
+      $or: [
+        { validationStatus: "fail" },
+        { publisherStatus: { $in: ["Reject", "Post Error", "Test"] } },
+        { isTestLead: true },
+      ],
+    });
   } else {
-    // Default view includes every publisher post, including intake validation failures.
-    const normalizedStatus = params.status.toLowerCase();
-    if (normalizedStatus === "sold") {
-      andConditions.push({ validationStatus: "success", publisherStatus: "Sold" });
-    } else if (normalizedStatus === "intake reject") {
-      andConditions.push({ validationStatus: "fail" });
-    } else if (normalizedStatus === "reject") {
-      andConditions.push({ validationStatus: "success", publisherStatus: "Reject" });
-    } else if (normalizedStatus === "post error") {
-      andConditions.push({ validationStatus: "success", publisherStatus: "Post Error" });
-    } else if (normalizedStatus === "test") {
-      andConditions.push({ validationStatus: "success", publisherStatus: "Test" });
-    } else if (normalizedStatus === "new") {
-      andConditions.push({ validationStatus: "success" });
-      andConditions.push({
-        $or: [
-          { publisherStatus: { $exists: false } },
-          { publisherStatus: null },
-          { publisherStatus: { $nin: ["Sold", "Reject", "Post Error", "Test"] } },
-        ],
-      });
-    } else if (normalizedStatus === "accepted") {
-      andConditions.push({ validationStatus: "success", publisherStatus: "Sold" });
+    const statusLabels = params.status
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const statusConditions = statusLabels
+      .map((label) => buildPublisherStatusCondition(label))
+      .filter((condition): condition is Record<string, unknown> => Boolean(condition));
+
+    if (statusConditions.length === 1) {
+      andConditions.push(statusConditions[0]);
+    } else if (statusConditions.length > 1) {
+      andConditions.push({ $or: statusConditions });
     }
   }
 
