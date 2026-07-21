@@ -215,7 +215,40 @@ export function clearDisabledGeneralFilterValues(filter: CampaignGeneralFilter):
 
 export function normalizeGeneralFiltersForStorage(filters: CampaignGeneralFilter[]) {
   const cleared = filters.map(clearDisabledGeneralFilterValues);
-  return syncMultiSelectFilterPairEnabled(cleared);
+  const withoutEmptySelections = disableEmptyMultiValueFilters(cleared);
+  return syncMultiSelectFilterPairEnabled(withoutEmptySelections);
+}
+
+/** Turn OFF Checkbox / Multi Select filters that are enabled but have no selected values. */
+function disableEmptyMultiValueFilters(filters: CampaignGeneralFilter[]): CampaignGeneralFilter[] {
+  const multiSelectFieldsWithValues = new Set<string>();
+
+  for (const filter of filters) {
+    if (filter.dataTypeFilter !== "Multi Select") continue;
+    if ((filter.selectedValues?.length ?? 0) > 0) {
+      multiSelectFieldsWithValues.add(filter.fieldName);
+    }
+  }
+
+  return filters.map((filter) => {
+    if (
+      filter.dataTypeFilter === "Checkbox" &&
+      filter.enabled &&
+      (filter.selectedValues?.length ?? 0) === 0
+    ) {
+      return clearDisabledGeneralFilterValues({ ...filter, enabled: false });
+    }
+
+    if (
+      filter.dataTypeFilter === "Multi Select" &&
+      filter.enabled &&
+      !multiSelectFieldsWithValues.has(filter.fieldName)
+    ) {
+      return clearDisabledGeneralFilterValues({ ...filter, enabled: false });
+    }
+
+    return filter;
+  });
 }
 
 function syncMultiSelectFilterPairEnabled(filters: CampaignGeneralFilter[]): CampaignGeneralFilter[] {
@@ -578,13 +611,31 @@ export function applyMultiSelectFilterValuesChange(
 ) {
   const target = filters.find((filter) => filter.fieldId === fieldId);
   if (!target || target.dataTypeFilter !== "Multi Select") {
-    return filters.map((filter) => (filter.fieldId === fieldId ? { ...filter, selectedValues } : filter));
+    const normalizedSelected = selectedValues.map((value) => value.trim()).filter(Boolean);
+    return filters.map((filter) => {
+      if (filter.fieldId !== fieldId) return filter;
+
+      // Checkbox (and other multi-value filters): auto-OFF when nothing is selected.
+      if (
+        filter.dataTypeFilter === "Checkbox" &&
+        filter.enabled &&
+        normalizedSelected.length === 0
+      ) {
+        return clearDisabledGeneralFilterValues({
+          ...filter,
+          selectedValues: [],
+          enabled: false,
+        });
+      }
+
+      return { ...filter, selectedValues: normalizedSelected };
+    });
   }
 
   const normalizedSelected = selectedValues.map((value) => value.trim()).filter(Boolean);
   const siblingMode: MultiSelectFilterMode = target.multiSelectMode === "excluded" ? "included" : "excluded";
 
-  return filters.map((filter) => {
+  const next = filters.map((filter) => {
     if (filter.fieldId === fieldId) {
       return { ...filter, selectedValues: normalizedSelected };
     }
@@ -605,6 +656,19 @@ export function applyMultiSelectFilterValuesChange(
 
     return filter;
   });
+
+  const pairHasAnyValue = next.some(
+    (filter) =>
+      filter.fieldName === target.fieldName &&
+      filter.dataTypeFilter === "Multi Select" &&
+      (filter.selectedValues?.length ?? 0) > 0
+  );
+
+  if (!pairHasAnyValue) {
+    return patchMultiSelectFilterPairEnabled(next, target.fieldName, false);
+  }
+
+  return next;
 }
 
 export function patchGeneralFilter(

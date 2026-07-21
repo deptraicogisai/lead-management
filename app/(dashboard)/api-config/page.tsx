@@ -196,7 +196,6 @@ export default function ApiConfigPage() {
           skeletonRows={8}
         >
           <DataTable<SellerVertical>
-            scrollShell={false}
             columns={verticalColumns}
             rows={verticalRows}
             emptyMessage="No publisher channels configured for this publisher yet."

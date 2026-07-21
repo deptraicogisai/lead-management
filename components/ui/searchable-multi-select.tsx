@@ -185,9 +185,9 @@ export function SearchableMultiSelect({
             selectedOptions.map((option) => (
               <span
                 key={option.id}
-                className="inline-flex max-w-[calc((100%-1.125rem)/4)] items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
               >
-                <span className="truncate">
+                <span className="break-words whitespace-normal">
                   {option.displayId !== undefined ? `[${option.displayId}] ${option.label}` : option.label}
                 </span>
                 <span
@@ -204,7 +204,7 @@ export function SearchableMultiSelect({
                       removeOption(option.id);
                     }
                   }}
-                  className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                  className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                   aria-label={`Remove ${option.label}`}
                 >
                   <X size={12} />

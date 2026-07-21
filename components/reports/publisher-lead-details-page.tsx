@@ -748,7 +748,6 @@ export function PublisherLeadDetailsPage() {
                   selectedRowIds={selectedIds}
                   onToggleRow={toggleRowSelection}
                   onToggleAllRows={toggleAllRows}
-                  stickyHeader
                 />
 
                 <div className="mt-4">

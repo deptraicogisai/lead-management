@@ -79,11 +79,11 @@ type DataTableProps<T> = {
     disabled?: boolean;
   };
   defaultSort?: TableSortState;
-  /** Stick thead under the app chrome while the window scrolls. */
+  /** Stick thead under the app chrome while the window scrolls (ScrollableTableShell only). */
   stickyHeader?: boolean;
   /**
-   * Use the dual-table ScrollableTableShell (wide report tables).
-   * Set false for compact admin grids where a single table keeps columns aligned.
+   * Use the dual-table ScrollableTableShell (wide report tables + sticky header).
+   * Set false for compact admin grids where a single table keeps columns aligned (no sticky).
    */
   scrollShell?: boolean;
   /** Client-side filter against the currently loaded rows (current page). */
@@ -130,6 +130,37 @@ function renderCellContent<T>(row: T, column: Column<T>) {
   return value === undefined || value === null ? "" : String(value);
 }
 
+const CHECKBOX_INPUT_CLASS =
+  "m-0 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900";
+
+const CHECKBOX_HEADER_CELL_CLASS =
+  "relative w-14 border-b border-slate-200 px-3 py-2 sm:px-4 sm:py-2.5 dark:border-slate-600";
+
+const CHECKBOX_BODY_CELL_CLASS =
+  "relative w-14 border-b border-slate-100 px-3 py-2 sm:px-4 sm:py-2.5 dark:border-slate-700/80";
+
+function CheckboxCell({
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  ariaLabel: string;
+}) {
+  return (
+    <label className="absolute inset-0 flex cursor-pointer items-center justify-center">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        aria-label={ariaLabel}
+        className={CHECKBOX_INPUT_CLASS}
+      />
+    </label>
+  );
+}
+
 export function DataTable<T extends { id: string }>({
   columns,
   rows,
@@ -139,12 +170,13 @@ export function DataTable<T extends { id: string }>({
   onToggleAllRows,
   rowReorder,
   defaultSort,
-  stickyHeader = false,
+  stickyHeader = true,
   scrollShell = true,
   filterQuery = "",
 }: DataTableProps<T>) {
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Sticky thead inside overflow-x-auto breaks (header floats mid-table). Compact grids stay non-sticky.
   const dragOverRowIdRef = useRef<string | null>(null);
   const dropTargetRef = useRef<string | null>(null);
   const stableBodyHeightRef = useRef(0);
@@ -360,13 +392,11 @@ export function DataTable<T extends { id: string }>({
         <th className="w-10 border-b border-slate-200 px-2 py-2 text-left sm:py-3 dark:border-slate-600" aria-label="Reorder" />
       ) : null}
       {isSelectable ? (
-        <th className="w-14 border-b border-slate-200 px-3 py-2 text-left sm:px-4 sm:py-2.5 dark:border-slate-600">
-          <input
-            type="checkbox"
+        <th className={CHECKBOX_HEADER_CELL_CLASS}>
+          <CheckboxCell
             checked={allRowsSelected}
-            onChange={(event) => onToggleAllRows?.(event.target.checked)}
-            aria-label="Select all rows"
-            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+            onChange={() => onToggleAllRows?.(!allRowsSelected)}
+            ariaLabel="Select all rows"
           />
         </th>
       ) : null}
@@ -448,13 +478,11 @@ export function DataTable<T extends { id: string }>({
               </td>
             ) : null}
             {isSelectable ? (
-              <td className="border-b border-slate-100 px-3 py-2 align-middle sm:px-4 sm:py-2.5 dark:border-slate-700/80">
-                <input
-                  type="checkbox"
+              <td className={CHECKBOX_BODY_CELL_CLASS}>
+                <CheckboxCell
                   checked={selectedIds.has(row.id)}
                   onChange={() => onToggleRow?.(row.id)}
-                  aria-label={`Select row ${row.id}`}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-500 dark:bg-slate-900"
+                  ariaLabel={`Select row ${row.id}`}
                 />
               </td>
             ) : null}
@@ -462,7 +490,7 @@ export function DataTable<T extends { id: string }>({
               <td
                 key={String(column.key)}
                 className={cn(
-                  "border-b border-slate-100 px-3 py-2 text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200",
+                  "border-b border-slate-100 px-3 py-2 align-middle text-slate-600 sm:px-4 sm:py-2.5 dark:border-slate-700/80 dark:text-slate-200",
                   column.className
                 )}
               >

@@ -547,7 +547,18 @@ export function LeadDetailPage() {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 md:p-6">
               {activeTab === "lead-body" ? (
-                <div className="space-y-3">
+                <div className="space-y-5">
+                  {lead.publisherResponse ? (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        Publisher response
+                      </h3>
+                      <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100">
+                        {JSON.stringify(lead.publisherResponse, null, 2)}
+                      </pre>
+                    </div>
+                  ) : null}
+                  <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Lead body</h3>
                   <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
                     <table className="min-w-full text-sm">
@@ -574,6 +585,7 @@ export function LeadDetailPage() {
                         )}
                       </tbody>
                     </table>
+                  </div>
                   </div>
                 </div>
               ) : null}

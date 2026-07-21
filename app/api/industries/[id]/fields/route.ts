@@ -188,7 +188,8 @@ export async function POST(req: Request, context: Params) {
     vertical.fields.push(field);
     await vertical.save();
 
-    return NextResponse.json(toVerticalFieldResponse(field), { status: 201 });
+    const createdField = vertical.fields[vertical.fields.length - 1];
+    return NextResponse.json(toVerticalFieldResponse(createdField), { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save vertical fields.";
     return NextResponse.json({ message }, { status: 500 });

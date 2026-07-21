@@ -635,31 +635,22 @@ const SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS: LeadResponseStatusDefinition[] = 
   },
   {
     statusCode: 3,
-    title: "In Progress",
-    description: "The lead is still being processed.",
-    example: {
-      status: 3,
-      status_text: "In Progress",
-    },
-  },
-  {
-    statusCode: 4,
     title: "Authentication or Server Error",
     description:
       "The request failed due to authentication problems or an unexpected server error while processing the lead.",
     example: {
-      status: 4,
+      status: 3,
       status_text: "Authentication or server error",
       reasons: "Authentication failed. API key is required.",
     },
   },
   {
-    statusCode: 7,
+    statusCode: 4,
     title: "Access Denied",
     description:
       "The publisher, publisher channel, or publisher source is paused and cannot accept leads.",
     example: {
-      status: 7,
+      status: 4,
       status_text: "Access Denied",
       reasons: { message: "The publisher is currently paused" },
     },
@@ -710,11 +701,11 @@ export function buildRejectLeadResponse() {
   return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[0].example;
 }
 
-export function buildInProgressLeadResponse() {
+export function buildAuthorizationFailedLeadResponse() {
   return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[1].example;
 }
 
-export function buildAuthorizationFailedLeadResponse() {
+export function buildAccessDeniedLeadResponse() {
   return SHARED_LEAD_RESPONSE_STATUS_DEFINITIONS[2].example;
 }
 
@@ -758,13 +749,13 @@ export function buildErrorRows(fields: DocumentationField[]): DocumentationError
     {
       status: "401 Unauthorized",
       scenario: "Missing or invalid API key",
-      message: '{"status":4,"errors":[{"Authorization Failed":""}]}',
+      message: '{"status":3,"status_text":"Authentication or server error","reasons":"Authentication failed. API key is required."}',
     },
     {
       status: "403 Forbidden",
       scenario: "Publisher, publisher channel, or publisher source is paused",
       message:
-        '{"status":7,"status_text":"Access Denied","reasons":{"message":"The publisher is currently paused"}}',
+        '{"status":4,"status_text":"Access Denied","reasons":{"message":"The publisher is currently paused"}}',
     },
     {
       status: "500 Internal Server Error",

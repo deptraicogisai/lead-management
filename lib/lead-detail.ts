@@ -129,6 +129,8 @@ export type LeadDetailRecord = {
   publisherPayout: string;
   fields: LeadDetailFieldRow[];
   validationErrors: string[];
+  /** JSON body returned to the publisher for this lead intake. */
+  publisherResponse: Record<string, unknown> | null;
   filterLog: LeadDetailFilterLogEntry[];
   filterProcessing: LeadDetailFilterProcessingSection[];
   redirects: LeadDetailRedirectRow[];
@@ -688,6 +690,8 @@ export function buildLeadDetailRecord(params: {
   id: string;
   validationStatus: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
+  isTestLead?: boolean;
+  publisherResponse?: Record<string, unknown> | null;
   redirectConfirmedAt?: Date | string | null;
   redirectUrl?: string | null;
   redirectClientIp?: string | null;
@@ -753,6 +757,7 @@ export function buildLeadDetailRecord(params: {
     statusLabel: resolvePublisherLeadDetailStatus({
       publisherStatus: params.publisherStatus,
       validationStatus: params.validationStatus,
+      isTestLead: params.isTestLead,
     }),
     redirectLabel,
     redirectConfirmed: isLeadRedirectConfirmed({ redirectConfirmedAt: params.redirectConfirmedAt }),
@@ -767,6 +772,7 @@ export function buildLeadDetailRecord(params: {
     publisherPayout: money.publisherPayout,
     fields: buildLeadBodyFields(params.payload, params.fieldLabelsByName),
     validationErrors: params.validationErrors ?? [],
+    publisherResponse: params.publisherResponse ?? null,
     filterLog: params.filterLog ?? [],
     filterProcessing: params.filterProcessing ?? [],
     redirects: buildLeadRedirectRows({

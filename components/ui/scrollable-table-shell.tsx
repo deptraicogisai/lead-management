@@ -10,6 +10,7 @@ import {
   type Ref,
 } from "react";
 import { cn } from "@/lib/utils";
+import { useTableStickyHeader } from "@/lib/use-table-sticky-header";
 
 export const TABLE_STICKY_HEADER_CLASS = "bg-slate-50 dark:bg-slate-800";
 
@@ -178,7 +179,7 @@ export function ScrollableTableShell({
   scrollContainerRef,
   showMobileHint = false,
   overlay,
-  stickyHeader = false,
+  stickyHeader = true,
   freezeColumnWidths = false,
   columnLayoutKey,
   columnWidthHints,
@@ -195,21 +196,9 @@ export function ScrollableTableShell({
   const syncingScrollRef = useRef(false);
   const scrollLeftRef = useRef(0);
   const frozenWidthsRef = useRef<number[] | null>(null);
-  const stickySentinelRef = useRef<HTMLDivElement>(null);
-  const stickyTopRef = useRef(0);
+  const { sentinelRef: stickySentinelRef, stickyTop, headerIsStuck, updateHeaderIsStuck } =
+    useTableStickyHeader(stickyHeader);
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
-  const [stickyTop, setStickyTop] = useState(0);
-  const [headerIsStuck, setHeaderIsStuck] = useState(false);
-
-  stickyTopRef.current = stickyTop;
-
-  const updateHeaderIsStuck = useCallback(() => {
-    if (!stickyHeader) return;
-    const sentinel = stickySentinelRef.current;
-    if (!sentinel) return;
-    const stuck = sentinel.getBoundingClientRect().bottom <= stickyTopRef.current + 0.5;
-    setHeaderIsStuck((current) => (current === stuck ? current : stuck));
-  }, [stickyHeader]);
 
   const mergedTableClassName = cn(DEFAULT_TABLE_CLASS, tableClassName);
 
@@ -428,61 +417,7 @@ export function ScrollableTableShell({
       window.removeEventListener("resize", syncLayout);
       window.visualViewport?.removeEventListener("resize", syncLayout);
     };
-  }, [applyScrollLeft, freezeColumnWidths, syncLayout, tfoot]);
-
-  useEffect(() => {
-    if (!stickyHeader) {
-      setStickyTop(0);
-      return;
-    }
-
-    const chrome = document.querySelector<HTMLElement>(".mobile-app-header");
-    if (!chrome) {
-      setStickyTop(0);
-      return;
-    }
-
-    const updateStickyTop = () => {
-      setStickyTop(Math.ceil(chrome.getBoundingClientRect().height));
-    };
-
-    updateStickyTop();
-    const observer = new ResizeObserver(updateStickyTop);
-    observer.observe(chrome);
-    window.addEventListener("resize", updateStickyTop);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateStickyTop);
-    };
-  }, [stickyHeader]);
-
-  useEffect(() => {
-    if (!stickyHeader) {
-      setHeaderIsStuck(false);
-      return;
-    }
-
-    let frame = 0;
-    const scheduleUpdate = () => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        updateHeaderIsStuck();
-      });
-    };
-
-    scheduleUpdate();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true, capture: true });
-    window.addEventListener("resize", scheduleUpdate);
-    window.visualViewport?.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", scheduleUpdate, { capture: true });
-      window.removeEventListener("resize", scheduleUpdate);
-      window.visualViewport?.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [stickyHeader, stickyTop, updateHeaderIsStuck, children, thead, tfoot]);
+  }, [applyScrollLeft, columnWidthHints, freezeColumnWidths, stickyHeader, updateHeaderIsStuck, syncLayout, tfoot]);
 
   return (
     <div

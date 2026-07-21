@@ -243,10 +243,12 @@ export function buildQualityDots(
 export function resolvePublisherLeadDetailStatus(input: {
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
   validationStatus?: "success" | "fail";
+  isTestLead?: boolean;
 }): PublisherLeadDetailsRow["statusLabel"] {
+  // Test-mode leads always display as Test, including intake/filter rejects.
+  if (input.publisherStatus === "Test" || input.isTestLead) return "Test";
   if (input.validationStatus === "fail") return "Intake Reject";
   if (input.publisherStatus === "Sold") return "Sold";
-  if (input.publisherStatus === "Test") return "Test";
   if (input.publisherStatus === "Post Error") return "Post Error";
   if (input.publisherStatus === "Reject") return "Reject";
   return "New";
@@ -547,6 +549,7 @@ export function mapLeadDocToPublisherRow(input: {
   id: string;
   validationStatus: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
+  isTestLead?: boolean;
   redirectConfirmedAt?: Date | string | null;
   soldPrice?: number | null;
   postedAt: string;
@@ -587,6 +590,7 @@ export function mapLeadDocToPublisherRow(input: {
     statusLabel: resolvePublisherLeadDetailStatus({
       publisherStatus: input.publisherStatus,
       validationStatus: input.validationStatus,
+      isTestLead: input.isTestLead,
     }),
     tier: 0,
     publisherLabel: input.publisherIndex

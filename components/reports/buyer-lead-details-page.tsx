@@ -829,7 +829,6 @@ export function BuyerLeadDetailsPage() {
               rows={rows}
               filterQuery={pageFilter}
               emptyMessage="No buyer deliveries found."
-              stickyHeader
             />
 
             <div className="mt-4">

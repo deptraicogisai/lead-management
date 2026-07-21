@@ -53,7 +53,7 @@ export function resolveAcceptedBuyerPrice(
 
 export type DeliveryPriceSource = {
   pingTreeType: PingTreeCampaignType;
-  buyerStatus: string;
+  buyerStatus?: string;
   price: number | null;
   campaignMinPrice?: number;
 };
@@ -66,7 +66,9 @@ export function isSilentZeroMinPriceAccept(delivery: DeliveryPriceSource): boole
   return (
     delivery.pingTreeType === "Silent" &&
     delivery.buyerStatus === "Accept" &&
-    (delivery.campaignMinPrice ?? 0) === 0
+    delivery.campaignMinPrice !== undefined &&
+    delivery.campaignMinPrice !== null &&
+    delivery.campaignMinPrice === 0
   );
 }
 
@@ -128,6 +130,71 @@ export function resolvePublisherBuyerPrice(
   }
 
   return accepted.price ?? null;
+}
+
+export type PublisherScopedDelivery = DeliveryPriceSource & {
+  sellerLeadRef?: string;
+  buyerStatus?: string;
+  buyerRef?: string;
+  campaignRef?: string;
+};
+
+/** Accept delivery that counts toward publisher-report TTL for the lead's API type. */
+export function isPublisherScopedAcceptDelivery(
+  delivery: PublisherScopedDelivery,
+  apiType: MappingApiType = "Redirect"
+): boolean {
+  return (
+    delivery.buyerStatus === "Accept" &&
+    isPublisherCountableAccept(delivery) &&
+    shouldApplyPublisherPayout(delivery.pingTreeType, apiType)
+  );
+}
+
+export function findPublisherScopedAcceptedDelivery(
+  deliveries: PublisherScopedDelivery[],
+  apiType: MappingApiType = "Redirect"
+): PublisherScopedDelivery | null {
+  if (apiType === "Redirect") {
+    return (
+      deliveries.find(
+        (delivery) =>
+          delivery.pingTreeType === "Redirect" && isPublisherScopedAcceptDelivery(delivery, apiType)
+      ) ?? null
+    );
+  }
+
+  return (
+    deliveries.find(
+      (delivery) =>
+        delivery.pingTreeType === "Silent" && isPublisherScopedAcceptDelivery(delivery, apiType)
+    ) ?? null
+  );
+}
+
+function scopedAcceptRawPrice(delivery: PublisherScopedDelivery, apiType: MappingApiType): number {
+  if (apiType === "Silent" && delivery.pingTreeType === "Silent") {
+    return silentAcceptRawPrice(delivery) ?? 0;
+  }
+
+  return typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
+}
+
+/** Sum buyer-side TTL for publisher reports, scoped by mapping API type. */
+export function sumPublisherScopedDeliveryRevenue(
+  leadId: string,
+  deliveries: PublisherScopedDelivery[],
+  apiType: MappingApiType = "Redirect"
+): number {
+  let total = 0;
+  for (const delivery of deliveries) {
+    const sellerLeadRef = delivery.sellerLeadRef ?? "";
+    if (sellerLeadRef !== leadId) continue;
+    if (!isPublisherScopedAcceptDelivery(delivery, apiType)) continue;
+    total += scopedAcceptRawPrice(delivery, apiType);
+  }
+
+  return normalizePrice(total) ?? 0;
 }
 
 export function shouldExposePublisherResponsePrice(

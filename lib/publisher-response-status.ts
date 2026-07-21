@@ -1,17 +1,22 @@
 import { formatPublisherReasons, type PublisherReasons } from "@/lib/mapping-lead-validation";
 
+/**
+ * Publisher API JSON `status` codes:
+ * 1 — Accepted
+ * 2 — Rejected
+ * 3 — Authentication or server error (auth failures + unexpected server errors)
+ * 4 — Access Denied (publisher / channel / source paused)
+ */
 export const PUBLISHER_RESPONSE_STATUS = {
   accepted: 1,
   rejected: 2,
-  inProgress: 3,
-  error: 4,
-  accessDenied: 7,
+  error: 3,
+  accessDenied: 4,
 } as const;
 
 export const PUBLISHER_RESPONSE_STATUS_TEXT = {
   accepted: "Accepted",
   rejected: "Rejected",
-  inProgress: "In Progress",
   error: "Authentication or server error",
   accessDenied: "Access Denied",
 } as const;
@@ -31,13 +36,6 @@ export function buildPublisherRejectedResponse(reasons: string[]): Record<string
     status: PUBLISHER_RESPONSE_STATUS.rejected,
     status_text: PUBLISHER_RESPONSE_STATUS_TEXT.rejected,
     reasons: formatPublisherReasons(reasons),
-  };
-}
-
-export function buildPublisherInProgressResponse(): Record<string, unknown> {
-  return {
-    status: PUBLISHER_RESPONSE_STATUS.inProgress,
-    status_text: PUBLISHER_RESPONSE_STATUS_TEXT.inProgress,
   };
 }
 

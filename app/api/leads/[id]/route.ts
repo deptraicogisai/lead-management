@@ -22,6 +22,13 @@ import {
   type PublisherLeadAcceptedDelivery,
 } from "@/lib/publisher-lead-details";
 import { getChannelMappingForLeadRef, loadPublisherChannelMappingsByIds } from "@/lib/publisher-channel-mapping";
+import { loadMappingApiTypeByIds } from "@/lib/mapping-api-type-server";
+import { resolveLeadMappingApiType } from "@/lib/mapping-api-type";
+import {
+  findPublisherScopedAcceptedDelivery,
+  sumPublisherScopedDeliveryRevenue,
+  type PublisherScopedDelivery,
+} from "@/lib/lead-price";
 import { isPingTreeProcessingType } from "@/lib/ping-tree-config";
 
 type Params = { params: Promise<{ id: string }> };
@@ -36,6 +43,8 @@ type LeadDoc = {
   validationStatus: "success" | "fail";
   validationErrors?: string[];
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
+  isTestLead?: boolean;
+  publisherResponse?: Record<string, unknown> | null;
   redirectConfirmedAt?: Date | string | null;
   redirectUrl?: string | null;
   redirectClientIp?: string | null;
@@ -210,8 +219,25 @@ export async function GET(_req: Request, context: Params) {
     const campaignById = new Map(campaigns.map((campaign) => [campaign._id.toString(), campaign]));
 
     const acceptedDeliveries = deliveries.filter((delivery) => delivery.buyerStatus === "Accept");
-    const acceptedRedirect = acceptedDeliveries.find((delivery) => delivery.pingTreeType === "Redirect");
-    const acceptedAny = acceptedRedirect ?? acceptedDeliveries[0] ?? null;
+    const mappingRef =
+      typeof lead.mappingRef === "string" ? lead.mappingRef : lead.mappingRef?.toString() ?? "";
+    const mappingApiTypeById = await loadMappingApiTypeByIds([mappingRef]);
+    const apiType = resolveLeadMappingApiType(mappingRef, mappingApiTypeById);
+
+    const scopedDeliveries: PublisherScopedDelivery[] = acceptedDeliveries.map((delivery) => {
+      const campaign = campaignById.get(delivery.campaignRef?.toString() ?? "");
+      return {
+        sellerLeadRef: leadId,
+        pingTreeType: delivery.pingTreeType === "Silent" ? "Silent" : "Redirect",
+        buyerStatus: delivery.buyerStatus,
+        price: typeof delivery.price === "number" ? delivery.price : null,
+        campaignMinPrice: typeof campaign?.minPrice === "number" ? campaign.minPrice : undefined,
+        buyerRef: delivery.buyerRef?.toString() ?? "",
+        campaignRef: delivery.campaignRef?.toString() ?? "",
+      };
+    });
+
+    const acceptedAny = findPublisherScopedAcceptedDelivery(scopedDeliveries, apiType);
 
     let acceptedDelivery: PublisherLeadAcceptedDelivery | null = null;
     let buyerLabel = "";
@@ -235,7 +261,10 @@ export async function GET(_req: Request, context: Params) {
         : buyerCompany;
     }
 
-    const redirectDelivery = acceptedRedirect ?? null;
+    const redirectDelivery =
+      apiType === "Redirect"
+        ? acceptedDeliveries.find((delivery) => delivery.pingTreeType === "Redirect") ?? null
+        : null;
     if (redirectDelivery) {
       const campaign = campaignById.get(redirectDelivery.campaignRef?.toString() ?? "");
       redirectCampaignId = redirectDelivery.campaignRef?.toString() ?? "";
@@ -243,9 +272,7 @@ export async function GET(_req: Request, context: Params) {
       redirectCreatedAt = toIsoString(redirectDelivery.postedAt, lead.postedAt);
     }
 
-    const buyerRevenue = acceptedDeliveries.reduce((sum, delivery) => {
-      return sum + (typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0);
-    }, 0);
+    const buyerRevenue = sumPublisherScopedDeliveryRevenue(leadId, scopedDeliveries, apiType);
 
     const fieldLabelsByName = new Map<string, string>();
     const verticalFields = Array.isArray((vertical as { fields?: unknown } | null)?.fields)
@@ -366,8 +393,6 @@ export async function GET(_req: Request, context: Params) {
     const publisherName = seller?.name?.trim() || "Unknown";
     const verticalIndex = verticalIndexById.get(verticalRef) ?? 0;
     const verticalName = vertical?.name?.trim() || "Unknown";
-    const mappingRef =
-      typeof lead.mappingRef === "string" ? lead.mappingRef : lead.mappingRef?.toString() ?? "";
     const channelMappingById = await loadPublisherChannelMappingsByIds([mappingRef]);
     const channelMapping = getChannelMappingForLeadRef(channelMappingById, mappingRef);
 
@@ -375,6 +400,11 @@ export async function GET(_req: Request, context: Params) {
       id: leadId,
       validationStatus: lead.validationStatus,
       publisherStatus: lead.publisherStatus,
+      isTestLead: Boolean(lead.isTestLead),
+      publisherResponse:
+        lead.publisherResponse && typeof lead.publisherResponse === "object"
+          ? (lead.publisherResponse as Record<string, unknown>)
+          : null,
       redirectConfirmedAt: lead.redirectConfirmedAt,
       redirectUrl: lead.redirectUrl,
       redirectClientIp: lead.redirectClientIp,

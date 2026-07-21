@@ -382,10 +382,13 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       return;
     }
 
+    const normalizedFilters = normalizeGeneralFiltersForStorage(campaign.generalFilters);
+    setCampaign({ ...campaign, generalFilters: normalizedFilters });
+
     const saved = await saveSection(
       "filters",
       {
-        generalFilters: normalizeGeneralFiltersForStorage(campaign.generalFilters),
+        generalFilters: normalizedFilters,
         plDnplListIds: selectedPlDnplIds,
         copyPlDnplToOtherCampaigns,
       },
@@ -403,7 +406,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         body: JSON.stringify({
           action: "copy-filters",
           targetCampaignIds: copyFilterCampaignIds,
-          generalFilters: normalizeGeneralFiltersForStorage(campaign.generalFilters),
+          generalFilters: normalizedFilters,
         }),
       });
 

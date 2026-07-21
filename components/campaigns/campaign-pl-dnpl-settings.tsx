@@ -159,7 +159,7 @@ export function CampaignPlDnplSettings({
                         : "border-rose-200 bg-rose-100 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-200"
                     )}
                   >
-                    <span className="truncate">
+                    <span className="break-words whitespace-normal">
                       [{list.displayId}] {list.name}
                     </span>
                   </span>

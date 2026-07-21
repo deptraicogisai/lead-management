@@ -17,6 +17,9 @@ import {
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { finalizeBuyerPerformanceMetrics } from "@/lib/buyer-performance-summary";
 import { finalizePublisherPerformanceMetrics } from "@/lib/publisher-performance-summary";
+import { buildLeadApiTypeByLeadId, type MappingApiType } from "@/lib/mapping-api-type";
+import { loadMappingApiTypeByIds } from "@/lib/mapping-api-type-server";
+import { isPublisherScopedAcceptDelivery } from "@/lib/lead-price";
 import {
   BUYER_CHART_SERIES,
   PUBLISHER_CHART_SERIES,
@@ -41,6 +44,7 @@ type LeadProjection = {
   _id?: { toString(): string };
   sellerRef?: { toString(): string } | string;
   verticalRef?: { toString(): string } | string;
+  mappingRef?: { toString(): string } | string;
   validationStatus?: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
   soldPrice?: number | null;
@@ -54,6 +58,7 @@ type DeliveryProjection = {
   sellerLeadRef?: { toString(): string } | string;
   verticalRef?: { toString(): string } | string;
   buyerStatus?: string;
+  pingTreeType?: "Redirect" | "Silent";
   price?: number | null;
   postedAt?: Date | string;
 };
@@ -90,6 +95,29 @@ const CHART_DAY_COUNT = 8;
 function refToString(ref?: { toString(): string } | string | null) {
   if (!ref) return "";
   return typeof ref === "string" ? ref : ref.toString();
+}
+
+function resolvePublisherScopedTtl(
+  delivery: DeliveryProjection,
+  leadApiTypeByLeadId: Map<string, MappingApiType>
+): number {
+  const leadId = refToString(delivery.sellerLeadRef);
+  const apiType = leadApiTypeByLeadId.get(leadId) ?? "Redirect";
+  const pingTreeType = delivery.pingTreeType === "Silent" ? "Silent" : "Redirect";
+  if (
+    !isPublisherScopedAcceptDelivery(
+      {
+        pingTreeType,
+        buyerStatus: delivery.buyerStatus ?? "Accept",
+        price: typeof delivery.price === "number" ? delivery.price : null,
+      },
+      apiType
+    )
+  ) {
+    return 0;
+  }
+
+  return typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
 }
 
 function createPublisherAccumulator(): PublisherAccumulator {
@@ -437,6 +465,7 @@ function buildRankingData(
   deliveries: DeliveryProjection[],
   soldPriceByLeadId: Map<string, number>,
   redirectedLeadIds: Set<string>,
+  leadApiTypeByLeadId: Map<string, MappingApiType>,
   refs: ReferenceData
 ): DashboardRankingData {
   const publisherBySeller = new Map<string, PublisherAccumulator>();
@@ -520,10 +549,10 @@ function buildRankingData(
 
       if (sellerId) {
         const sellerBucket = ensurePublisher(publisherBySeller, sellerId);
-        sellerBucket.ttl += typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
+        const scopedTtl = resolvePublisherScopedTtl(delivery, leadApiTypeByLeadId);
+        sellerBucket.ttl += scopedTtl;
         if (productId) {
-          ensurePublisher(productPublisher, productId).ttl +=
-            typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
+          ensurePublisher(productPublisher, productId).ttl += scopedTtl;
         }
       }
 
@@ -557,7 +586,8 @@ function aggregateTotalsForRange(
   leads: LeadProjection[],
   deliveries: DeliveryProjection[],
   soldPriceByLeadId: Map<string, number>,
-  redirectedLeadIds: Set<string>
+  redirectedLeadIds: Set<string>,
+  leadApiTypeByLeadId: Map<string, MappingApiType>
 ) {
   const publisher = createPublisherAccumulator();
   const buyer = createBuyerAccumulator();
@@ -585,7 +615,7 @@ function aggregateTotalsForRange(
       buyer.accept += 1;
       if (typeof delivery.price === "number" && Number.isFinite(delivery.price)) {
         buyer.ttl += delivery.price;
-        publisher.ttl += delivery.price;
+        publisher.ttl += resolvePublisherScopedTtl(delivery, leadApiTypeByLeadId);
       }
       const leadId = refToString(delivery.sellerLeadRef);
       if (leadId) {
@@ -671,6 +701,7 @@ export async function buildDashboardSnapshot(layoutName: string): Promise<Dashbo
       .select({
         sellerRef: 1,
         verticalRef: 1,
+        mappingRef: 1,
         validationStatus: 1,
         publisherStatus: 1,
         soldPrice: 1,
@@ -687,6 +718,7 @@ export async function buildDashboardSnapshot(layoutName: string): Promise<Dashbo
         sellerLeadRef: 1,
         verticalRef: 1,
         buyerStatus: 1,
+        pingTreeType: 1,
         price: 1,
         postedAt: 1,
       })
@@ -704,9 +736,18 @@ export async function buildDashboardSnapshot(layoutName: string): Promise<Dashbo
   const sellerLeadDocs =
     acceptLeadIds.size > 0
       ? await SellerLeadModel.find({ _id: { $in: [...acceptLeadIds] } })
-          .select({ soldPrice: 1, redirectConfirmedAt: 1 })
+          .select({ soldPrice: 1, redirectConfirmedAt: 1, mappingRef: 1 })
           .lean()
       : [];
+
+  const mappingApiTypeById = await loadMappingApiTypeByIds([
+    ...(leads as LeadProjection[]).map((lead) => refToString(lead.mappingRef)),
+    ...sellerLeadDocs.map((lead) => refToString(lead.mappingRef)),
+  ]);
+  const leadApiTypeByLeadId = buildLeadApiTypeByLeadId(
+    [...(leads as LeadProjection[]), ...sellerLeadDocs],
+    mappingApiTypeById
+  );
 
   const soldPriceByLeadId = new Map<string, number>();
   const redirectedLeadIds = new Set<string>();
@@ -769,7 +810,7 @@ export async function buildDashboardSnapshot(layoutName: string): Promise<Dashbo
       buyerBucket.accept += 1;
       if (typeof delivery.price === "number" && Number.isFinite(delivery.price)) {
         buyerBucket.ttl += delivery.price;
-        publisherBucket.ttl += delivery.price;
+        publisherBucket.ttl += resolvePublisherScopedTtl(delivery, leadApiTypeByLeadId);
       }
       const leadId = refToString(delivery.sellerLeadRef);
       if (leadId) {
@@ -784,32 +825,65 @@ export async function buildDashboardSnapshot(layoutName: string): Promise<Dashbo
     publisherByDay.set(key, publisherBucket);
   }
 
-  const todayTotals = aggregateTotalsForRange(ranges.today, leadRows, deliveryRows, soldPriceByLeadId, redirectedLeadIds);
+  const todayTotals = aggregateTotalsForRange(
+    ranges.today,
+    leadRows,
+    deliveryRows,
+    soldPriceByLeadId,
+    redirectedLeadIds,
+    leadApiTypeByLeadId
+  );
   const priorDayTotals = aggregateTotalsForRange(
     ranges.yesterday,
     leadRows,
     deliveryRows,
     soldPriceByLeadId,
-    redirectedLeadIds
+    redirectedLeadIds,
+    leadApiTypeByLeadId
   );
   const priorWeekTotals = aggregateTotalsForRange(
     ranges.priorWeek,
     leadRows,
     deliveryRows,
     soldPriceByLeadId,
-    redirectedLeadIds
+    redirectedLeadIds,
+    leadApiTypeByLeadId
   );
 
   const [todayRankings, yesterdayRankings, weekRankings, activityToday, activityYesterday, activityLastWeek, activityLastMonth] =
     await Promise.all([
       Promise.resolve(
-        buildRankingData(ranges.today, leadRows, deliveryRows, soldPriceByLeadId, redirectedLeadIds, refs)
+        buildRankingData(
+          ranges.today,
+          leadRows,
+          deliveryRows,
+          soldPriceByLeadId,
+          redirectedLeadIds,
+          leadApiTypeByLeadId,
+          refs
+        )
       ),
       Promise.resolve(
-        buildRankingData(ranges.yesterday, leadRows, deliveryRows, soldPriceByLeadId, redirectedLeadIds, refs)
+        buildRankingData(
+          ranges.yesterday,
+          leadRows,
+          deliveryRows,
+          soldPriceByLeadId,
+          redirectedLeadIds,
+          leadApiTypeByLeadId,
+          refs
+        )
       ),
       Promise.resolve(
-        buildRankingData(ranges.week, leadRows, deliveryRows, soldPriceByLeadId, redirectedLeadIds, refs)
+        buildRankingData(
+          ranges.week,
+          leadRows,
+          deliveryRows,
+          soldPriceByLeadId,
+          redirectedLeadIds,
+          leadApiTypeByLeadId,
+          refs
+        )
       ),
       countFailedLogs(ranges.activity.today),
       countFailedLogs(ranges.activity.yesterday),

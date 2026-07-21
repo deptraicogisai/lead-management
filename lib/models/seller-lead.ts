@@ -15,6 +15,8 @@ const sellerLeadSchema = new Schema(
       index: true,
     },
     isTestLead: { type: Boolean, default: false },
+    /** JSON body returned to the publisher for this intake request. */
+    publisherResponse: { type: Schema.Types.Mixed, required: false, default: null },
     // Buyer offer URL returned from a Redirect campaign accept.
     redirectUrl: { type: String, required: false, trim: true, default: "" },
     redirectConfirmedAt: { type: Date, required: false, index: true },

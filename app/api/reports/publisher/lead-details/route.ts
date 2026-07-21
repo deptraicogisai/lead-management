@@ -17,6 +17,13 @@ import {
   type PublisherLeadAcceptedDelivery,
   type PublisherLeadDetailsRow,
 } from "@/lib/publisher-lead-details";
+import { loadMappingApiTypeByIds } from "@/lib/mapping-api-type-server";
+import { resolveLeadMappingApiType } from "@/lib/mapping-api-type";
+import {
+  findPublisherScopedAcceptedDelivery,
+  sumPublisherScopedDeliveryRevenue,
+  type PublisherScopedDelivery,
+} from "@/lib/lead-price";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
 import {
   buildMultiValuePayloadMatch,
@@ -38,6 +45,7 @@ type LeadDoc = {
   validationStatus: "success" | "fail";
   validationErrors?: string[];
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
+  isTestLead?: boolean;
   redirectConfirmedAt?: Date | string | null;
   soldPrice?: number | null;
   userAgent?: string;
@@ -269,38 +277,24 @@ type AcceptedDeliveryDoc = {
   campaignOrder?: number;
 };
 
-function resolveRedirectCampaignDelivery(
-  leadId: string,
-  deliveries: AcceptedDeliveryDoc[]
-): AcceptedDeliveryDoc | null {
-  return (
-    deliveries.find((delivery) => {
-      const sellerLeadRef =
-        typeof delivery.sellerLeadRef === "string"
-          ? delivery.sellerLeadRef
-          : delivery.sellerLeadRef?.toString() ?? "";
-      return sellerLeadRef === leadId && delivery.pingTreeType === "Redirect";
-    }) ?? null
-  );
+function refToLeadId(ref?: { toString(): string } | string | null) {
+  if (!ref) return "";
+  return typeof ref === "string" ? ref : ref.toString();
 }
 
-function sumAcceptedDeliveryRevenue(leadId: string, deliveries: AcceptedDeliveryDoc[]) {
-  return deliveries.reduce((total, delivery) => {
-    const sellerLeadRef =
-      typeof delivery.sellerLeadRef === "string"
-        ? delivery.sellerLeadRef
-        : delivery.sellerLeadRef?.toString() ?? "";
-    if (sellerLeadRef !== leadId) {
-      return total;
-    }
-
-    const price = typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
-    return total + price;
-  }, 0);
+function normalizeAcceptedDeliveries(deliveries: AcceptedDeliveryDoc[]): PublisherScopedDelivery[] {
+  return deliveries.map((delivery) => ({
+    sellerLeadRef: refToLeadId(delivery.sellerLeadRef),
+    buyerRef: refToLeadId(delivery.buyerRef),
+    campaignRef: refToLeadId(delivery.campaignRef),
+    pingTreeType: delivery.pingTreeType === "Silent" ? ("Silent" as const) : ("Redirect" as const),
+    buyerStatus: delivery.buyerStatus ?? "Accept",
+    price: typeof delivery.price === "number" ? delivery.price : null,
+  }));
 }
 
 function buildAcceptedDeliverySummary(
-  delivery: AcceptedDeliveryDoc | null,
+  delivery: PublisherScopedDelivery | null,
   campaignById: Map<string, { name?: string | null; displayId?: number | null }>,
   buyerById: Map<string, BuyerDoc>
 ): PublisherLeadAcceptedDelivery | null {
@@ -308,10 +302,8 @@ function buildAcceptedDeliverySummary(
     return null;
   }
 
-  const campaignId =
-    typeof delivery.campaignRef === "string" ? delivery.campaignRef : delivery.campaignRef?.toString() ?? "";
-  const buyerId =
-    typeof delivery.buyerRef === "string" ? delivery.buyerRef : delivery.buyerRef?.toString() ?? "";
+  const campaignId = delivery.campaignRef ?? "";
+  const buyerId = delivery.buyerRef ?? "";
   const campaign = campaignById.get(campaignId);
   const buyer = buyerById.get(buyerId);
 
@@ -447,6 +439,15 @@ export async function GET(req: Request) {
       })
     );
 
+    const mappingApiTypeById = await loadMappingApiTypeByIds(
+      leads.map((lead) => {
+        const doc = lead as LeadDoc;
+        return typeof doc.mappingRef === "string" ? doc.mappingRef : doc.mappingRef?.toString() ?? "";
+      })
+    );
+
+    const scopedDeliveries = normalizeAcceptedDeliveries(acceptedDeliveries);
+
     const normalizedLeads = leads.map((lead) => {
       const doc = lead as LeadDoc;
       const payload = normalizeLeadPayload(doc as Record<string, unknown>);
@@ -468,16 +469,20 @@ export async function GET(req: Request) {
       const verticalRef =
         typeof doc.verticalRef === "string" ? doc.verticalRef : doc.verticalRef?.toString() ?? "";
       const leadId = doc._id?.toString() ?? "";
+      const mappingRef =
+        typeof doc.mappingRef === "string" ? doc.mappingRef : doc.mappingRef?.toString() ?? "";
+      const apiType = resolveLeadMappingApiType(mappingRef, mappingApiTypeById);
       const postedAt = toIsoString(doc.postedAt, doc.createdAt);
       const createdAt = toIsoString(doc.createdAt, doc.postedAt);
-      const acceptedDeliveryDoc = resolveRedirectCampaignDelivery(leadId, acceptedDeliveries);
-      const buyerRevenue = sumAcceptedDeliveryRevenue(leadId, acceptedDeliveries);
+      const acceptedDeliveryDoc = findPublisherScopedAcceptedDelivery(scopedDeliveries, apiType);
+      const buyerRevenue = sumPublisherScopedDeliveryRevenue(leadId, scopedDeliveries, apiType);
       const channelMapping = getChannelMappingForLeadRef(channelMappingById, doc.mappingRef);
 
       return mapLeadDocToPublisherRow({
         id: leadId,
         validationStatus: doc.validationStatus,
         publisherStatus: doc.publisherStatus,
+        isTestLead: Boolean(doc.isTestLead),
         redirectConfirmedAt: doc.redirectConfirmedAt,
         soldPrice: doc.soldPrice,
         postedAt,

@@ -15,7 +15,7 @@ import {
   type PublisherReasons,
 } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
-import { distributeLeadAfterIntake } from "@/lib/lead-distribution";
+import { distributeLeadAfterIntake, isTestLeadPayload } from "@/lib/lead-distribution";
 import { ensureTrafficSourceForLead } from "@/lib/traffic-source-server";
 import { extractSource } from "@/lib/traffic-source";
 import { isTrafficSourceAllowed, normalizeTrafficSourceStatus } from "@/lib/models/traffic-source";
@@ -23,9 +23,12 @@ import {
   isPublisherIntakePaused,
   PUBLISHER_INTAKE_ACCESS_DENIED_MESSAGES,
 } from "@/lib/publisher-intake-access";
-import { buildPublisherSoldResponse, normalizeMappingApiType } from "@/lib/mapping-api-type";
 import {
-  buildPublisherAcceptedResponse,
+  buildPublisherSoldResponse,
+  normalizeMappingApiType,
+  SILENT_API_NO_BUYER_MESSAGE,
+} from "@/lib/mapping-api-type";
+import {
   buildPublisherAccessDeniedResponse,
   buildPublisherErrorResponse,
   buildPublisherRejectedResponse,
@@ -148,10 +151,13 @@ async function persistRejectedSellerLead(params: {
   reasons: string[];
   postedAt: Date;
   userAgent: string;
+  publisherResponse?: Record<string, unknown> | null;
 }) {
   if (params.reasons.length === 0) {
     return;
   }
+
+  const isTestLead = isTestLeadPayload(params.payload);
 
   try {
     await ensureSellerLeadReferencesMigrated();
@@ -162,6 +168,9 @@ async function persistRejectedSellerLead(params: {
       payload: params.payload,
       validationStatus: "fail",
       validationErrors: params.reasons,
+      publisherStatus: isTestLead ? "Test" : undefined,
+      isTestLead,
+      publisherResponse: params.publisherResponse ?? null,
       postedAt: params.postedAt,
       userAgent: params.userAgent,
     });
@@ -389,6 +398,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -420,6 +430,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -448,6 +459,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -474,6 +486,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -500,6 +513,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -527,6 +541,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -555,6 +570,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -601,6 +617,7 @@ export async function handleSellerLeadPost(req: Request) {
               reasons,
               postedAt,
               userAgent,
+              publisherResponse: responsePayload,
             });
 
             await createSellerIntakeLog({
@@ -629,6 +646,7 @@ export async function handleSellerLeadPost(req: Request) {
               reasons,
               postedAt,
               userAgent,
+              publisherResponse: responsePayload,
             });
 
             await createSellerIntakeLog({
@@ -667,6 +685,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        publisherResponse: responsePayload,
       });
 
       await createSellerIntakeLog({
@@ -694,6 +713,7 @@ export async function handleSellerLeadPost(req: Request) {
     });
 
     const reasons = validationResult.allReasons;
+    const isTestLead = isTestLeadPayload(payload);
 
     const validationStatus = reasons.length === 0 ? "success" : "fail";
     const createdLead = await SellerLeadModel.create({
@@ -703,12 +723,19 @@ export async function handleSellerLeadPost(req: Request) {
       payload,
       validationStatus,
       validationErrors: reasons,
+      publisherStatus: isTestLead ? "Test" : undefined,
+      isTestLead,
       postedAt,
       userAgent,
     });
 
     if (validationStatus === "fail") {
       const responsePayload = buildLeadRejectResponse(reasons);
+
+      await SellerLeadModel.updateOne(
+        { _id: createdLead._id },
+        { $set: { publisherResponse: responsePayload } }
+      );
 
       await createSellerIntakeLog({
         sellerRef: seller._id,
@@ -751,12 +778,22 @@ export async function handleSellerLeadPost(req: Request) {
         publisherResponsePrice: distribution.publisherResponsePrice,
       });
     } else if (distribution.publisherStatus === "Test") {
-      responsePayload = buildPublisherAcceptedResponse();
+      // Test leads never post to buyers — always reject with Buyer not found.
+      responsePayload = buildPublisherRejectedResponse([
+        distribution.message || SILENT_API_NO_BUYER_MESSAGE,
+      ]);
     } else if (distribution.publisherStatus === "Post Error") {
       responsePayload = buildPublisherRejectedResponse([distribution.message]);
     } else {
       responsePayload = buildPublisherRejectedResponse([distribution.message]);
     }
+
+    await SellerLeadModel.updateOne(
+      { _id: createdLead._id },
+      { $set: { publisherResponse: responsePayload } }
+    );
+
+    const isAccepted = distribution.publisherStatus === "Sold";
 
     await createSellerIntakeLog({
       sellerRef: seller._id,
@@ -764,16 +801,11 @@ export async function handleSellerLeadPost(req: Request) {
       endpointUrl,
       requestPayload: payload,
       responseBody: JSON.stringify(responsePayload),
-      deliveryStatus: distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test" ? "success" : "fail",
-      httpStatus: distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test" ? 200 : 400,
+      deliveryStatus: isAccepted ? "success" : "fail",
+      httpStatus: isAccepted ? 200 : 400,
     });
 
-    const httpStatus =
-      distribution.publisherStatus === "Sold" || distribution.publisherStatus === "Test"
-        ? 200
-        : 400;
-
-    return NextResponse.json(responsePayload, { status: httpStatus });
+    return NextResponse.json(responsePayload, { status: isAccepted ? 200 : 400 });
   } catch (error) {
     console.error("Seller lead intake failed:", error);
 
@@ -790,6 +822,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons: ["Unexpected server error while processing lead."],
         postedAt: new Date(),
         userAgent: req.headers.get("user-agent")?.trim() || "Unknown",
+        publisherResponse: responsePayload,
       });
       await createSellerIntakeLog({
         sellerRef: sellerRefForLog,

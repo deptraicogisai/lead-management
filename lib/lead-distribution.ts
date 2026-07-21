@@ -111,12 +111,33 @@ export type LeadDistributionResult = {
   message: string;
 };
 
-function isTestLeadPayload(payload: Record<string, unknown>) {
-  const testValue = payload.test ?? payload.Test;
-  if (testValue === 0 || testValue === "0" || testValue === false || testValue === "false") {
-    return true;
+function isTruthyFlag(value: unknown) {
+  return value === 1 || value === "1" || value === true || value === "true";
+}
+
+function isFalsyFlag(value: unknown) {
+  return (
+    value === 0 ||
+    value === "0" ||
+    value === false ||
+    value === "false" ||
+    value === null ||
+    value === undefined ||
+    value === ""
+  );
+}
+
+/** Publisher payload flag: test_mode=1 keeps the lead in-system only (never posts to buyers). */
+export function isTestLeadPayload(payload: Record<string, unknown>) {
+  const testMode = payload.test_mode ?? payload.testMode ?? payload.Test_Mode;
+  if (isTruthyFlag(testMode)) return true;
+  if (isFalsyFlag(testMode) && testMode !== undefined && testMode !== null && testMode !== "") {
+    return false;
   }
-  return false;
+
+  // Legacy alias: test=1
+  const testValue = payload.test ?? payload.Test;
+  return isTruthyFlag(testValue);
 }
 
 function getCampaignPriority(
@@ -1651,7 +1672,8 @@ export async function distributeLeadAfterIntake(params: {
       publisherResponsePrice: null,
       campaignDeliveries: [],
       buyerPostAttempts: [],
-      message: "Test lead received. Lead was not posted to buyers.",
+      buyerPostHint: SILENT_API_NO_BUYER_MESSAGE,
+      message: SILENT_API_NO_BUYER_MESSAGE,
     };
   }
 

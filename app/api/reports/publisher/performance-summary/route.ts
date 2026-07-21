@@ -7,6 +7,9 @@ import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/model
 import { LeadDeliveryModel } from "@/lib/models/lead-delivery";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { normalizeSearchParam, parsePageParam } from "@/lib/pagination";
+import { buildLeadApiTypeByLeadId } from "@/lib/mapping-api-type";
+import { loadMappingApiTypeByIds } from "@/lib/mapping-api-type-server";
+import { isPublisherScopedAcceptDelivery } from "@/lib/lead-price";
 import {
   emptyPublisherPerformanceMetrics,
   finalizePublisherPerformanceMetrics,
@@ -18,7 +21,9 @@ const DUP_WINDOWS_DAYS = [1, 14, 30, 45] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type LeadProjection = {
+  _id?: { toString(): string };
   sellerRef?: { toString(): string } | string;
+  mappingRef?: { toString(): string } | string;
   validationStatus?: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test";
   soldPrice?: number | null;
@@ -167,10 +172,11 @@ export async function GET(req: Request) {
       return NextResponse.json(buildEmptyResponse(page, pageSize, verticals, sellers));
     }
 
-    const [leads, deliveryTotals, redirectTotals] = await Promise.all([
+    const [leads, acceptDeliveries, redirectTotals] = await Promise.all([
       SellerLeadModel.find(leadMatch)
         .select({
           sellerRef: 1,
+          mappingRef: 1,
           validationStatus: 1,
           publisherStatus: 1,
           soldPrice: 1,
@@ -187,10 +193,15 @@ export async function GET(req: Request) {
         })
         .sort({ postedAt: 1 })
         .lean(),
-      LeadDeliveryModel.aggregate<{ _id: Types.ObjectId | null; ttl: number }>([
-        { $match: deliveryMatch },
-        { $group: { _id: "$sellerRef", ttl: { $sum: { $ifNull: ["$price", 0] } } } },
-      ]),
+      LeadDeliveryModel.find(deliveryMatch)
+        .select({
+          sellerRef: 1,
+          sellerLeadRef: 1,
+          pingTreeType: 1,
+          buyerStatus: 1,
+          price: 1,
+        })
+        .lean(),
       SellerLeadModel.aggregate<{ _id: Types.ObjectId | null; redirect: number }>([
         {
           $match: {
@@ -201,6 +212,36 @@ export async function GET(req: Request) {
         { $group: { _id: "$sellerRef", redirect: { $sum: 1 } } },
       ]),
     ]);
+
+    const mappingApiTypeById = await loadMappingApiTypeByIds(
+      (leads as LeadProjection[]).map((lead) => refToString(lead.mappingRef))
+    );
+    let leadApiTypeByLeadId = buildLeadApiTypeByLeadId(leads as LeadProjection[], mappingApiTypeById);
+
+    const missingLeadIds = [
+      ...new Set(
+        acceptDeliveries
+          .map((delivery) => refToString(delivery.sellerLeadRef))
+          .filter((leadId) => leadId && !leadApiTypeByLeadId.has(leadId))
+      ),
+    ];
+    if (missingLeadIds.length > 0) {
+      const extraLeads = await SellerLeadModel.find({
+        _id: { $in: missingLeadIds.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id)) },
+      })
+        .select({ mappingRef: 1 })
+        .lean();
+      const extraMappingApiTypeById = await loadMappingApiTypeByIds(
+        extraLeads.map((lead) => refToString(lead.mappingRef))
+      );
+      for (const [mappingId, apiType] of extraMappingApiTypeById.entries()) {
+        mappingApiTypeById.set(mappingId, apiType);
+      }
+      leadApiTypeByLeadId = new Map([
+        ...leadApiTypeByLeadId.entries(),
+        ...buildLeadApiTypeByLeadId(extraLeads, mappingApiTypeById).entries(),
+      ]);
+    }
 
     const accumulators = new Map<string, PublisherAccumulator>();
     const ensureAccumulator = (sellerId: string) => {
@@ -246,10 +287,28 @@ export async function GET(req: Request) {
       }
     }
 
-    for (const entry of deliveryTotals) {
-      const sellerId = entry._id ? entry._id.toString() : "";
+    for (const delivery of acceptDeliveries) {
+      const sellerId = refToString(delivery.sellerRef);
       if (!sellerId) continue;
-      ensureAccumulator(sellerId).ttl += entry.ttl ?? 0;
+
+      const leadId = refToString(delivery.sellerLeadRef);
+      const apiType = leadApiTypeByLeadId.get(leadId) ?? "Redirect";
+      const pingTreeType = delivery.pingTreeType === "Silent" ? "Silent" : "Redirect";
+      if (
+        !isPublisherScopedAcceptDelivery(
+          {
+            pingTreeType,
+            buyerStatus: delivery.buyerStatus ?? "Accept",
+            price: typeof delivery.price === "number" ? delivery.price : null,
+          },
+          apiType
+        )
+      ) {
+        continue;
+      }
+
+      const price = typeof delivery.price === "number" && Number.isFinite(delivery.price) ? delivery.price : 0;
+      ensureAccumulator(sellerId).ttl += price;
     }
 
     for (const entry of redirectTotals) {

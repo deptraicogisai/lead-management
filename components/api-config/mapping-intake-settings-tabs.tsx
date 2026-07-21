@@ -160,9 +160,12 @@ export function MappingIntakeSettingsTabs({
       return;
     }
 
+    const normalizedFilters = normalizeGeneralFiltersForStorage(settings.generalFilters);
+    setSettings({ ...settings, generalFilters: normalizedFilters });
+
     const saved = await saveSection(
       "filters",
-      { generalFilters: normalizeGeneralFiltersForStorage(settings.generalFilters) },
+      { generalFilters: normalizedFilters },
       "Filters saved successfully."
     );
 
@@ -177,7 +180,7 @@ export function MappingIntakeSettingsTabs({
         body: JSON.stringify({
           action: "copy-filters",
           targetSellerIds: copyFilterPublisherIds,
-          generalFilters: normalizeGeneralFiltersForStorage(settings.generalFilters),
+          generalFilters: normalizedFilters,
         }),
       });
 

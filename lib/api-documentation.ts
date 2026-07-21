@@ -605,11 +605,13 @@ export async function generateApiDocumentationPdfBuffer(
       : "1 — Accepted: lead accepted successfully; Silent APIs do not include redirect_url."
   );
   writeBullet(doc, "2 — Reject: lead rejected.");
-  writeBullet(doc, "3 — In Progress: lead is still being processed.");
-  writeBullet(doc, "4 — Authorization Failed: API key or authorization credentials are missing or invalid.");
   writeBullet(
     doc,
-    "7 — Access Denied: publisher, publisher channel, or publisher source is paused."
+    "3 — Authentication or Server Error: authentication failed or an unexpected server error occurred."
+  );
+  writeBullet(
+    doc,
+    "4 — Access Denied: publisher, publisher channel, or publisher source is paused."
   );
 
   outline.responseStatusItems.forEach((item) => {
