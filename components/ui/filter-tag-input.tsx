@@ -68,7 +68,7 @@ export function FilterTagInput({
   return (
     <div
       className={cn(
-        "flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-600 dark:bg-slate-800",
+        "flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-500 dark:bg-slate-800",
         disabled && "cursor-not-allowed opacity-60",
         className
       )}
@@ -103,7 +103,7 @@ export function FilterTagInput({
         onBlur={() => {
           if (draft.trim()) addTag(draft);
         }}
-        className="min-w-[8rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed dark:text-slate-100 dark:placeholder:text-slate-500"
+        className="min-w-[8rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-slate-800 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed dark:text-slate-50 dark:placeholder:text-slate-300"
       />
     </div>
   );

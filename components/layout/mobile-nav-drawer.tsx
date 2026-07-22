@@ -128,7 +128,7 @@ export function MobileNavDrawer() {
           <SidebarNavContent isMobile onNavigate={closeMobileNav} />
         </div>
 
-        <div className="mobile-safe-bottom shrink-0 border-t border-slate-200 px-4 py-2 text-center text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
+        <div className="mobile-safe-bottom shrink-0 border-t border-slate-200 px-4 py-2 text-center text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
           Tap outside to close
         </div>
       </aside>

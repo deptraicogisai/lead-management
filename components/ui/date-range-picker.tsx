@@ -26,6 +26,7 @@ import {
   type DateRangeStrings,
 } from "@/lib/date-range";
 import { cn } from "@/lib/utils";
+import { CONTROL_MUTED_CLASS } from "@/lib/control-contrast";
 
 type DateRangePickerProps = {
   id?: string;
@@ -109,7 +110,7 @@ function TimeSelects({
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={cn("text-xs font-medium", CONTROL_MUTED_CLASS)}>{label}</p>
       <div className="flex items-center gap-1">
         <DropdownSelect
           value={String(date.getHours())}
@@ -121,7 +122,7 @@ function TimeSelects({
           size="compact"
           className="w-[4.25rem]"
         />
-        <span className="text-xs text-slate-400">:</span>
+        <span className={cn("text-xs", CONTROL_MUTED_CLASS)}>:</span>
         <DropdownSelect
           value={String(date.getMinutes())}
           options={Array.from({ length: 60 }, (_, minute) => ({
@@ -132,7 +133,7 @@ function TimeSelects({
           size="compact"
           className="w-[4.25rem]"
         />
-        <span className="text-xs text-slate-400">:</span>
+        <span className={cn("text-xs", CONTROL_MUTED_CLASS)}>:</span>
         <DropdownSelect
           value={String(date.getSeconds())}
           options={Array.from({ length: 60 }, (_, second) => ({
@@ -169,7 +170,7 @@ function MonthGrid({
     <div>
       <div className="mb-2 grid grid-cols-7 gap-1">
         {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="py-1 text-center text-[11px] font-medium text-slate-400">
+          <div key={label} className={cn("py-1 text-center text-[11px] font-medium", CONTROL_MUTED_CLASS)}>
             {label}
           </div>
         ))}
@@ -177,12 +178,14 @@ function MonthGrid({
       <div className="grid grid-cols-7 gap-1">
         {days.map((day, index) => {
           if (!day) {
-            return <div key={`empty-${index}`} className="h-8" />;
+            return <div key={`empty-${index}`} className="h-10 sm:h-8" />;
           }
 
           const selectedStart = isSameDay(day, rangeStart);
           const selectedEnd = isSameDay(day, rangeEnd);
           const inRange = isDateInRange(day, rangeStart, rangeEnd);
+
+          const isEndpoint = selectedStart || selectedEnd;
 
           return (
             <button
@@ -190,10 +193,15 @@ function MonthGrid({
               type="button"
               onClick={() => onSelectDay(day)}
               className={cn(
-                "h-8 rounded-md text-xs font-medium transition",
-                inRange && "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200",
-                (selectedStart || selectedEnd) &&
-                  "bg-sky-600 text-white hover:bg-sky-600 dark:bg-sky-500 dark:text-white"
+                "h-10 rounded-lg text-sm font-medium transition sm:h-8 sm:rounded-md sm:text-xs",
+                !inRange &&
+                  !isEndpoint &&
+                  "text-slate-800 hover:bg-slate-200 hover:text-slate-950 dark:text-slate-100 dark:hover:bg-slate-700 dark:hover:text-white",
+                inRange &&
+                  !isEndpoint &&
+                  "bg-sky-100 text-sky-800 hover:bg-sky-200 hover:text-sky-950 dark:bg-sky-500/25 dark:text-sky-100 dark:hover:bg-sky-500/45 dark:hover:text-white",
+                isEndpoint &&
+                  "bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:text-white dark:hover:bg-sky-400"
               )}
             >
               {day.getDate()}
@@ -371,9 +379,16 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
         ref={triggerRef}
         type="button"
         onClick={openPicker}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+        className={cn(
+          "flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-800 outline-none transition",
+          "hover:border-slate-400 hover:bg-slate-50",
+          "focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
+          "dark:border-slate-500 dark:bg-slate-800 dark:text-slate-50",
+          "dark:hover:border-slate-400 dark:hover:bg-slate-700",
+          "dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+        )}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" />
+        <CalendarDays className={cn("h-4 w-4 shrink-0", CONTROL_MUTED_CLASS)} />
         <span className="truncate">{displayLabel}</span>
       </button>
 
@@ -399,8 +414,8 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                   className={cn(
                     "shrink-0 rounded-lg px-3 py-2 text-left text-sm transition md:mb-1 md:block md:w-full",
                     draft.preset === preset
-                      ? "bg-sky-600 font-medium text-white"
-                      : "text-slate-700 hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+                      ? "bg-sky-600 font-medium text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
+                      : "text-slate-700 hover:bg-slate-200 hover:text-slate-950 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
                   )}
                 >
                   {getDateRangePresetLabel(preset)}
@@ -418,17 +433,21 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                       leftMonth: new Date(current.leftMonth.getFullYear(), current.leftMonth.getMonth() - 1, 1),
                     }))
                   }
-                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center rounded-xl transition sm:h-auto sm:w-auto sm:rounded-lg sm:p-1",
+                    "hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white",
+                    CONTROL_MUTED_CLASS
+                  )}
                   aria-label="Previous month"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
                 </button>
 
                 <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-6">
                   <p className="text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
                     {getMonthLabel(draft.leftMonth.getFullYear(), draft.leftMonth.getMonth())}
                   </p>
-                  <p className="text-center text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  <p className="hidden text-center text-sm font-semibold text-slate-800 sm:block dark:text-slate-100">
                     {getMonthLabel(rightMonth.getFullYear(), rightMonth.getMonth())}
                   </p>
                 </div>
@@ -441,10 +460,14 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                       leftMonth: new Date(current.leftMonth.getFullYear(), current.leftMonth.getMonth() + 1, 1),
                     }))
                   }
-                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center rounded-xl transition sm:h-auto sm:w-auto sm:rounded-lg sm:p-1",
+                    "hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white",
+                    CONTROL_MUTED_CLASS
+                  )}
                   aria-label="Next month"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
                 </button>
               </div>
 
@@ -455,12 +478,14 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
                   rangeTo={draft.to}
                   onSelectDay={selectDay}
                 />
-                <MonthGrid
-                  monthDate={rightMonth}
-                  rangeFrom={draft.from}
-                  rangeTo={draft.to}
-                  onSelectDay={selectDay}
-                />
+                <div className="hidden sm:block">
+                  <MonthGrid
+                    monthDate={rightMonth}
+                    rangeFrom={draft.from}
+                    rangeTo={draft.to}
+                    onSelectDay={selectDay}
+                  />
+                </div>
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2 sm:gap-6 dark:border-slate-700">
@@ -482,12 +507,11 @@ export function DateRangePicker({ id, value, onChange, className }: DateRangePic
             <p className="truncate text-xs text-slate-600 dark:text-slate-300">
               {formatDateRangeDisplay(draft.from, draft.to)}
             </p>
-            <div className="flex items-center justify-end gap-2">
+            <div className="mobile-filter-actions flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
               <CancelButton type="button" onClick={handleCancel} />
               <PrimaryButton type="button" onClick={handleApply}>
                 Apply
               </PrimaryButton>
-
             </div>
           </div>
             </div>,

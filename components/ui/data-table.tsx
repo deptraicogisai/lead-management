@@ -434,7 +434,7 @@ export function DataTable<T extends { id: string }>({
       <tr>
         <td
           colSpan={columns.length + (isSelectable ? 1 : 0) + (isReorderable ? 1 : 0)}
-          className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700/80 dark:text-slate-400"
+          className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-600 dark:border-slate-700/80 dark:text-slate-300"
         >
           {deferredFilterQuery.trim() ? "No matching rows on this page." : emptyMessage}
         </td>

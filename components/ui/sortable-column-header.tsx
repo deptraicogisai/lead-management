@@ -38,7 +38,7 @@ export function SortableColumnHeader({
       <span
         className={cn(
           "inline-flex w-3 shrink-0 flex-col items-center justify-center text-[8px] leading-[0.7]",
-          active ? "text-blue-600 dark:text-blue-300" : "text-slate-400"
+          active ? "text-blue-600 dark:text-blue-300" : "text-slate-500 dark:text-slate-300"
         )}
         aria-hidden
       >

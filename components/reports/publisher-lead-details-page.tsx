@@ -88,7 +88,7 @@ function RedirectCell({
   isRedirectCampaign: boolean;
 }) {
   if (label === "—" || !isRedirectCampaign) {
-    return <span className="whitespace-nowrap text-slate-400 dark:text-slate-500">—</span>;
+    return <span className="whitespace-nowrap text-slate-500 dark:text-slate-300">—</span>;
   }
 
   const presentation = getStatusBadgePresentation(redirectConfirmed ? "Sold" : "Reject", "outline");
@@ -419,7 +419,7 @@ export function PublisherLeadDetailsPage() {
             rel="noopener noreferrer"
             className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
           >
-            <Eye size={13} className="shrink-0 text-slate-400 group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400" />
+            <Eye size={13} className="shrink-0 text-slate-500 group-hover:text-blue-500 dark:text-slate-300 dark:group-hover:text-blue-400" />
             <span>{row.displayCode}</span>
           </Link>
         ),

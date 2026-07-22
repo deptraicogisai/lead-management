@@ -55,7 +55,7 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       className={cn(
-        "group relative flex w-full min-w-0 max-w-full cursor-pointer items-center overflow-hidden font-medium transition duration-200",
+        "group relative flex w-full min-w-0 max-w-full cursor-pointer items-center overflow-hidden font-medium transition-colors duration-200",
         isMobile
           ? "min-h-[48px] gap-3 rounded-xl px-4 py-3 text-[15px] leading-none"
           : cn(
@@ -87,7 +87,7 @@ function NavLink({
           "flex shrink-0 items-center justify-center",
           isMobile && "h-9 w-9 rounded-lg",
           isMobile && (isActive ? "bg-white/15" : "bg-slate-100 dark:bg-slate-800"),
-          !collapsed && !isMobile && "transition duration-200 group-hover:translate-x-0.5"
+          !collapsed && !isMobile && "transition-transform duration-200 group-hover:translate-x-0.5"
         )}
       >
         <Icon size={iconSize} />
@@ -179,7 +179,7 @@ function CollapsibleNavSection({
           type="button"
           onClick={onToggle}
           className={cn(
-            "flex min-h-[48px] w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-[15px] font-semibold transition",
+            "flex min-h-[48px] w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-[15px] font-semibold transition-colors duration-200",
             isActive
               ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
@@ -219,7 +219,7 @@ function CollapsibleNavSection({
             type="button"
             onClick={() => setFlyoutOpen((current) => !current)}
             className={cn(
-              "flex w-full items-center justify-center rounded-lg border py-2 transition duration-200",
+              "flex w-full items-center justify-center rounded-lg border py-2 transition-colors duration-200",
               isActive || flyoutOpen
                 ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/18 dark:text-blue-200"
                 : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-100 dark:hover:bg-slate-700"
@@ -247,7 +247,7 @@ function CollapsibleNavSection({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex w-full min-w-0 max-w-full items-center justify-between gap-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3.5 pr-2 text-left text-[13px] font-semibold leading-none transition duration-200 dark:border-slate-700 dark:bg-slate-800/70",
+          "flex w-full min-w-0 max-w-full items-center justify-between gap-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3.5 pr-2 text-left text-[13px] font-semibold leading-none transition-colors duration-200 dark:border-slate-700 dark:bg-slate-800/70",
           isActive
             ? "text-blue-700 dark:text-blue-200"
             : "text-slate-700 hover:bg-slate-200 dark:text-slate-100 dark:hover:bg-slate-700"

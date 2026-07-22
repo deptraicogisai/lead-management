@@ -28,7 +28,9 @@ export function Sidebar() {
     <aside
       style={scaleStyle}
       className={cn(
-        "fixed left-0 top-0 z-20 hidden flex-col overflow-hidden border-r border-slate-200 bg-white py-5 shadow-sm transition-[width,padding] duration-300 ease-in-out lg:flex dark:border-slate-700 dark:bg-slate-900",
+        "fixed left-0 top-0 z-20 hidden flex-col overflow-hidden border-r border-slate-200 bg-white py-5 shadow-sm lg:flex dark:border-slate-700 dark:bg-slate-900",
+        // Only animate collapse — never theme colors (avoids muddy sidebar flash).
+        "transition-[width,padding] duration-300 ease-in-out",
         fontScaleFactor === 1 && "h-screen",
         fontScaleFactor === 1 && (navCollapsed ? "w-[4.5rem] px-2" : "w-64 px-3"),
         fontScaleFactor !== 1 && (navCollapsed ? "px-2" : "px-3")
@@ -41,7 +43,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               >
                 <PanelLeftOpen size={18} />
               </button>
@@ -56,7 +58,7 @@ export function Sidebar() {
               <h1 className="truncate text-base font-semibold leading-tight text-slate-900 dark:text-slate-100">
                 SaaS Admin
               </h1>
-              <p className="truncate text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <p className="truncate text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Lead Management
               </p>
             </div>
@@ -64,7 +66,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               >
                 <PanelLeftClose size={18} />
               </button>

@@ -426,8 +426,8 @@ export function ScrollableTableShell({
         className
       )}
     >
-      {showMobileHint ? (
-        <p className="border-b border-slate-200 px-3 py-2 text-xs text-slate-500 sm:hidden dark:border-slate-700 dark:text-slate-400">
+      {(showMobileHint || hasHorizontalOverflow) ? (
+        <p className="border-b border-slate-200 px-3 py-2 text-xs text-slate-600 sm:hidden dark:border-slate-700 dark:text-slate-300">
           Swipe horizontally to see more columns
         </p>
       ) : null}

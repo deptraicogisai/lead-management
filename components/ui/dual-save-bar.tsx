@@ -19,7 +19,14 @@ type DualSaveBarProps = {
 
 function SaveBarRow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-end gap-3", className)}>{children}</div>
+    <div
+      className={cn(
+        "mobile-page-actions flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3",
+        className
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -32,7 +39,7 @@ export function DualSaveBar({
   dual = true,
 }: DualSaveBarProps) {
   const bottomBarClassName = cn(
-    "border-t border-slate-200 pt-4 dark:border-slate-700",
+    "sticky bottom-0 z-10 -mx-1 border-t border-slate-200 bg-white/95 px-1 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pt-4 sm:pb-0 sm:backdrop-blur-none dark:sm:bg-transparent",
     barClassName
   );
 
@@ -41,7 +48,7 @@ export function DualSaveBar({
       {dual ? (
         <SaveBarRow
           className={cn(
-            "border-b border-slate-200 pb-4 dark:border-slate-700",
+            "hidden border-b border-slate-200 pb-4 sm:flex dark:border-slate-700",
             barClassName
           )}
         >

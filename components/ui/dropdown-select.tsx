@@ -3,6 +3,11 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  CONTROL_DISABLED_CLASS,
+  CONTROL_MUTED_CLASS,
+  CONTROL_TEXT_CLASS,
+} from "@/lib/control-contrast";
 import { cn } from "@/lib/utils";
 
 export type DropdownSelectOption = {
@@ -130,7 +135,7 @@ export function DropdownSelect({
               }
         }
         className={cn(
-          "z-[300] rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-900",
+          "z-[300] rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-500 dark:bg-slate-900",
           disablePortal && "absolute left-0 right-0 top-[calc(100%+4px)]",
           menuClassName
         )}
@@ -152,11 +157,11 @@ export function DropdownSelect({
                 setOpen(false);
               }}
               className={cn(
-                "flex h-9 w-full items-center rounded-lg px-3 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-sky-100 hover:text-sky-900 focus-visible:bg-sky-100 focus-visible:text-sky-900 focus-visible:outline-none dark:text-slate-200 dark:hover:bg-sky-500/20 dark:hover:text-sky-100 dark:focus-visible:bg-sky-500/20 dark:focus-visible:text-sky-100",
+                "flex h-9 w-full items-center rounded-lg px-3 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-sky-100 hover:text-sky-900 focus-visible:bg-sky-100 focus-visible:text-sky-900 focus-visible:outline-none dark:text-slate-100 dark:hover:bg-sky-500/25 dark:hover:text-white dark:focus-visible:bg-sky-500/25 dark:focus-visible:text-white",
                 option.disabled &&
-                  "cursor-not-allowed text-slate-400 hover:bg-transparent dark:text-slate-500 dark:hover:bg-transparent",
+                  "cursor-not-allowed text-slate-500 hover:bg-transparent dark:text-slate-400 dark:hover:bg-transparent",
                 option.value === value &&
-                  "bg-blue-100 font-medium text-blue-800 hover:bg-sky-200 dark:bg-blue-500/25 dark:text-blue-200 dark:hover:bg-sky-500/30"
+                  "bg-blue-100 font-medium text-blue-800 hover:bg-sky-200 dark:bg-blue-500/30 dark:text-blue-100 dark:hover:bg-sky-500/35"
               )}
             >
               <span className="truncate">{option.label}</span>
@@ -177,21 +182,21 @@ export function DropdownSelect({
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          "flex w-full items-center justify-between gap-2 border border-slate-300 bg-white text-left text-slate-800 outline-none transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25",
+          "flex w-full items-center justify-between gap-2 border border-slate-300 bg-white text-left outline-none transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-500 dark:bg-slate-800 dark:focus:border-blue-400 dark:focus:ring-blue-400/25",
+          CONTROL_TEXT_CLASS,
           size === "compact"
             ? "min-h-8 rounded-lg px-2 py-1 text-xs"
             : "min-h-11 rounded-xl px-3 py-2 text-sm",
-          disabled &&
-            "cursor-not-allowed bg-slate-100 text-slate-500 opacity-70 dark:bg-slate-900/60 dark:text-slate-400",
+          disabled && CONTROL_DISABLED_CLASS,
           className
         )}
       >
-        <span className={cn("truncate", !selectedLabel && "text-slate-400")}>
+        <span className={cn("truncate", !selectedLabel && CONTROL_MUTED_CLASS)}>
           {selectedLabel ?? placeholder}
         </span>
         <ChevronDown
           size={16}
-          className={cn("shrink-0 text-slate-400 transition", open && "rotate-180")}
+          className={cn("shrink-0 transition", CONTROL_MUTED_CLASS, open && "rotate-180")}
         />
       </button>
 

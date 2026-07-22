@@ -53,7 +53,7 @@ export function CopyToTargetsPanel({
           emptyMessage={emptyMessage}
         />
         {description ? (
-          <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
+          <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">{description}</p>
         ) : null}
       </div>
     </div>

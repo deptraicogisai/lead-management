@@ -14,6 +14,13 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { formatDecimalInputDisplayValue, sanitizeNumberInputValue } from "@/lib/decimal-input";
+import {
+  CONTROL_DISABLED_CLASS,
+  CONTROL_FIELD_CLASS,
+  CONTROL_HINT_CLASS,
+  CONTROL_LABEL_CLASS,
+  CONTROL_MUTED_CLASS,
+} from "@/lib/control-contrast";
 import { cn } from "@/lib/utils";
 import {
   buttonLabelText,
@@ -56,11 +63,9 @@ export {
   tableActionDangerButtonClassName,
 } from "@/lib/button-styles";
 
-const fieldControlClassName =
-  "w-full rounded-xl border border-slate-300 bg-white text-sm text-slate-800 outline-none transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25";
+const fieldControlClassName = CONTROL_FIELD_CLASS;
 
-const fieldControlDisabledClassName =
-  "cursor-not-allowed bg-slate-100 text-slate-500 opacity-70 dark:bg-slate-900/60 dark:text-slate-400";
+const fieldControlDisabledClassName = CONTROL_DISABLED_CLASS;
 
 export function FormError({ error, className }: { error?: string; className?: string }) {
   if (!error) return null;
@@ -92,7 +97,7 @@ export function FieldLabel({
   required?: boolean;
 }) {
   return (
-    <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+    <label htmlFor={htmlFor} className={cn("mb-2 block text-sm font-medium", CONTROL_LABEL_CLASS)}>
       {label}
       {required ? <span className="text-red-600 dark:text-red-400"> *</span> : null}
     </label>
@@ -144,9 +149,9 @@ export const Input = forwardRef<
       onChange={isDecimalNumberInput ? handleChange : onChange}
       {...restProps}
       className={cn(
-        "w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition duration-200 dark:placeholder:text-slate-400",
+        "w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition duration-200 placeholder:text-slate-500 dark:placeholder:text-slate-300",
         disabled
-          ? "pointer-events-none cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 caret-transparent selection:bg-transparent focus:border-slate-200 focus:ring-0 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-400"
+          ? cn("pointer-events-none caret-transparent selection:bg-transparent focus:ring-0", CONTROL_DISABLED_CLASS)
           : cn(
               fieldControlClassName,
               "focus:-translate-y-px",
@@ -234,7 +239,7 @@ export function Checkbox({ checked, onChange, label, disabled, id, className }: 
           "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition duration-150",
           checked
             ? "border-emerald-700 bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600"
-            : "border-slate-300 bg-white group-hover:border-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:group-hover:border-slate-500"
+            : "border-slate-300 bg-white group-hover:border-slate-400 dark:border-slate-500 dark:bg-slate-800 dark:group-hover:border-slate-400"
         )}
       >
         <Check
@@ -246,7 +251,7 @@ export function Checkbox({ checked, onChange, label, disabled, id, className }: 
           )}
         />
       </span>
-      <span className="text-sm text-slate-700 dark:text-slate-200">{label}</span>
+      <span className={cn("text-sm", CONTROL_LABEL_CLASS)}>{label}</span>
     </button>
   );
 }

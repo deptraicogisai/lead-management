@@ -18,8 +18,6 @@ type SystemSettingsDrawerProps = {
   onClose: () => void;
 };
 
-const DRAWER_WIDTH_PX = 400;
-/** Slightly larger than dashboard default (body 13px), independent of System Font Size. */
 const DRAWER_FONT_ZOOM = 1.08;
 
 export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProps) {
@@ -59,22 +57,21 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
         aria-label="System settings"
         data-font-scale-stable=""
         style={{
-          width: `min(${DRAWER_WIDTH_PX}px, calc(100vw - 16px))`,
           zoom: DRAWER_FONT_ZOOM,
         }}
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex flex-col border-l border-slate-200 bg-slate-50 shadow-2xl transition-transform duration-300 ease-out dark:border-slate-700 dark:bg-slate-950",
+          "fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl transition-transform duration-300 ease-out sm:w-[min(400px,calc(100vw-16px))] dark:border-slate-700 dark:bg-slate-950",
           open ? "translate-x-0" : "translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
+        <div className="mobile-safe-top flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300">
               <Settings size={20} />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Settings</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
                 Display preferences and database cleanup.
               </p>
             </div>
@@ -82,14 +79,14 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
             aria-label="Close settings"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="mobile-safe-bottom flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <label
               htmlFor="system-font-size"
@@ -123,7 +120,7 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
               className="dark:bg-slate-950"
               disablePortal
             />
-            <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
               Stored timestamps remain UTC. Lead, report and log times are converted only for
               display. Default: America/New_York (EST/EDT).
             </p>

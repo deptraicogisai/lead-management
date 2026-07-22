@@ -9,6 +9,7 @@ import {
   FILTER_DROPDOWN_MAX_VISIBLE_ITEMS,
   FILTER_DROPDOWN_SCROLL_CLASS,
 } from "@/components/ui/search-filter-layout";
+import { CONTROL_MUTED_CLASS, CONTROL_TEXT_CLASS } from "@/lib/control-contrast";
 import { cn } from "@/lib/utils";
 
 export type StatusMultiSelectOption = {
@@ -124,12 +125,18 @@ export function StatusMultiSelect({
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          "flex min-h-[2.75rem] w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm text-slate-800 transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50",
+          "flex min-h-[2.75rem] w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-left text-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-500 dark:bg-slate-800",
+          CONTROL_TEXT_CLASS,
           disabled && "cursor-not-allowed opacity-60"
         )}
       >
-        <span className={cn("truncate", selectedInOrder.length === 0 && "text-slate-400")}>{summaryLabel}</span>
-        <ChevronDown size={16} className={cn("shrink-0 text-slate-400 transition", open && "rotate-180")} />
+        <span className={cn("truncate", selectedInOrder.length === 0 && CONTROL_MUTED_CLASS)}>
+          {summaryLabel}
+        </span>
+        <ChevronDown
+          size={16}
+          className={cn("shrink-0 transition", CONTROL_MUTED_CLASS, open && "rotate-180")}
+        />
       </button>
 
       {open && menuPosition && typeof document !== "undefined"
@@ -170,7 +177,7 @@ export function StatusMultiSelect({
                 )}
               >
                 {options.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No options available.</p>
+                  <p className={cn("px-3 py-2 text-sm", CONTROL_MUTED_CLASS)}>No options available.</p>
                 ) : (
                   options.map((option) => (
                     <Checkbox

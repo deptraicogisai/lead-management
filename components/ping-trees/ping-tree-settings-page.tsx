@@ -126,11 +126,11 @@ function CampaignNameLabel({
       target="_blank"
       rel="noopener noreferrer"
       title="Open campaign in new tab"
-      className="inline-flex min-w-0 max-w-full items-center gap-1 text-sm font-medium leading-snug text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
+      className="inline-flex min-w-0 max-w-full items-start gap-1 text-sm font-medium leading-snug text-blue-700 transition hover:text-blue-800 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <span className="min-w-0 break-words">{formatCampaignLabel(card)}</span>
+      <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{formatCampaignLabel(card)}</span>
       <ExternalLink size={13} strokeWidth={2.25} className="shrink-0 opacity-70" aria-hidden />
     </a>
   );
@@ -229,12 +229,12 @@ const greenControlClass = cn(
 const iconActionClass = cn("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full", greenControlClass);
 
 const arrowActionClass = cn(
-  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white",
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white md:h-8 md:w-8",
   greenControlClass
 );
 
 const textActionClass = cn(
-  "inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[11px] font-medium",
+  "inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-xs font-medium md:min-h-7 md:px-3 md:text-[11px]",
   greenControlClass
 );
 
@@ -244,7 +244,9 @@ const draggingCardClassName =
 const highlightedCardClassName =
   "border-emerald-400 bg-emerald-400/20 ring-2 ring-emerald-400/50 dark:border-emerald-400 dark:bg-emerald-400/25 dark:ring-emerald-400/40";
 
-const cardActionsClass = "flex items-center justify-end gap-1";
+const activeMobileActionsClass =
+  "flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2.5 dark:border-slate-800";
+const activeDesktopActionsClass = "flex items-center justify-end gap-1";
 const inactiveCardActionsClass =
   "flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2.5 dark:border-slate-800";
 
@@ -351,6 +353,70 @@ function PriorityControls({
   );
 }
 
+function ActiveCampaignCardActions({
+  isGhost,
+  canMoveUp,
+  canMoveDown,
+  position,
+  showMockButton,
+  className,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
+  onApplyPosition,
+  onConfigureMock,
+}: {
+  isGhost: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  position: number;
+  showMockButton: boolean;
+  className: string;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onRemove: () => void;
+  onApplyPosition: (value: number) => number;
+  onConfigureMock: () => void;
+}) {
+  return (
+    <div className={className} data-no-drag>
+      <button
+        type="button"
+        disabled={isGhost || !canMoveUp}
+        onClick={isGhost ? undefined : onMoveUp}
+        title="Move up"
+        className={arrowActionClass}
+      >
+        <ChevronUp size={16} strokeWidth={2.5} />
+      </button>
+      <button
+        type="button"
+        disabled={isGhost || !canMoveDown}
+        onClick={isGhost ? undefined : onMoveDown}
+        title="Move down"
+        className={arrowActionClass}
+      >
+        <ChevronDown size={16} strokeWidth={2.5} />
+      </button>
+      <button type="button" disabled={isGhost} onClick={isGhost ? undefined : onRemove} className={textActionClass}>
+        Remove
+      </button>
+      <PriorityControls position={position} onApplyPosition={isGhost ? () => position : onApplyPosition} />
+      {showMockButton ? (
+        <button
+          type="button"
+          disabled={isGhost}
+          onClick={isGhost ? undefined : onConfigureMock}
+          title="Configure test lead mock response"
+          className={cn(iconActionClass, "h-9 w-9 md:h-7 md:w-7")}
+        >
+          <Settings2 size={14} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function ActiveCampaignCard({
   card,
   position,
@@ -395,49 +461,53 @@ function ActiveCampaignCard({
         !isGhost && isHighlighted && highlightedCardClassName
       )}
     >
-      <div className="flex items-start justify-between gap-2 px-2.5 py-2">
+      <div className="md:hidden">
+        <div className="flex min-h-[3rem] items-start justify-between gap-3 px-3 py-3">
+          <div className="min-w-0 flex flex-1 flex-col gap-1.5">
+            <StatusBadge status={card.status} compact />
+            <CampaignNameLabel card={card} variant="active" />
+          </div>
+          <p className="shrink-0 pt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+            ${card.minPrice.toFixed(2)}
+          </p>
+        </div>
+
+        <ActiveCampaignCardActions
+          isGhost={isGhost}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          position={position}
+          showMockButton={showMockButton}
+          className={activeMobileActionsClass}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          onRemove={onRemove}
+          onApplyPosition={onApplyPosition}
+          onConfigureMock={onConfigureMock}
+        />
+      </div>
+
+      <div className="hidden items-start justify-between gap-2 px-2.5 py-2 md:flex">
         <div className="min-w-0 flex flex-1 flex-wrap items-center gap-1.5">
           <StatusBadge status={card.status} compact />
           <CampaignNameLabel card={card} variant="active" />
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-1.5" data-no-drag>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">${card.minPrice.toFixed(2)}</p>
-          <div className={cardActionsClass}>
-            <button
-              type="button"
-              disabled={isGhost || !canMoveUp}
-              onClick={isGhost ? undefined : onMoveUp}
-              title="Move up"
-              className={arrowActionClass}
-            >
-              <ChevronUp size={16} strokeWidth={2.5} />
-            </button>
-            <button
-              type="button"
-              disabled={isGhost || !canMoveDown}
-              onClick={isGhost ? undefined : onMoveDown}
-              title="Move down"
-              className={arrowActionClass}
-            >
-              <ChevronDown size={16} strokeWidth={2.5} />
-            </button>
-            <button type="button" disabled={isGhost} onClick={isGhost ? undefined : onRemove} className={textActionClass}>
-              Remove
-            </button>
-            <PriorityControls position={position} onApplyPosition={isGhost ? () => position : onApplyPosition} />
-            {showMockButton ? (
-              <button
-                type="button"
-                disabled={isGhost}
-                onClick={isGhost ? undefined : onConfigureMock}
-                title="Configure test lead mock response"
-                className={iconActionClass}
-              >
-                <Settings2 size={14} />
-              </button>
-            ) : null}
-          </div>
+          <ActiveCampaignCardActions
+            isGhost={isGhost}
+            canMoveUp={canMoveUp}
+            canMoveDown={canMoveDown}
+            position={position}
+            showMockButton={showMockButton}
+            className={activeDesktopActionsClass}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
+            onRemove={onRemove}
+            onApplyPosition={onApplyPosition}
+            onConfigureMock={onConfigureMock}
+          />
         </div>
       </div>
     </div>

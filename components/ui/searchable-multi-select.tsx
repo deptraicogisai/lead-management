@@ -11,6 +11,7 @@ import {
   FILTER_DROPDOWN_SCROLL_CLASS,
 } from "@/components/ui/search-filter-layout";
 import { cn } from "@/lib/utils";
+import { CONTROL_HINT_CLASS, CONTROL_MUTED_CLASS, CONTROL_TEXT_CLASS } from "@/lib/control-contrast";
 
 export type SearchableMultiSelectOption = {
   id: string;
@@ -172,20 +173,21 @@ export function SearchableMultiSelect({
         disabled={disabled || isLoading}
         onClick={() => setDropdownOpen((open) => !open)}
         className={cn(
-          "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm dark:border-slate-600 dark:bg-slate-800",
+          "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm dark:border-slate-500 dark:bg-slate-800",
+          CONTROL_TEXT_CLASS,
           (disabled || isLoading) && "cursor-not-allowed opacity-60"
         )}
       >
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {isLoading ? (
-            <span className="text-slate-400">Loading...</span>
+            <span className={CONTROL_MUTED_CLASS}>Loading...</span>
           ) : selectedOptions.length === 0 ? (
-            <span className="text-slate-400">{placeholder}</span>
+            <span className={CONTROL_MUTED_CLASS}>{placeholder}</span>
           ) : (
             selectedOptions.map((option) => (
               <span
                 key={option.id}
-                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
               >
                 <span className="break-words whitespace-normal">
                   {option.displayId !== undefined ? `[${option.displayId}] ${option.label}` : option.label}
@@ -204,7 +206,10 @@ export function SearchableMultiSelect({
                       removeOption(option.id);
                     }
                   }}
-                  className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                  className={cn(
+                    "shrink-0 rounded p-0.5 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100",
+                    CONTROL_MUTED_CLASS
+                  )}
                   aria-label={`Remove ${option.label}`}
                 >
                   <X size={12} />
@@ -215,7 +220,7 @@ export function SearchableMultiSelect({
         </span>
         <ChevronDown
           size={16}
-          className={cn("shrink-0 text-slate-400 transition", dropdownOpen && "rotate-180")}
+          className={cn("shrink-0 transition", CONTROL_MUTED_CLASS, dropdownOpen && "rotate-180")}
         />
       </button>
 
@@ -239,7 +244,7 @@ export function SearchableMultiSelect({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder={searchPlaceholder}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-300 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
                 />
               </div>
 
@@ -250,7 +255,7 @@ export function SearchableMultiSelect({
                 )}
               >
                 {filteredOptions.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
+                  <p className={cn("px-3 py-2 text-sm", CONTROL_MUTED_CLASS)}>{emptyMessage}</p>
                 ) : (
                   filteredOptions.map((option) => {
                     const checked = selectedIds.includes(option.id);
@@ -271,7 +276,7 @@ export function SearchableMultiSelect({
                               <span className="flex min-w-0 flex-col">
                                 <span className="font-medium text-slate-800 dark:text-slate-100">{option.label}</span>
                                 {option.description ? (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">{option.description}</span>
+                                  <span className={cn("text-xs", CONTROL_HINT_CLASS)}>{option.description}</span>
                                 ) : null}
                               </span>
                             </span>

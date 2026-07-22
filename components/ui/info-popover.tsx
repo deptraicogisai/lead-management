@@ -96,8 +96,8 @@ export function InfoPopover({
         aria-label={title ? `About ${title}` : "More information"}
         aria-describedby={open ? tooltipId : undefined}
         className={cn(
-          "inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-slate-400 transition",
-          "hover:text-sky-600 dark:text-slate-500 dark:hover:text-sky-300"
+          "inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full text-slate-500 transition",
+          "hover:text-sky-600 dark:text-slate-300 dark:hover:text-sky-300"
         )}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}

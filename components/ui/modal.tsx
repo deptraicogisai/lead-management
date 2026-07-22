@@ -35,19 +35,29 @@ export function Modal({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   if (!open || (!disablePortal && !mounted)) return null;
 
   const content = (
     <div
       className={cn(
-        "animate-fade-in fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-slate-950/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:py-6",
+        "animate-fade-in fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden overflow-y-auto overscroll-contain bg-slate-950/45 p-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:p-4 sm:py-6",
         className
       )}
     >
       <div
         className={cn(
           "animate-scale-in flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl",
-          "max-h-[min(90dvh,calc(100dvh-2rem))] p-4 sm:max-h-[90vh] sm:p-6",
+          "max-h-[min(92dvh,calc(100dvh-1.5rem))] p-4 sm:max-h-[90vh] sm:p-6",
           "dark:border-slate-700 dark:bg-slate-900",
           panelClassName ?? "max-w-md"
         )}
@@ -58,7 +68,7 @@ export function Modal({
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-slate-900 sm:text-lg dark:text-slate-100">{title}</h3>
             {description ? (
-              <p className="mt-1.5 text-xs text-slate-600 sm:mt-2 sm:text-sm dark:text-slate-400">{description}</p>
+              <p className="mt-1.5 text-xs text-slate-600 sm:mt-2 sm:text-sm dark:text-slate-300">{description}</p>
             ) : null}
           </div>
           {onClose ? (
@@ -66,7 +76,7 @@ export function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition duration-200 hover:bg-slate-100 hover:text-slate-700 active:scale-95 sm:h-9 sm:w-9 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-slate-700 active:scale-95 sm:h-9 sm:w-9 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               <X size={18} />
             </button>

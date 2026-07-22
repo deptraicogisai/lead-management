@@ -104,7 +104,7 @@ type SummaryColumn = {
 
 const PERFORMANCE_METRIC_COLORS = {
   post: "text-slate-800 dark:text-slate-100",
-  sold: "text-slate-400 dark:text-slate-500",
+  sold: "text-slate-500 dark:text-slate-300",
   reject: "text-amber-600 dark:text-amber-400",
   redirect: redirectMetricColorClassName,
 } as const;
@@ -755,7 +755,7 @@ function PerformanceSummaryTable({
             <tr>
               <td
                 colSpan={columnCount}
-                className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-500 dark:border-slate-700/80 dark:text-slate-400"
+                className="border-b border-slate-100 px-3 py-8 text-center text-sm text-slate-600 dark:border-slate-700/80 dark:text-slate-300"
               >
                 {emptyMessage}
               </td>

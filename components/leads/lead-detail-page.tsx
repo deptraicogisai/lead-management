@@ -77,7 +77,7 @@ const FILTER_LOG_COLGROUP = (
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-2 border-b border-slate-200 py-2.5 text-sm last:border-b-0 dark:border-slate-700">
-      <dt className="font-medium text-slate-500 dark:text-slate-400">{label}</dt>
+      <dt className="font-medium text-slate-600 dark:text-slate-300">{label}</dt>
       <dd className="min-w-0 break-words text-slate-800 dark:text-slate-100">{children}</dd>
     </div>
   );
@@ -167,7 +167,7 @@ function FilterLogMessageCell({ message }: { message: string }) {
   }, [open, updatePosition]);
 
   if (!hasMessage) {
-    return <span className="text-slate-400 dark:text-slate-500">—</span>;
+    return <span className="text-slate-500 dark:text-slate-300">—</span>;
   }
 
   return (
@@ -195,7 +195,7 @@ function FilterLogMessageCell({ message }: { message: string }) {
               style={{ top: position.top, left: position.left }}
               className="fixed z-[120] w-[280px] -translate-y-full rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-700 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
             >
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                 Reason
               </p>
               <p className="break-words">{trimmed}</p>
@@ -249,7 +249,7 @@ function FilterLogDetailRow({
             className={cn(
               "line-clamp-2 break-words font-medium hover:underline",
               row.campaignDisabled
-                ? "text-slate-500 dark:text-slate-400"
+                ? "text-slate-600 dark:text-slate-300"
                 : "text-blue-700 dark:text-blue-300"
             )}
             title={row.campaignLabel}
@@ -273,7 +273,7 @@ function FilterLogDetailRow({
           {row.status.trim() && row.status.trim() !== "—" ? (
             <StatusBadge status={row.status} />
           ) : (
-            <span className="text-slate-400 dark:text-slate-500">—</span>
+            <span className="text-slate-500 dark:text-slate-300">—</span>
           )}
           {row.offeredPriceLabel ? (
             <span className="absolute right-0 top-0 rounded border border-amber-200 bg-amber-50 px-1 py-px text-[11px] font-semibold leading-none text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
@@ -286,13 +286,13 @@ function FilterLogDetailRow({
         {showMessageIcon ? (
           <FilterLogMessageCell message={row.message} />
         ) : (
-          <span className="text-slate-400 dark:text-slate-500">—</span>
+          <span className="text-slate-500 dark:text-slate-300">—</span>
         )}
       </td>
       <td className="whitespace-nowrap px-4 py-2.5 align-middle tabular-nums text-slate-700 dark:text-slate-200">
         {row.timeLabel}
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 align-middle text-slate-400 dark:text-slate-500">—</td>
+      <td className="whitespace-nowrap px-4 py-2.5 align-middle text-slate-500 dark:text-slate-300">—</td>
       <td className="whitespace-nowrap px-4 py-2.5 align-middle">
         {row.hasDelivery ? (
           <button
@@ -304,7 +304,7 @@ function FilterLogDetailRow({
             Log
           </button>
         ) : (
-          <span className="text-slate-400 dark:text-slate-500">—</span>
+          <span className="text-slate-500 dark:text-slate-300">—</span>
         )}
       </td>
     </tr>
@@ -718,7 +718,7 @@ export function LeadDetailPage() {
                         const index = match?.[2]?.trim() || "";
                         return (
                           <p className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100">
-                            <span className="font-medium text-slate-500 dark:text-slate-400">Ping Tree:</span>{" "}
+                            <span className="font-medium text-slate-600 dark:text-slate-300">Ping Tree:</span>{" "}
                             <span>{title}</span>
                             {index ? (
                               <span className="ml-1.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
@@ -841,7 +841,7 @@ export function LeadDetailPage() {
                                       <tr>
                                         <td
                                           colSpan={10}
-                                          className="px-4 py-6 text-center text-slate-500 dark:text-slate-400"
+                                          className="px-4 py-6 text-center text-slate-600 dark:text-slate-300"
                                         >
                                           No campaigns in this processing tree.
                                         </td>

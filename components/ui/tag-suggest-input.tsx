@@ -198,7 +198,7 @@ export function TagSuggestInput({
             >
               <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
                 <Sparkles size={14} className="text-emerald-600 dark:text-emerald-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                   Matching tags
                 </span>
                 <span className="ml-auto rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
@@ -232,7 +232,7 @@ export function TagSuggestInput({
                           "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border",
                           isActive
                             ? "border-emerald-200 bg-white text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-                            : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                            : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-300"
                         )}
                       >
                         <Hash size={14} />

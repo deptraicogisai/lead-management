@@ -14,7 +14,7 @@ export function PublisherTagBadges({ tag, className }: PublisherTagBadgesProps) 
     .filter(Boolean);
 
   if (tags.length === 0) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-slate-500 dark:text-slate-300">—</span>;
   }
 
   return (

@@ -27,6 +27,12 @@ html.dark {
   color-scheme: dark;
 }
 
+/* Atomic theme swaps — prevent color/layout transitions from fighting the sidebar.
+   Exclude the theme toggle so its switch thumb can still slide. */
+html.theme-switching *:not([data-theme-toggle], [data-theme-toggle] *) {
+  transition: none !important;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
@@ -35,7 +41,6 @@ body {
   font-weight: 400;
   background: #f8fafc;
   color: #0f172a;
-  transition: background-color 200ms ease, color 200ms ease;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
@@ -75,6 +80,17 @@ button {
 html.dark body {
   background: #020617;
   color: #e2e8f0;
+}
+
+/* Keep placeholders readable in both themes (browser default opacity is often too faint). */
+::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+html.dark ::placeholder {
+  color: #cbd5e1;
+  opacity: 1;
 }
 
 :root {
@@ -702,6 +718,20 @@ select:disabled {
   .mobile-page-actions :is(button, a) {
     width: 100%;
     min-width: 0;
+  }
+
+  .mobile-filter-actions > :is(button, a) {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Comfortable tap targets for dense table action clusters on phones */
+@media (max-width: 639px) {
+  .table-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 }
 
