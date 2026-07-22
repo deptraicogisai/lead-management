@@ -215,6 +215,16 @@ export function Header({ session, onOpenSettings }: HeaderProps) {
           </div>
         </div>
       </div>
+
+      <div
+        className="flex items-center gap-2 border-t border-slate-200/80 px-3 py-1.5 text-[11px] font-medium text-slate-600 lg:hidden dark:border-slate-700/80 dark:text-slate-300"
+        title={systemTimeLabel}
+      >
+        <Clock3 size={13} className="shrink-0 text-blue-500" />
+        <span className="min-w-0 whitespace-normal break-words tabular-nums leading-4" suppressHydrationWarning>
+          {systemTimeLabel}
+        </span>
+      </div>
     </header>
   );
 }
