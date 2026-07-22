@@ -11,6 +11,7 @@ import {
   useSystemSettings,
 } from "@/components/settings/system-settings-context";
 import { SystemSettingsDrawer } from "@/components/settings/system-settings-drawer";
+import { useMediaQuery } from "@/lib/use-media-query";
 import type { AuthSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +19,11 @@ function DashboardScaledShell({ session, children }: { session: AuthSession; chi
   const { collapsed } = useSidebarLayout();
   const { fontScale } = useSystemSettings();
   const fontScaleFactor = getSystemFontScaleFactor(fontScale);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const useMobileScrollShell = !isDesktop;
 
   return (
     <>
@@ -37,11 +40,15 @@ function DashboardScaledShell({ session, children }: { session: AuthSession; chi
           )}
         >
           <div
-            className="dashboard-font-scale"
+            className={cn(
+              "dashboard-font-scale min-w-0",
+              useMobileScrollShell &&
+                "h-[100dvh] overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+            )}
             style={fontScaleFactor === 1 ? undefined : { zoom: fontScaleFactor }}
             suppressHydrationWarning
           >
-            <main className="min-h-[100dvh]">
+            <main className={cn("min-h-[100dvh] min-w-0", useMobileScrollShell && "min-h-0")}>
               <div className="mobile-app-shell">
                 <DashboardChrome session={session} onOpenSettings={openSettings}>
                   {children}

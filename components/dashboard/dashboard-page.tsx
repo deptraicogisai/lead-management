@@ -59,7 +59,7 @@ export function DashboardPageContent() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Dashboard</h1>
@@ -95,7 +95,7 @@ export function DashboardPageContent() {
         <DashboardLineChart chart={data.buyerChart} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
         <DashboardRankingPanel
           title="Top Publishers"
           summaryHref="/reports/publisher/performance-summary"

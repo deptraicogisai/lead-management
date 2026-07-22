@@ -47,7 +47,7 @@ const periodOptions: Array<{ value: DashboardPeriod; label: string; icon: Lucide
 
 /** Compact fixed viewport for ~6 body rows so period switches don't flash a scrollbar. */
 const rankingTableScrollClassName = cn(
-  "table-scroll-thin h-[calc(2.75rem+6*2.55rem)] overflow-x-hidden overflow-y-scroll",
+  "table-scroll-thin h-[calc(2.75rem+6*2.55rem)] overflow-y-auto overflow-x-auto overscroll-x-contain",
   "[scrollbar-gutter:stable]"
 );
 
@@ -300,7 +300,7 @@ export function DashboardRankingPanel({ title, summaryHref, rankings, variant }:
   })();
 
   return (
-    <section className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+    <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-800 dark:text-slate-100">{title}</h2>
         <PeriodTabs period={period} onChange={setPeriod} />
