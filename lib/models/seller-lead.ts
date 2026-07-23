@@ -42,6 +42,8 @@ const sellerLeadSchema = new Schema(
     },
     postedAt: { type: Date, required: true, index: true },
     userAgent: { type: String, required: false, trim: true },
+    /** Inbound HTTP headers from the publisher → system intake request. */
+    requestHeaders: { type: Schema.Types.Mixed, required: false, default: null },
   },
   { timestamps: true }
 );

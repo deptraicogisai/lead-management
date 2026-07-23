@@ -968,7 +968,11 @@ async function processCampaignAttempt(params: {
     normalizeCampaignIntegrationConfigValues(campaign.integrationSettings).url?.trim() ||
     buyer.postLeadUrl?.trim() ||
     "";
-  const usesMockEndpoint = Boolean(mockBuyerPostUrl) || isBuyerLeadMockEndpoint(resolvedPostUrl);
+  // Only treat the request as a mock buyer post when Test Mode / explicit mock is on.
+  // A leftover /api/lists/addlead URL must not apply campaign mock data in live mode.
+  const usesMockEndpoint =
+    params.mockBuyerPost &&
+    (Boolean(mockBuyerPostUrl) || isBuyerLeadMockEndpoint(resolvedPostUrl));
 
   if (usesMockEndpoint) {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
@@ -1560,7 +1564,7 @@ export type { PendingBuyerPostCampaign };
 
 export async function listPendingBuyerPostCampaigns(
   verticalRefId: string,
-  mockBuyerPost = true,
+  mockBuyerPost = false,
   publisherApiType: MappingApiType = "Redirect",
   options?: {
     sellerRefId?: string;

@@ -147,8 +147,9 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
                 <span className="min-w-0">
                   <span className="block">Test Mode</span>
                   <span className="mt-1 block text-xs font-normal leading-5 text-slate-600 dark:text-slate-300">
-                    When on, Ping Tree shows Set mock data on campaigns, and buyer responses use that
-                    mock data. When off, leads post to the real buyer API.
+                    When on, Ping Tree shows Set mock data, Buyer Lead API is available, and buyer
+                    responses use mock data. When off, Lead API is hidden and leads post to the real
+                    buyer API.
                   </span>
                 </span>
               </label>

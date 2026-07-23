@@ -535,13 +535,14 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               className={selectClassName}
             />
           )}
-          {!testMode
+          {testMode
             ? renderDetailRow(
                 "Lead API",
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Post to <code className="text-[11px]">/api/lists/addlead</code>. Set{" "}
+                      Used while Test Mode is on. Post to{" "}
+                      <code className="text-[11px]">/api/lists/addlead</code> with{" "}
                       <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
                     </p>
                     <SecondaryButton type="button" onClick={handleGenerateApi}>

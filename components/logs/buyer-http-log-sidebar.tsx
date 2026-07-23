@@ -8,6 +8,7 @@ import {
   sanitizeLogPayloadForDisplay,
   type BuyerHttpExchangeLog,
 } from "@/lib/buyer-http-log";
+import { buildBuyerRequestLogPayload } from "@/lib/buyer-post-request";
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
@@ -124,7 +125,7 @@ export function BuyerHttpLogSidebar({
               <JsonLogPanel
                 title="Request"
                 tone="request"
-                data={sanitizeLogPayloadForDisplay(request.body)}
+                data={sanitizeLogPayloadForDisplay(buildBuyerRequestLogPayload(request))}
                 emptyMessage="No buyer request was recorded."
               />
             </section>

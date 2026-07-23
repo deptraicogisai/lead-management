@@ -18,6 +18,28 @@ export function snapshotFetchResponseHeaders(response: Response): Record<string,
   return headers;
 }
 
+const SKIP_INCOMING_REQUEST_HEADERS = new Set([
+  "cookie",
+  "set-cookie",
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "transfer-encoding",
+  "te",
+  "trailer",
+  "upgrade",
+]);
+
+/** Capture inbound HTTP headers for publisher → system Get Log display. */
+export function snapshotIncomingRequestHeaders(headers: Headers): Record<string, string> {
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    if (SKIP_INCOMING_REQUEST_HEADERS.has(key.toLowerCase())) return;
+    result[key] = value;
+  });
+  return result;
+}
+
 export function parseResponseBodyForDisplay(body: string): unknown {
   const trimmed = body.trim();
   if (!trimmed) {

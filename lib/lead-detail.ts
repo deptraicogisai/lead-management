@@ -147,8 +147,10 @@ export type LeadDetailRecord = {
   publisherPayout: string;
   fields: LeadDetailFieldRow[];
   validationErrors: string[];
-  /** Raw payload the publisher sent to our intake. */
+  /** Raw payload the publisher sent to our intake (Get Log formats method/headers/data). */
   publisherRequest: Record<string, unknown>;
+  /** Inbound HTTP headers from the publisher intake request. */
+  publisherRequestHeaders: Record<string, string>;
   /** JSON body returned to the publisher for this lead intake. */
   publisherResponse: Record<string, unknown> | null;
   filterLog: LeadDetailFilterLogEntry[];
@@ -309,7 +311,7 @@ export function formatRedirectReferrerLabel(referrer: string) {
   if (!trimmed) return "—";
   try {
     const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
-    return url.hostname || trimmed;
+    return url.hostname.trim() || trimmed;
   } catch {
     return trimmed;
   }
@@ -331,7 +333,7 @@ export function buildLeadRedirectRows(params: {
   const redirectUrl = params.redirectUrl?.trim() || "";
   if (!redirectUrl) return [];
 
-  const createdAt = params.redirectCreatedAt?.trim() || params.postedAt;
+  const createdAt = params.redirectCreatedAt?.trim() || params.postedAt?.trim() || "";
   const confirmed =
     params.redirectConfirmedAt != null
       ? typeof params.redirectConfirmedAt === "string"
@@ -353,20 +355,23 @@ export function buildLeadRedirectRows(params: {
   const referrer = params.redirectReferrer?.trim() || "";
   const userAgent =
     params.redirectClickUserAgent?.trim() || params.userAgent?.trim() || "—";
+  const campaignId = params.campaignId?.trim() || "";
+  const campaignName = params.campaignName?.trim() || "—";
+  const dateLabel = createdAt ? formatDateTimeDisplay(createdAt) || createdAt : "—";
 
   return [
     {
       date: createdAt,
-      dateLabel: formatDateTimeDisplay(createdAt),
+      dateLabel,
       clickDate: clickIso,
       clickDateLabel: clickIso ? formatRedirectClickDateLabel(clickIso, createdAt) : "—",
-      campaignId: params.campaignId?.trim() || "",
-      campaignName: params.campaignName?.trim() || "—",
+      campaignId,
+      campaignName,
       clientIp,
       status: clickIso ? "Yes" : "No",
       redirectUrl,
       referrer,
-      referrerLabel: formatRedirectReferrerLabel(referrer),
+      referrerLabel: referrer ? formatRedirectReferrerLabel(referrer) : "",
       userAgent,
     },
   ];
@@ -812,6 +817,7 @@ export function buildLeadDetailRecord(params: {
   redirectReferrer?: string | null;
   redirectClickUserAgent?: string | null;
   userAgent?: string | null;
+  requestHeaders?: Record<string, string> | null;
   soldPrice?: number | null;
   postedAt: string;
   redirectCreatedAt?: string | null;
@@ -861,6 +867,19 @@ export function buildLeadDetailRecord(params: {
       ? `[${sourceId}] ${sourceName}`
       : sourceName || (sourceId ? `[${sourceId}]` : "—");
 
+  const storedHeaders =
+    params.requestHeaders && typeof params.requestHeaders === "object" && !Array.isArray(params.requestHeaders)
+      ? Object.fromEntries(
+          Object.entries(params.requestHeaders).map(([key, value]) => [key, String(value ?? "")])
+        )
+      : {};
+  const publisherRequestHeaders =
+    Object.keys(storedHeaders).length > 0
+      ? storedHeaders
+      : params.userAgent?.trim()
+        ? { "user-agent": params.userAgent.trim() }
+        : {};
+
   return {
     id: params.id,
     publicLeadId: buildPublisherLeadDisplayCode(params.id),
@@ -888,6 +907,7 @@ export function buildLeadDetailRecord(params: {
     fields: buildLeadBodyFields(params.payload, params.fieldLabelsByName),
     validationErrors: params.validationErrors ?? [],
     publisherRequest: params.payload ?? {},
+    publisherRequestHeaders,
     publisherResponse: resolvePublisherResponseForLeadDetail({
       leadId: params.id,
       publisherResponse: params.publisherResponse,

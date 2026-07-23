@@ -21,6 +21,7 @@ import {
 import { describePlDnplRuleLines, evaluatePlDnplForCampaign } from "@/lib/pl-dnpl-evaluation";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { distributeLeadAfterIntake, listPendingBuyerPostCampaigns } from "@/lib/lead-distribution";
+import { isSystemTestModeEnabled } from "@/lib/system-settings";
 import { normalizeMappingApiType } from "@/lib/mapping-api-type";
 import { toMappingRevShareSettings, type MappingRevShareDoc } from "@/lib/mapping-rev-share-settings";
 import { buildInitialBuyerPostQueue } from "@/lib/test-lead-buyer-progress";
@@ -245,6 +246,7 @@ export async function runMappingTestLeadSubmit(params: {
   endpointUrl: string;
   origin: string;
   userAgent?: string;
+  requestHeaders?: Record<string, string>;
 }) {
   const postedAt = new Date();
   const validationResult = await validateMappingLeadIntake({
@@ -297,22 +299,24 @@ export async function runMappingTestLeadSubmit(params: {
       validationErrors: validationResult.allReasons,
       postedAt,
       userAgent: params.userAgent ?? "Test Lead UI",
+      requestHeaders: params.requestHeaders ?? null,
     });
     leadSaved = true;
     createdLeadId = createdLead._id?.toString() ?? "";
 
     if (validationResult.passed && params.postToBuyer && createdLeadId && params.verticalRef) {
       const publisherApiType = normalizeMappingApiType((params.mappingDoc as { apiType?: string | null }).apiType);
+      const systemTestMode = await isSystemTestModeEnabled();
 
       if (params.buyerPostProgress?.onPending) {
         const pendingCampaigns = await listPendingBuyerPostCampaigns(
           params.verticalRef.toString(),
-          true,
+          systemTestMode,
           publisherApiType,
           {
             sellerRefId: params.sellerRef.toString(),
             mappingRefId: params.mappingRef.toString(),
-            allocationScope: "test",
+            allocationScope: systemTestMode ? "test" : "live",
           }
         );
         await params.buyerPostProgress.onPending(
@@ -329,8 +333,9 @@ export async function runMappingTestLeadSubmit(params: {
         postedAt,
         origin: params.origin,
         postToBuyer: true,
-        mockBuyerPost: true,
-        mockBuyerPostOptions: params.mockBuyerPostOptions,
+        // Follow system Test Mode — do not force mock responses when it is off.
+        mockBuyerPost: systemTestMode,
+        mockBuyerPostOptions: systemTestMode ? params.mockBuyerPostOptions : undefined,
         revShareSettings: toMappingRevShareSettings((params.mappingDoc as { revShare?: MappingRevShareDoc }).revShare),
         progress: {
           onBuyerPostProcessing: params.buyerPostProgress?.onProcessing,

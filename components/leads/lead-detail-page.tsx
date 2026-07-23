@@ -11,7 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Check, Copy, ExternalLink, FileText, Filter, Link2, MessageSquareText, ScrollText, TreePine, VolumeX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
@@ -20,7 +20,6 @@ import { LeadGetLogFlow, type LeadGetLogCampaignStep } from "@/components/leads/
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageSection } from "@/components/ui/state";
-import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
@@ -28,6 +27,7 @@ import {
   resolveBuyerHttpExchangeFromLog,
   sanitizeLogPayloadForDisplay,
 } from "@/lib/buyer-http-log";
+import { buildBuyerRequestLogPayload } from "@/lib/buyer-post-request";
 import type {
   LeadDetailFilterLogRow,
   LeadDetailFilterProcessingKey,
@@ -84,7 +84,9 @@ function buildGetLogCampaignSteps(
         wasPosted: row.wasPosted,
         campaignDisabled: row.campaignDisabled,
         message: row.message || row.rejectReason || row.errorReason || "",
-        requestBody: sanitizeLogPayloadForDisplay(exchange.request?.body ?? null),
+        requestBody: sanitizeLogPayloadForDisplay(
+          exchange.request ? buildBuyerRequestLogPayload(exchange.request) : null
+        ),
         responseBody: row.responseBody.trim()
           ? parseResponseBodyForDisplay(exchange.response?.body || row.responseBody)
           : null,
@@ -116,10 +118,6 @@ const DETAIL_TABS = [
   { id: "filter-log" as const, label: "Filter log", icon: Filter },
   { id: "get-log" as const, label: "Get Log", icon: ScrollText },
 ];
-
-function isLeadDetailTab(value: string | null): value is LeadDetailTab {
-  return value === "lead-body" || value === "redirect" || value === "filter-log" || value === "get-log";
-}
 
 function filterProcessingTabIcon(key: string): LucideIcon {
   if (key === "Silent") return VolumeX;
@@ -382,15 +380,11 @@ function FilterLogDetailRow({
 export function LeadDetailPage() {
   const { timeZone } = useSystemSettings();
   const params = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
   const leadIdParam = typeof params?.id === "string" ? params.id : "";
   const [lead, setLead] = useState<LeadDetailRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<LeadDetailTab>(() => {
-    const tab = searchParams.get("tab");
-    return isLeadDetailTab(tab) ? tab : "lead-body";
-  });
+  const [activeTab, setActiveTab] = useState<LeadDetailTab>("lead-body");
   const [filterProcessingKey, setFilterProcessingKey] = useState<LeadDetailFilterProcessingKey>("");
   const [logRow, setLogRow] = useState<LeadDetailFilterLogRow | null>(null);
   const [postedExpanded, setPostedExpanded] = useState(true);
@@ -404,12 +398,12 @@ export function LeadDetailPage() {
 
   useBreadcrumbLabel(lead ? lead.publicLeadId : "Lead Detail");
 
+  // Always open on Lead body when entering / switching leads.
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (isLeadDetailTab(tab)) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
+    setActiveTab("lead-body");
+    setFilterProcessingKey("");
+    setLogRow(null);
+  }, [leadIdParam]);
 
   const filterSections = lead?.filterProcessing ?? [];
   const getLogCampaigns = useMemo(
@@ -664,106 +658,127 @@ export function LeadDetailPage() {
               {activeTab === "redirect" ? (
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Redirect</h3>
-                  <ScrollableTableShell
-                    rowCount={(lead.redirects ?? []).length}
-                    className="rounded-xl shadow-none"
-                    tableClassName="min-w-max"
-                    thead={
-                      <tr className="text-left text-xs font-extrabold text-slate-700 dark:text-slate-100">
-                        <th className="whitespace-nowrap px-4 py-3">Date</th>
-                        <th className="whitespace-nowrap px-4 py-3">Click Date</th>
-                        <th className="whitespace-nowrap px-4 py-3">Campaign</th>
-                        <th className="whitespace-nowrap px-4 py-3">Client IP</th>
-                        <th className="whitespace-nowrap px-4 py-3">Status</th>
-                        <th className="min-w-[14rem] px-4 py-3">Redirect url</th>
-                        <th className="min-w-[10rem] px-4 py-3">Referrer</th>
-                        <th className="min-w-[14rem] px-4 py-3">User Agent</th>
-                      </tr>
-                    }
-                  >
-                    <tbody>
-                      {(lead.redirects ?? []).length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                            No redirect records for this lead.
-                          </td>
+                  {/* Plain table: ScrollableTableShell width sync breaks under dashboard zoom. */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                    <table className="min-w-full border-separate border-spacing-0 text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-800">
+                        <tr className="text-left text-xs font-extrabold text-slate-700 dark:text-slate-100">
+                          <th className="whitespace-nowrap px-4 py-3">Date</th>
+                          <th className="whitespace-nowrap px-4 py-3">Click Date</th>
+                          <th className="whitespace-nowrap px-4 py-3">Campaign</th>
+                          <th className="whitespace-nowrap px-4 py-3">Client IP</th>
+                          <th className="whitespace-nowrap px-4 py-3">Status</th>
+                          <th className="min-w-[14rem] px-4 py-3">Redirect url</th>
+                          <th className="min-w-[10rem] px-4 py-3">Referrer</th>
+                          <th className="min-w-[14rem] px-4 py-3">User Agent</th>
                         </tr>
-                      ) : (
-                        (lead.redirects ?? []).map((row, index) => (
-                          <tr
-                            key={`${row.redirectUrl}-${row.clickDate}-${index}`}
-                            className="border-t border-slate-200 align-top dark:border-slate-700"
-                          >
-                            <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
-                              {formatDateTimeDisplay(row.date, timeZone)}
+                      </thead>
+                      <tbody>
+                        {(lead.redirects ?? []).length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                              No redirect records for this lead.
                             </td>
-                            <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
-                              {row.clickDate
-                                ? formatRedirectClickDateLabel(row.clickDate, row.date, timeZone)
-                                : "—"}
-                            </td>
-                            <td className="px-4 py-3">
-                              {row.campaignId ? (
-                                <Link
-                                  href={`/campaigns/${encodeURIComponent(row.campaignId)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-medium text-blue-700 hover:underline dark:text-blue-300"
-                                >
-                                  {row.campaignName}
-                                </Link>
-                              ) : (
-                                <span className="text-slate-700 dark:text-slate-200">{row.campaignName}</span>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-200">
-                              {row.clientIp}
-                            </td>
-                            <td className="px-4 py-3">
-                              <StatusBadge status={row.status} />
-                            </td>
-                            <td className="px-4 py-3">
-                              {row.redirectUrl ? (
-                                <div className="space-y-2">
-                                  <p className="break-all text-slate-800 dark:text-slate-100">{row.redirectUrl}</p>
-                                  <a
-                                    href={row.redirectUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
-                                  >
-                                    <ExternalLink size={12} />
-                                    Open URL
-                                  </a>
-                                </div>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {row.referrer ? (
-                                <div className="space-y-2">
-                                  <p className="break-all text-slate-800 dark:text-slate-100">{row.referrerLabel}</p>
-                                  <a
-                                    href={row.referrer.includes("://") ? row.referrer : `https://${row.referrer}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
-                                  >
-                                    <ExternalLink size={12} />
-                                    Open URL
-                                  </a>
-                                </div>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                            <td className="px-4 py-3 break-all text-slate-700 dark:text-slate-200">{row.userAgent}</td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </ScrollableTableShell>
+                        ) : (
+                          (lead.redirects ?? []).map((row, index) => {
+                            const dateText =
+                              (row.date ? formatDateTimeDisplay(row.date, timeZone) : "") ||
+                              row.dateLabel ||
+                              "—";
+                            const clickText = row.clickDate
+                              ? formatRedirectClickDateLabel(row.clickDate, row.date, timeZone)
+                              : row.clickDateLabel || "—";
+                            return (
+                              <tr
+                                key={`${row.redirectUrl}-${row.clickDate}-${index}`}
+                                className="border-t border-slate-200 align-top dark:border-slate-700"
+                              >
+                                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
+                                  {dateText}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-700 dark:text-slate-200">
+                                  {clickText}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {row.campaignId ? (
+                                    <Link
+                                      href={`/campaigns/${encodeURIComponent(row.campaignId)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                                    >
+                                      {row.campaignName || "—"}
+                                    </Link>
+                                  ) : (
+                                    <span className="text-slate-700 dark:text-slate-200">
+                                      {row.campaignName || "—"}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-200">
+                                  {row.clientIp || "—"}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <StatusBadge
+                                    status={row.status}
+                                    label={row.status === "Yes" ? "Clicked" : "Not clicked"}
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  {row.redirectUrl ? (
+                                    <div className="space-y-2">
+                                      <p className="break-all text-slate-800 dark:text-slate-100">
+                                        {row.redirectUrl}
+                                      </p>
+                                      <a
+                                        href={row.redirectUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+                                      >
+                                        <ExternalLink size={12} />
+                                        Open URL
+                                      </a>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500">—</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {row.referrer ? (
+                                    <div className="space-y-2">
+                                      <p className="break-all text-slate-800 dark:text-slate-100">
+                                        {row.referrerLabel || row.referrer}
+                                      </p>
+                                      <a
+                                        href={
+                                          row.referrer.includes("://")
+                                            ? row.referrer
+                                            : `https://${row.referrer}`
+                                        }
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+                                      >
+                                        <ExternalLink size={12} />
+                                        Open URL
+                                      </a>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500">—</span>
+                                  )}
+                                </td>
+                                <td className="break-all px-4 py-3 text-slate-700 dark:text-slate-200">
+                                  {row.userAgent || "—"}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : null}
 
@@ -951,7 +966,11 @@ export function LeadDetailPage() {
 
               {activeTab === "get-log" ? (
                 <LeadGetLogFlow
-                  publisherRequest={sanitizeLogPayloadForDisplay(lead.publisherRequest ?? {})}
+                  publisherRequest={sanitizeLogPayloadForDisplay({
+                    method: lead.method || "POST",
+                    headers: lead.publisherRequestHeaders ?? {},
+                    data: lead.publisherRequest ?? {},
+                  })}
                   publisherResponse={lead.publisherResponse}
                   campaigns={getLogCampaigns}
                   apiType={lead.apiType}

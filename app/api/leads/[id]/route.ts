@@ -53,6 +53,7 @@ type LeadDoc = {
   redirectReferrer?: string | null;
   redirectClickUserAgent?: string | null;
   userAgent?: string | null;
+  requestHeaders?: Record<string, string> | null;
   soldPrice?: number | null;
   pingTreeAllocations?: unknown;
   postedAt?: Date | string;
@@ -276,13 +277,29 @@ export async function GET(_req: Request, context: Params) {
 
     const redirectDelivery =
       apiType === "Redirect"
-        ? acceptedDeliveries.find((delivery) => delivery.pingTreeType === "Redirect") ?? null
+        ? acceptedDeliveries.find((delivery) => delivery.pingTreeType === "Redirect") ??
+          acceptedDeliveries[0] ??
+          null
         : null;
     if (redirectDelivery) {
       const campaign = campaignById.get(redirectDelivery.campaignRef?.toString() ?? "");
       redirectCampaignId = redirectDelivery.campaignRef?.toString() ?? "";
-      redirectCampaignName = campaign?.name?.trim() || "Campaign";
+      redirectCampaignName =
+        typeof campaign?.displayId === "number"
+          ? `[${campaign.displayId}] ${campaign?.name?.trim() || "Campaign"}`
+          : campaign?.name?.trim() || "Campaign";
       redirectCreatedAt = toIsoString(redirectDelivery.postedAt, lead.postedAt);
+    } else if (apiType === "Redirect" && (acceptedAny || lead.redirectUrl)) {
+      // Lead has redirect URL but delivery lookup missed campaign metadata.
+      if (acceptedAny) {
+        redirectCampaignId = acceptedAny.campaignRef?.toString() ?? "";
+        redirectCampaignName = acceptedDelivery
+          ? acceptedDelivery.campaignDisplayId != null
+            ? `[${acceptedDelivery.campaignDisplayId}] ${acceptedDelivery.campaignName}`
+            : acceptedDelivery.campaignName
+          : "Campaign";
+      }
+      redirectCreatedAt = toIsoString(lead.postedAt, lead.createdAt);
     }
 
     const buyerRevenue = sumPublisherScopedDeliveryRevenue(leadId, scopedDeliveries, apiType);
@@ -449,6 +466,10 @@ export async function GET(_req: Request, context: Params) {
       redirectReferrer: lead.redirectReferrer,
       redirectClickUserAgent: lead.redirectClickUserAgent,
       userAgent: lead.userAgent,
+      requestHeaders:
+        lead.requestHeaders && typeof lead.requestHeaders === "object" && !Array.isArray(lead.requestHeaders)
+          ? (lead.requestHeaders as Record<string, string>)
+          : null,
       soldPrice: lead.soldPrice,
       postedAt: toIsoString(lead.postedAt, lead.createdAt),
       redirectCreatedAt: redirectCreatedAt || undefined,

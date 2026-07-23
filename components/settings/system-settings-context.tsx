@@ -130,8 +130,8 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     const storedTimeZone = window.localStorage.getItem(SYSTEM_TIME_ZONE_STORAGE_KEY);
     return isTimeZone(storedTimeZone) ? storedTimeZone : DEFAULT_SYSTEM_TIME_ZONE;
   });
-  const [testMode, setTestModeState] = useState(false);
-  const [testModeReady, setTestModeReady] = useState(false);
+  const [testMode, setTestModeState] = useState(() => readCachedTestMode());
+  const [testModeReady, setTestModeReady] = useState(() => typeof window !== "undefined");
   const [isSavingTestMode, setIsSavingTestMode] = useState(false);
 
   useEffect(() => {

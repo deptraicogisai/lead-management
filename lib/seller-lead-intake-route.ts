@@ -16,6 +16,7 @@ import {
 } from "@/lib/mapping-lead-validation";
 import { validateMappingLeadIntake, type MappingIntakeDoc } from "@/lib/mapping-lead-intake";
 import { distributeLeadAfterIntake, isTestLeadPayload } from "@/lib/lead-distribution";
+import { snapshotIncomingRequestHeaders } from "@/lib/buyer-http-log";
 import { ensureTrafficSourceForLead } from "@/lib/traffic-source-server";
 import { extractSource } from "@/lib/traffic-source";
 import { isTrafficSourceAllowed, normalizeTrafficSourceStatus } from "@/lib/models/traffic-source";
@@ -151,6 +152,7 @@ async function persistRejectedSellerLead(params: {
   reasons: string[];
   postedAt: Date;
   userAgent: string;
+  requestHeaders?: Record<string, string>;
   publisherResponse?: Record<string, unknown> | null;
 }) {
   if (params.reasons.length === 0) {
@@ -173,6 +175,7 @@ async function persistRejectedSellerLead(params: {
       publisherResponse: params.publisherResponse ?? null,
       postedAt: params.postedAt,
       userAgent: params.userAgent,
+      requestHeaders: params.requestHeaders ?? null,
     });
   } catch (error) {
     console.error("Failed to persist rejected seller lead:", error);
@@ -381,6 +384,7 @@ export async function handleSellerLeadPost(req: Request) {
     requestPayloadForLog = body;
     const postedAt = new Date();
     const userAgent = req.headers.get("user-agent")?.trim() || "Unknown";
+    const requestHeaders = snapshotIncomingRequestHeaders(req.headers);
     endpointUrl = new URL(req.url).pathname;
     const requestApiKey =
       req.headers.get("x-api-key")?.trim() ||
@@ -398,6 +402,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -430,6 +435,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -459,6 +465,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -486,6 +493,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -513,6 +521,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -541,6 +550,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -570,6 +580,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -617,6 +628,7 @@ export async function handleSellerLeadPost(req: Request) {
               reasons,
               postedAt,
               userAgent,
+              requestHeaders,
               publisherResponse: responsePayload,
             });
 
@@ -646,6 +658,7 @@ export async function handleSellerLeadPost(req: Request) {
               reasons,
               postedAt,
               userAgent,
+              requestHeaders,
               publisherResponse: responsePayload,
             });
 
@@ -685,6 +698,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons,
         postedAt,
         userAgent,
+        requestHeaders,
         publisherResponse: responsePayload,
       });
 
@@ -727,6 +741,7 @@ export async function handleSellerLeadPost(req: Request) {
       isTestLead,
       postedAt,
       userAgent,
+      requestHeaders,
     });
 
     if (validationStatus === "fail") {
@@ -822,6 +837,7 @@ export async function handleSellerLeadPost(req: Request) {
         reasons: ["Unexpected server error while processing lead."],
         postedAt: new Date(),
         userAgent: req.headers.get("user-agent")?.trim() || "Unknown",
+        requestHeaders: snapshotIncomingRequestHeaders(req.headers),
         publisherResponse: responsePayload,
       });
       await createSellerIntakeLog({

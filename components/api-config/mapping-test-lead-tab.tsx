@@ -1317,7 +1317,7 @@ export function MappingTestLeadTab({ sellerId, mappingId, apiName, fields }: Map
               API: {apiName ?? "Selected API"}
             </p>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-              Validate against duplicates, filters, and schedule. Enable save to store the lead. Use post to buyer to run ping tree delivery against the mock buyer API.
+              Validate against duplicates, filters, and schedule. Enable save to store the lead. Use post to buyer to run ping tree delivery — mock responses apply only when Settings → Test Mode is on.
             </p>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               Endpoint: <span className="font-mono">{endpointUrl}</span>

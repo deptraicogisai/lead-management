@@ -5,6 +5,7 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { ensureVerticalMappingReferencesMigrated } from "@/lib/models/vertical-mapping";
 import { ensureMappingApiRequest, PUBLISHER_LEAD_ENDPOINT_PATH } from "@/lib/mapping-api-request";
 import { runMappingTestLeadSubmit } from "@/lib/mapping-lead-intake";
+import { snapshotIncomingRequestHeaders } from "@/lib/buyer-http-log";
 import { clearMappingTestLeadLogs, listMappingTestLeadLogs } from "@/lib/mapping-test-lead-log";
 import { buildTestLeadIntakeRuleGroups, buildTestLeadMultiSelectFilters } from "@/lib/mapping-test-lead-intake";
 import { parseMockBuyerPostOptions } from "@/lib/mock-buyer-post";
@@ -127,6 +128,7 @@ export async function POST(req: Request, context: Params) {
       endpointUrl: PUBLISHER_LEAD_ENDPOINT_PATH,
       origin: new URL(req.url).origin,
       userAgent: req.headers.get("user-agent")?.trim() || "Test Lead UI",
+      requestHeaders: snapshotIncomingRequestHeaders(req.headers),
     };
 
     if (postToBuyer && saveLead) {

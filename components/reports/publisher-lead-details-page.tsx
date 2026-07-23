@@ -414,7 +414,7 @@ export function PublisherLeadDetailsPage() {
         sortValue: (row) => row.displayCode,
         render: (row) => (
           <Link
-            href={`/leads/${encodeURIComponent(row.id)}?tab=get-log`}
+            href={`/leads/${encodeURIComponent(row.id)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"

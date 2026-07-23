@@ -27,12 +27,12 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !testMode) return;
     setForm((current) => ({
       ...current,
       postLeadUrl: current.postLeadUrl?.trim() || buildBuyerLeadPostUrl(window.location.origin),
     }));
-  }, []);
+  }, [testMode]);
 
   const handleGenerateApi = () => {
     const apiKey = generateBuyerApiKey();
@@ -56,7 +56,7 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
 
     if (!form.name.trim()) nextErrors.name = "Buyer name is required.";
     if (!form.email.includes("@")) nextErrors.email = "A valid email is required.";
-    if (!testMode && !form.apiKey?.trim()) {
+    if (testMode && !form.apiKey?.trim()) {
       nextErrors.apiKey = "Generate an API key before creating the buyer.";
     }
 
@@ -119,13 +119,14 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
         />
       </div>
 
-      {!testMode ? (
+      {testMode ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Buyer Lead API</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Post leads to <code className="text-[11px]">/api/lists/addlead</code> with{" "}
+                Used while Test Mode is on. Post leads to{" "}
+                <code className="text-[11px]">/api/lists/addlead</code> with{" "}
                 <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
               </p>
             </div>

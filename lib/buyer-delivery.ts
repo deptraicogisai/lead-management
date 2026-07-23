@@ -37,7 +37,6 @@ import {
   MOCK_BUYER_POST_BODY_KEY,
   type MockBuyerPostOptions,
 } from "@/lib/mock-buyer-post";
-import { isBuyerLeadMockEndpoint } from "@/lib/buyer-lead-api";
 import { resolveBuyerPostErrorReason } from "@/lib/buyer-post-error";
 import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 
@@ -205,8 +204,8 @@ export async function deliverLeadToBuyer(params: {
     mockBuyerPostUrl: params.mockBuyerPostUrl,
   });
   const { mappedValues, requestMappingData, buyerRequest, postLeadUrl, configValues } = prepared;
-  const targetsMockEndpoint =
-    Boolean(params.mockBuyerPostUrl?.trim()) || isBuyerLeadMockEndpoint(postLeadUrl);
+  // Only inject mock response options when we intentionally routed to the mock endpoint.
+  const targetsMockEndpoint = Boolean(params.mockBuyerPostUrl?.trim());
   const mockBuyerPostOptions = targetsMockEndpoint ? params.mockBuyerPostOptions : undefined;
 
   const mappedSummary =
