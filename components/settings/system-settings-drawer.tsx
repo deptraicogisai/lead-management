@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, Settings, Type, X } from "lucide-react";
+import { Clock3, FlaskConical, Settings, Type, X } from "lucide-react";
 import { useEffect } from "react";
 import { DataCleanupSettingsPage } from "@/components/settings/data-cleanup-settings-page";
 import {
@@ -10,7 +10,9 @@ import {
   type SystemTimeZone,
 } from "@/components/settings/system-settings-context";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
+import { ToggleSwitch } from "@/components/ui/form-controls";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type SystemSettingsDrawerProps = {
@@ -21,7 +23,16 @@ type SystemSettingsDrawerProps = {
 const DRAWER_FONT_ZOOM = 1.08;
 
 export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProps) {
-  const { fontScale, timeZone, setFontScale, setTimeZone } = useSystemSettings();
+  const {
+    fontScale,
+    timeZone,
+    testMode,
+    testModeReady,
+    isSavingTestMode,
+    setFontScale,
+    setTimeZone,
+    setTestMode,
+  } = useSystemSettings();
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +83,7 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Settings</h2>
               <p className="text-xs text-slate-600 dark:text-slate-300">
-                Display preferences and database cleanup.
+                Display preferences, test mode, and database cleanup.
               </p>
             </div>
           </div>
@@ -124,6 +135,42 @@ export function SystemSettingsDrawer({ open, onClose }: SystemSettingsDrawerProp
               Stored timestamps remain UTC. Lead, report and log times are converted only for
               display. Default: America/New_York (EST/EDT).
             </p>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-3">
+              <label
+                htmlFor="system-test-mode"
+                className="flex min-w-0 items-start gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
+              >
+                <FlaskConical size={17} className="mt-0.5 shrink-0 text-amber-500" />
+                <span className="min-w-0">
+                  <span className="block">Test Mode</span>
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-600 dark:text-slate-300">
+                    When on, Ping Tree shows Set mock data on campaigns, and buyer responses use that
+                    mock data. When off, leads post to the real buyer API.
+                  </span>
+                </span>
+              </label>
+              <ToggleSwitch
+                id="system-test-mode"
+                checked={testMode}
+                disabled={!testModeReady || isSavingTestMode}
+                onChange={(checked) => {
+                  void (async () => {
+                    const ok = await setTestMode(checked);
+                    if (ok) {
+                      toast.success(checked ? "Test Mode enabled." : "Test Mode disabled.");
+                    } else {
+                      toast.error("Failed to update Test Mode.");
+                    }
+                  })();
+                }}
+              />
+            </div>
+            {!testModeReady ? (
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Loading Test Mode…</p>
+            ) : null}
           </section>
 
           <DataCleanupSettingsPage enabled={open} variant="drawer" />

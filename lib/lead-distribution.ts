@@ -28,6 +28,7 @@ import {
   type SelectedPingTreeConfig,
 } from "@/lib/ping-tree-allocation";
 import { normalizeSilentPostingMode } from "@/lib/ping-tree-config";
+import { isSystemTestModeEnabled } from "@/lib/system-settings";
 import { resolveBuyerRedirectUrl } from "@/lib/publisher-redirect";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import {
@@ -1659,6 +1660,10 @@ export async function distributeLeadAfterIntake(params: {
 }): Promise<LeadDistributionResult> {
   const isTestLead = isTestLeadPayload(params.payload);
   const publisherApiType = params.publisherApiType ?? "Redirect";
+  const explicitMockBuyerPost = Boolean(params.mockBuyerPost);
+  const systemTestMode = await isSystemTestModeEnabled();
+  // System Test Mode and explicit Test Lead mocks both route buyer responses through campaign mocks.
+  const mockBuyerPost = explicitMockBuyerPost || systemTestMode;
   if (isTestLead && !params.postToBuyer) {
     await SellerLeadModel.updateOne(
       { _id: new Types.ObjectId(params.sellerLeadId) },
@@ -1685,8 +1690,9 @@ export async function distributeLeadAfterIntake(params: {
   // Pick the weighted PingTreeConfig for each bucket exactly once per lead.
   // Always advance counters — peeking a frozen live bucket (e.g. Main currently
   // "owes" the next slot) makes every Test Lead pick the same tree (100% Main).
-  // Test/mock posts use a separate `test:` bucket so they do not skew live totals.
-  const isTestAllocation = isTestLead || Boolean(params.mockBuyerPost);
+  // Explicit Test Lead / mock posts use a separate `test:` bucket so they do not
+  // skew live totals. System Test Mode still uses the live bucket.
+  const isTestAllocation = isTestLead || explicitMockBuyerPost;
   const selectedConfigByType = new Map<PingTreeCampaignType, SelectedPingTreeConfig | null>();
   for (const pingTreeType of pingTreeTypes) {
     const selected = await selectPingTreeConfig({
@@ -1704,7 +1710,7 @@ export async function distributeLeadAfterIntake(params: {
     const silentCampaignIds = await resolveEligiblePingTreeCampaignIds({
       pingTreeType: "Silent",
       verticalRefId: params.verticalRefId,
-      mockBuyerPost: Boolean(params.mockBuyerPost),
+      mockBuyerPost,
       selectedConfig: selectedConfigByType.get("Silent") ?? null,
     });
 
@@ -1737,7 +1743,7 @@ export async function distributeLeadAfterIntake(params: {
         payload: params.payload,
         postedAt: params.postedAt,
         origin: params.origin,
-        mockBuyerPost: Boolean(params.mockBuyerPost),
+        mockBuyerPost,
         mockBuyerPostOptions: params.mockBuyerPostOptions,
         stopOnAccept: pingTreeType === "Redirect",
         progress: params.progress,
@@ -1778,6 +1784,8 @@ export async function distributeLeadAfterIntake(params: {
       configId: config.id,
       configName: config.name,
       displayId: config.displayId,
+      silentPostingMode:
+        pingTreeType === "Silent" ? normalizeSilentPostingMode(config.silentPostingMode) : "",
     }));
 
   await SellerLeadModel.updateOne(
@@ -1796,7 +1804,7 @@ export async function distributeLeadAfterIntake(params: {
   let buyerPostAttempts = buildBuyerPostAttemptsFromDeliveries(coreDeliveries);
 
   const fallbackDelivery =
-    buyerPostAttempts.length === 0 && params.mockBuyerPost
+    buyerPostAttempts.length === 0 && explicitMockBuyerPost
       ? await buildFallbackTestLeadBuyerDelivery({
           verticalRefId: params.verticalRefId,
           payload: params.payload,

@@ -11,18 +11,23 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Check, Copy, ExternalLink, FileText, Filter, Link2, MessageSquareText, ScrollText, TreePine, VolumeX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { BuyerHttpLogSidebar } from "@/components/logs/buyer-http-log-sidebar";
+import { LeadGetLogFlow, type LeadGetLogCampaignStep } from "@/components/leads/lead-get-log-flow";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageSection } from "@/components/ui/state";
 import { ScrollableTableShell } from "@/components/ui/scrollable-table-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
-import { resolveBuyerHttpExchangeFromLog } from "@/lib/buyer-http-log";
+import {
+  parseResponseBodyForDisplay,
+  resolveBuyerHttpExchangeFromLog,
+  sanitizeLogPayloadForDisplay,
+} from "@/lib/buyer-http-log";
 import type {
   LeadDetailFilterLogRow,
   LeadDetailFilterProcessingKey,
@@ -30,8 +35,66 @@ import type {
   LeadDetailTab,
 } from "@/lib/lead-detail";
 import { formatRedirectClickDateLabel } from "@/lib/lead-detail";
+import type { JsonLogPanelTone } from "@/components/logs/json-log-panel";
 import { cn } from "@/lib/utils";
 import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
+
+function resolveCampaignResponseTone(row: LeadDetailFilterLogRow): JsonLogPanelTone {
+  if (!row.hasDelivery && !row.responseBody.trim()) return "neutral";
+  if (row.status === "Error" || row.status === "Timeout" || row.httpStatus >= 400) return "error";
+  if (row.status === "Accept") return "success";
+  if (row.responseBody.trim()) return "success";
+  return "neutral";
+}
+
+function pingTreeEditorHref(configId: string, processingKey: string) {
+  if (!configId.trim()) return null;
+  const campaignType = processingKey === "Silent" ? "Silent" : "Redirect";
+  return `/ping-tree-settings/editor?id=${encodeURIComponent(configId)}&type=${campaignType}`;
+}
+
+function buildGetLogCampaignSteps(
+  sections: LeadDetailRecord["filterProcessing"]
+): LeadGetLogCampaignStep[] {
+  const steps: LeadGetLogCampaignStep[] = [];
+  let order = 0;
+
+  for (const section of sections) {
+    for (const row of section.rows) {
+      order += 1;
+      const exchange = resolveBuyerHttpExchangeFromLog({
+        requestPayload: row.requestPayload,
+        responseBody: row.responseBody,
+        responseHeaders: row.responseHeaders,
+        httpStatus: row.httpStatus,
+        errorMessage: row.errorReason || row.rejectReason,
+      });
+
+      steps.push({
+        id: row.id || `${section.key}-${row.campaignId || order}`,
+        order,
+        campaignLabel: row.campaignLabel || "Campaign",
+        buyerLabel: row.buyerLabel || "—",
+        processingKey: section.key,
+        processingLabel: section.label,
+        pingTreeLabel: section.pingTreeName || section.pingTreeLabel.replace(/^Ping Tree:\s*/i, ""),
+        silentPostingMode: section.silentPostingMode || "",
+        status: row.status || (row.wasPosted ? "Posted" : row.hasDelivery ? "Skipped" : "Filtered"),
+        hasDelivery: row.hasDelivery,
+        wasPosted: row.wasPosted,
+        campaignDisabled: row.campaignDisabled,
+        message: row.message || row.rejectReason || row.errorReason || "",
+        requestBody: sanitizeLogPayloadForDisplay(exchange.request?.body ?? null),
+        responseBody: row.responseBody.trim()
+          ? parseResponseBodyForDisplay(exchange.response?.body || row.responseBody)
+          : null,
+        responseTone: resolveCampaignResponseTone(row),
+      });
+    }
+  }
+
+  return steps;
+}
 
 function formatFilterLogDateCell(row: LeadDetailFilterLogRow, timeZone: string) {
   if (row.date) {
@@ -51,7 +114,12 @@ const DETAIL_TABS = [
   { id: "lead-body" as const, label: "Lead body", icon: FileText },
   { id: "redirect" as const, label: "Redirect", icon: Link2 },
   { id: "filter-log" as const, label: "Filter log", icon: Filter },
+  { id: "get-log" as const, label: "Get Log", icon: ScrollText },
 ];
+
+function isLeadDetailTab(value: string | null): value is LeadDetailTab {
+  return value === "lead-body" || value === "redirect" || value === "filter-log" || value === "get-log";
+}
 
 function filterProcessingTabIcon(key: string): LucideIcon {
   if (key === "Silent") return VolumeX;
@@ -314,11 +382,15 @@ function FilterLogDetailRow({
 export function LeadDetailPage() {
   const { timeZone } = useSystemSettings();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const leadIdParam = typeof params?.id === "string" ? params.id : "";
   const [lead, setLead] = useState<LeadDetailRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<LeadDetailTab>("lead-body");
+  const [activeTab, setActiveTab] = useState<LeadDetailTab>(() => {
+    const tab = searchParams.get("tab");
+    return isLeadDetailTab(tab) ? tab : "lead-body";
+  });
   const [filterProcessingKey, setFilterProcessingKey] = useState<LeadDetailFilterProcessingKey>("");
   const [logRow, setLogRow] = useState<LeadDetailFilterLogRow | null>(null);
   const [postedExpanded, setPostedExpanded] = useState(true);
@@ -332,7 +404,18 @@ export function LeadDetailPage() {
 
   useBreadcrumbLabel(lead ? lead.publicLeadId : "Lead Detail");
 
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (isLeadDetailTab(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   const filterSections = lead?.filterProcessing ?? [];
+  const getLogCampaigns = useMemo(
+    () => buildGetLogCampaignSteps(filterSections),
+    [filterSections]
+  );
   const availableFilterTabs = useMemo(
     () =>
       filterSections.map((section) => ({
@@ -547,18 +630,7 @@ export function LeadDetailPage() {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 md:p-6">
               {activeTab === "lead-body" ? (
-                <div className="space-y-5">
-                  {lead.publisherResponse ? (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        Publisher response
-                      </h3>
-                      <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100">
-                        {JSON.stringify(lead.publisherResponse, null, 2)}
-                      </pre>
-                    </div>
-                  ) : null}
-                  <div className="space-y-3">
+                <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Lead body</h3>
                   <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
                     <table className="min-w-full text-sm">
@@ -585,7 +657,6 @@ export function LeadDetailPage() {
                         )}
                       </tbody>
                     </table>
-                  </div>
                   </div>
                 </div>
               ) : null}
@@ -716,14 +787,29 @@ export function LeadDetailPage() {
                         const match = treeValue.match(/^(.*?)(\s*\[\d+\])\s*$/);
                         const title = match?.[1]?.trim() || treeValue;
                         const index = match?.[2]?.trim() || "";
+                        const treeHref = pingTreeEditorHref(
+                          activeFilterSection.pingTreeConfigId,
+                          activeFilterSection.key
+                        );
                         return (
                           <p className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100">
                             <span className="font-medium text-slate-600 dark:text-slate-300">Ping Tree:</span>{" "}
                             <span>{title}</span>
                             {index ? (
-                              <span className="ml-1.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                                {index}
-                              </span>
+                              treeHref ? (
+                                <Link
+                                  href={treeHref}
+                                  className="ml-1.5 inline-flex items-center gap-1 font-semibold tabular-nums text-emerald-700 underline decoration-emerald-700/40 underline-offset-2 transition hover:text-emerald-800 hover:decoration-emerald-800 dark:text-emerald-400 dark:decoration-emerald-400/40 dark:hover:text-emerald-300"
+                                  title="Open ping tree"
+                                >
+                                  {index}
+                                  <ExternalLink size={14} className="shrink-0 opacity-80" />
+                                </Link>
+                              ) : (
+                                <span className="ml-1.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                                  {index}
+                                </span>
+                              )
                             ) : null}
                           </p>
                         );
@@ -861,6 +947,16 @@ export function LeadDetailPage() {
                     </div>
                   )}
                 </div>
+              ) : null}
+
+              {activeTab === "get-log" ? (
+                <LeadGetLogFlow
+                  publisherRequest={sanitizeLogPayloadForDisplay(lead.publisherRequest ?? {})}
+                  publisherResponse={lead.publisherResponse}
+                  campaigns={getLogCampaigns}
+                  apiType={lead.apiType}
+                  leadStatus={lead.statusLabel}
+                />
               ) : null}
             </div>
           </div>

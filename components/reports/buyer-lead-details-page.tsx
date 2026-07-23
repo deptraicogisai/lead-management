@@ -57,6 +57,10 @@ import {
   type BuyerLeadDetailsFilters,
   type BuyerLeadDetailsRow,
 } from "@/lib/buyer-lead-details";
+import {
+  formatPayloadFieldValue,
+  type PublisherLeadFieldColumn,
+} from "@/lib/publisher-lead-details";
 
 type FilterOption = {
   id: string;
@@ -65,6 +69,7 @@ type FilterOption = {
 
 type BuyerLeadDetailsResponse = {
   items: BuyerLeadDetailsRow[];
+  fieldColumns: PublisherLeadFieldColumn[];
   page: number;
   pageSize: number;
   totalItems: number;
@@ -124,6 +129,7 @@ export function BuyerLeadDetailsPage() {
     buildDefaultFilters(timeZone, searchParams)
   );
   const [rows, setRows] = useState<BuyerLeadDetailsRow[]>([]);
+  const [fieldColumns, setFieldColumns] = useState<PublisherLeadFieldColumn[]>([]);
   const [products, setProducts] = useState<FilterOption[]>([]);
   const [publishers, setPublishers] = useState<FilterOption[]>([]);
   const [buyers, setBuyers] = useState<FilterOption[]>([]);
@@ -244,6 +250,7 @@ export function BuyerLeadDetailsPage() {
         }
 
         setRows(data.items);
+        setFieldColumns(data.fieldColumns ?? []);
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
         setProducts(loadedProducts);
@@ -254,6 +261,7 @@ export function BuyerLeadDetailsPage() {
         setPublisherTags(data.filters.publisherTags);
       } catch {
         setRows([]);
+        setFieldColumns([]);
         setTotalItems(0);
         setTotalPages(1);
       } finally {
@@ -303,7 +311,11 @@ export function BuyerLeadDetailsPage() {
     setPageFilter("");
   };
 
-  const buildExportMatrix = (exportRows: BuyerLeadDetailsRow[], selectedKeys: string[]) => {
+  const buildExportMatrix = (
+    exportRows: BuyerLeadDetailsRow[],
+    exportFieldColumns: PublisherLeadFieldColumn[],
+    selectedKeys: string[]
+  ) => {
     const exportColumns: Array<{
       key: string;
       label: string;
@@ -330,6 +342,11 @@ export function BuyerLeadDetailsPage() {
       { key: "publisherSource", label: "Publisher Source", value: (row) => row.publisherSource },
       { key: "publisherTag", label: "Publisher Tags", value: (row) => row.publisherTag || "—" },
       { key: "responseTimeLabel", label: "Time", value: (row) => row.responseTimeLabel },
+      ...exportFieldColumns.map((field) => ({
+        key: `field:${field.fieldName}`,
+        label: field.label,
+        value: (row: BuyerLeadDetailsRow) => formatPayloadFieldValue(row.rawPayload[field.fieldName]),
+      })),
     ];
 
     const selectedSet = new Set(selectedKeys);
@@ -343,12 +360,13 @@ export function BuyerLeadDetailsPage() {
 
   const fetchAllRows = async () => {
     if (totalItems === 0) {
-      return [] as BuyerLeadDetailsRow[];
+      return { items: [] as BuyerLeadDetailsRow[], fieldColumns };
     }
 
     const maxPageSize = 1000;
     const pages = Math.ceil(totalItems / maxPageSize);
     const allRows: BuyerLeadDetailsRow[] = [];
+    let mergedFieldColumns = fieldColumns;
 
     for (let nextPage = 1; nextPage <= pages; nextPage += 1) {
       const response = await fetch(`/api/reports/buyer/lead-details?${buildQuery(appliedFilters, nextPage, maxPageSize)}`);
@@ -358,9 +376,10 @@ export function BuyerLeadDetailsPage() {
 
       const data = (await response.json()) as BuyerLeadDetailsResponse;
       allRows.push(...data.items);
+      mergedFieldColumns = data.fieldColumns ?? mergedFieldColumns;
     }
 
-    return allRows;
+    return { items: allRows, fieldColumns: mergedFieldColumns };
   };
 
   const handleExport = async (mode: "current-page" | "all-pages") => {
@@ -385,18 +404,19 @@ export function BuyerLeadDetailsPage() {
       "publisherSource",
       "publisherTag",
       "responseTimeLabel",
+      ...fieldColumns.map((field) => `field:${field.fieldName}`),
     ]);
 
     try {
       if (mode === "all-pages") {
-        const exportRows = await fetchAllRows();
-        const { headers, matrix } = buildExportMatrix(exportRows, selectedKeys);
+        const result = await fetchAllRows();
+        const { headers, matrix } = buildExportMatrix(result.items, result.fieldColumns, selectedKeys);
         downloadCsv("buyer-lead-details-all.csv", headers, matrix);
         return;
       }
 
       const pageRows = filterRowsByQuery(rows, columns, pageFilter);
-      const { headers, matrix } = buildExportMatrix(pageRows, selectedKeys);
+      const { headers, matrix } = buildExportMatrix(pageRows, fieldColumns, selectedKeys);
       downloadCsv("buyer-lead-details-current-page.csv", headers, matrix);
     } catch {
       // Ignore export errors for now.
@@ -405,8 +425,8 @@ export function BuyerLeadDetailsPage() {
     }
   };
 
-  const allColumns: Column<BuyerLeadDetailsRow>[] = useMemo(
-    () => [
+  const allColumns: Column<BuyerLeadDetailsRow>[] = useMemo(() => {
+    const systemColumns: Column<BuyerLeadDetailsRow>[] = [
       {
         key: "postedAt",
         label: "Date",
@@ -430,7 +450,7 @@ export function BuyerLeadDetailsPage() {
         render: (row) => (
           <div className="inline-flex items-center gap-1.5">
             <Link
-              href={`/leads/${encodeURIComponent(row.leadId)}`}
+              href={`/leads/${encodeURIComponent(row.leadId)}?tab=get-log`}
               target="_blank"
               rel="noopener noreferrer"
               className="group inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
@@ -573,9 +593,21 @@ export function BuyerLeadDetailsPage() {
           </span>
         ),
       },
-    ],
-    [timeZone]
-  );
+    ];
+
+    const dynamicFieldColumns: Column<BuyerLeadDetailsRow>[] = fieldColumns.map((field) => ({
+      key: `field:${field.fieldName}`,
+      label: field.label,
+      sortValue: (row) => formatPayloadFieldValue(row.rawPayload?.[field.fieldName]),
+      render: (row) => (
+        <span className="whitespace-nowrap">
+          {formatPayloadFieldValue(row.rawPayload?.[field.fieldName])}
+        </span>
+      ),
+    }));
+
+    return [...systemColumns, ...dynamicFieldColumns];
+  }, [fieldColumns, timeZone]);
 
   const columnOptions = useMemo(
     () =>
@@ -592,7 +624,7 @@ export function BuyerLeadDetailsPage() {
   const allColumnKeys = useMemo(() => columnOptions.map((option) => option.key), [columnOptions]);
 
   const { visibleColumnKeys, setVisibleColumnKeys, effectiveVisibleKeys } =
-    usePersistedVisibleColumnKeys("buyer-lead-details-v2", allColumnKeys, {
+    usePersistedVisibleColumnKeys("buyer-lead-details-v3", allColumnKeys, {
       ready: !isInitialLoad && !isRefreshing,
     });
 

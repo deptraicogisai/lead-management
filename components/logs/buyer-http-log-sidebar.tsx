@@ -2,64 +2,12 @@
 
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { getCodeTokenClassName, tokenizeJson } from "@/lib/api-documentation-content";
+import { JsonLogPanel } from "@/components/logs/json-log-panel";
 import {
   parseResponseBodyForDisplay,
+  sanitizeLogPayloadForDisplay,
   type BuyerHttpExchangeLog,
 } from "@/lib/buyer-http-log";
-import { cn } from "@/lib/utils";
-
-type LogPanelTone = "request" | "success" | "error" | "neutral";
-
-const LOG_PANEL_TONES: Record<
-  LogPanelTone,
-  { header: string; border: string; body: string }
-> = {
-  request: {
-    header: "bg-sky-700 text-white dark:bg-sky-600",
-    border: "border-sky-200 dark:border-sky-500/40",
-    body: "bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100",
-  },
-  success: {
-    header: "bg-emerald-700 text-white dark:bg-emerald-600",
-    border: "border-emerald-200 dark:border-emerald-500/40",
-    body: "bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100",
-  },
-  error: {
-    header: "bg-red-700 text-white dark:bg-red-600",
-    border: "border-red-200 dark:border-red-500/40",
-    body: "bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100",
-  },
-  neutral: {
-    header: "bg-slate-700 text-white dark:bg-slate-600",
-    border: "border-slate-200 dark:border-slate-600",
-    body: "bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100",
-  },
-};
-
-function JsonLogPanel({ title, data, tone }: { title: string; data: unknown; tone: LogPanelTone }) {
-  const code = JSON.stringify(data, null, 2);
-  const tokens = tokenizeJson(code);
-  const styles = LOG_PANEL_TONES[tone];
-
-  return (
-    <div className={cn("overflow-hidden rounded-2xl border shadow-sm", styles.border)}>
-      <div className={cn("px-4 py-2.5 text-sm font-semibold", styles.header)}>{title}</div>
-      <pre className={cn("max-h-80 overflow-auto p-4 text-xs leading-6", styles.body)}>
-        {tokens.map((token, index) => {
-          const className = getCodeTokenClassName(token.styleKey);
-          return className ? (
-            <span key={`${title}-${index}`} className={className}>
-              {token.text}
-            </span>
-          ) : (
-            <span key={`${title}-${index}`}>{token.text}</span>
-          );
-        })}
-      </pre>
-    </div>
-  );
-}
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
@@ -174,14 +122,10 @@ export function BuyerHttpLogSidebar({
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">System → Buyer Request</h3>
               <JsonLogPanel
-                title={`${request.method} ${request.url}`}
+                title="Request"
                 tone="request"
-                data={{
-                  method: request.method,
-                  url: request.url,
-                  headers: request.headers,
-                  body: request.body,
-                }}
+                data={sanitizeLogPayloadForDisplay(request.body)}
+                emptyMessage="No buyer request was recorded."
               />
             </section>
           ) : (
@@ -194,13 +138,10 @@ export function BuyerHttpLogSidebar({
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Buyer → System Response</h3>
               <JsonLogPanel
-                title={`HTTP ${response.httpStatus || httpStatus || 0}`}
+                title="Response"
                 tone={responseSuccess ? "success" : "error"}
-                data={{
-                  httpStatus: response.httpStatus || httpStatus || 0,
-                  headers: response.headers ?? {},
-                  body: parseResponseBodyForDisplay(response.body),
-                }}
+                data={parseResponseBodyForDisplay(response.body)}
+                emptyMessage="No buyer response was recorded."
               />
             </section>
           ) : null}

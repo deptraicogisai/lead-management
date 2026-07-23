@@ -79,7 +79,6 @@ export function MappingRevShareSettingsTab({ sellerId, mappingId }: MappingRevSh
           data.map((seller) => ({
             id: seller.id,
             label: seller.name,
-            description: seller.email,
             displayId: seller.displayId,
           }))
         );

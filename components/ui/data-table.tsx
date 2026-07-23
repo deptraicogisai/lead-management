@@ -81,6 +81,8 @@ type DataTableProps<T> = {
   defaultSort?: TableSortState;
   /** Stick thead under the app chrome while the window scrolls (ScrollableTableShell only). */
   stickyHeader?: boolean;
+  /** Extra sticky offset under app chrome (e.g. sticky actions bar). */
+  stickyTopOffset?: number;
   /**
    * Use the dual-table ScrollableTableShell (wide report tables + sticky header).
    * Set false for compact admin grids where a single table keeps columns aligned (no sticky).
@@ -171,6 +173,7 @@ export function DataTable<T extends { id: string }>({
   rowReorder,
   defaultSort,
   stickyHeader = true,
+  stickyTopOffset = 0,
   scrollShell = true,
   filterQuery = "",
 }: DataTableProps<T>) {
@@ -513,6 +516,7 @@ export function DataTable<T extends { id: string }>({
         <ScrollableTableShell
           rowCount={rows.length}
           stickyHeader={stickyHeader}
+          stickyTopOffset={stickyTopOffset}
           scrollContainerRef={scrollContainerRef}
           freezeColumnWidths
           columnLayoutKey={columnLayoutKey}

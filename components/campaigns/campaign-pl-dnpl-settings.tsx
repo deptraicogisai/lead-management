@@ -31,8 +31,7 @@ function toOption(list: PresentListRecord): SearchableMultiSelectOption {
   return {
     id: list.id,
     displayId: list.displayId,
-    label: `${list.name} (${list.listType})`,
-    description: list.applyToField,
+    label: list.name,
   };
 }
 
@@ -105,7 +104,6 @@ export function CampaignPlDnplSettings({
             id: campaign.id,
             displayId: campaign.displayId,
             label: campaign.name,
-            description: `[${campaign.displayId}] ${campaign.buyerLabel} · ${campaign.productLabel}`,
           }))
         );
       } finally {

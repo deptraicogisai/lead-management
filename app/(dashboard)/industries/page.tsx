@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IndustryForm } from "@/components/forms/industry-form";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { IdBadge } from "@/components/ui/id-badge";
@@ -33,6 +33,10 @@ export default function IndustriesPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
+  const [stickyActionsOffset, setStickyActionsOffset] = useState(0);
+  const handleStickyOffsetChange = useCallback((offset: number) => {
+    setStickyActionsOffset(offset);
+  }, []);
 
   const editingVertical = verticalRows.find((vertical) => vertical.id === editingVerticalId) ?? null;
 
@@ -177,6 +181,9 @@ export default function IndustriesPage() {
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <ListTableToolbar
+              sticky
+              stuckLabel="Verticals"
+              onStickyOffsetChange={handleStickyOffsetChange}
               pageSize={pageSize}
               pageSizeOptions={[15, 50]}
               onPageSizeChange={(value) => {
@@ -212,6 +219,9 @@ export default function IndustriesPage() {
                 columns={columns}
                 rows={verticalRows}
                 emptyMessage="No verticals yet. Create your first vertical to get started."
+                stickyHeader
+                stickyTopOffset={stickyActionsOffset}
+                scrollShell
               />
             </ListTableContainer>
           </div>

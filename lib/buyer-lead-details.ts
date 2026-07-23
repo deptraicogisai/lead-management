@@ -1,15 +1,19 @@
-import { buildDefaultLeadDetailsDateRange, formatDateTimeDisplay } from "@/lib/date-range";
+import {
+  buildDefaultLeadDetailsDateRange,
+  formatDateTimeDisplay,
+} from "@/lib/date-range";
 import { BUYER_LEAD_DETAILS_STATUS_OPTIONS, BUYER_LEAD_REJECT_GROUP_STATUSES } from "@/lib/buyer-lead-status";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 import {
   buildPublisherLeadDisplayCode,
+  formatPingTreeSnapshotDisplayLabel,
   formatPublisherLeadMoney,
   normalizePublisherLeadPingTreeAllocations,
+  resolvePingTreeAllocationForDelivery,
   resolvePublisherChannelLabel,
   resolvePublisherSourceLabel,
   type PublisherChannelMappingInfo,
-  type PublisherLeadPingTreeAllocation,
 } from "@/lib/publisher-lead-details";
 
 export type BuyerLeadDetailsRow = {
@@ -54,6 +58,7 @@ export type BuyerLeadDetailsRow = {
   responseBody: string;
   responseHeaders: Record<string, string>;
   validationErrors: string[];
+  rawPayload: Record<string, unknown>;
 };
 
 export type BuyerLeadDetailsFilters = {
@@ -194,28 +199,32 @@ export function resolveBuyerLeadMoneyMetrics(input: {
 }
 
 export function resolveBuyerDeliveryPingTree(
-  allocations: PublisherLeadPingTreeAllocation[],
-  pingTreeType: "Redirect" | "Silent"
+  allocations: ReturnType<typeof normalizePublisherLeadPingTreeAllocations>,
+  pingTreeType: "Redirect" | "Silent",
+  processingType?: string | null
 ) {
-  return allocations.find((allocation) => allocation.pingTreeType === pingTreeType) ?? null;
+  return resolvePingTreeAllocationForDelivery(allocations, { pingTreeType, processingType });
 }
 
 export function buildBuyerLeadPingTreeFields(
   rawAllocations: unknown,
-  pingTreeType: "Redirect" | "Silent"
+  pingTreeType: "Redirect" | "Silent",
+  processingType?: string | null
 ) {
   const allocation = resolveBuyerDeliveryPingTree(
     normalizePublisherLeadPingTreeAllocations(rawAllocations),
-    pingTreeType
+    pingTreeType,
+    processingType
   );
 
+  const pingTreeLabel = formatPingTreeSnapshotDisplayLabel(allocation, {
+    pingTreeType,
+    processingType,
+  });
+
   return {
-    pingTreeLabel: allocation
-      ? allocation.displayId != null
-        ? `[${allocation.displayId}] ${allocation.configName?.trim() || "Unknown"}`
-        : allocation.configName?.trim() || "—"
-      : "—",
-    pingTreeName: allocation?.configName?.trim() || "",
+    pingTreeLabel,
+    pingTreeName: allocation ? pingTreeLabel : "",
     pingTreeDisplayId: allocation?.displayId ?? null,
   };
 }
@@ -227,6 +236,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
   buyerStatus: string;
   price: number | null;
   pingTreeType: "Redirect" | "Silent";
+  processingType?: string | null;
   redirectConfirmedAt?: Date | string | null;
   publisherPayout?: number | null;
   soldPrice?: number | null;
@@ -257,7 +267,11 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
   campaignOrder: number;
   pingTreeAllocations?: unknown;
 }): BuyerLeadDetailsRow {
-  const pingTreeFields = buildBuyerLeadPingTreeFields(input.pingTreeAllocations, input.pingTreeType);
+  const pingTreeFields = buildBuyerLeadPingTreeFields(
+    input.pingTreeAllocations,
+    input.pingTreeType,
+    input.processingType
+  );
   const isRedirectCampaign = input.pingTreeType === "Redirect";
   const redirectConfirmed = isLeadRedirectConfirmed({
     redirectConfirmedAt: input.redirectConfirmedAt,
@@ -316,6 +330,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
     responseBody: input.responseBody,
     responseHeaders: input.responseHeaders,
     validationErrors: input.validationErrors,
+    rawPayload: input.leadPayload ?? {},
   };
 }
 

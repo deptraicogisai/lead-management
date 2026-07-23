@@ -53,6 +53,7 @@ export async function GET(req: Request) {
     const statusFilter = normalizeSearchParam(searchParams.get("status"));
     const productId = normalizeSearchParam(searchParams.get("productId"));
     const buyerId = normalizeSearchParam(searchParams.get("buyerId"));
+    const integrationId = normalizeSearchParam(searchParams.get("integrationId"));
     const typeFilter = normalizeSearchParam(searchParams.get("type"));
     const dateFrom = parseDate(searchParams.get("dateFrom"));
     const dateTo = parseDate(searchParams.get("dateTo"));
@@ -82,6 +83,10 @@ export async function GET(req: Request) {
 
     if (buyerId && Types.ObjectId.isValid(buyerId)) {
       filter.buyerRef = buyerId;
+    }
+
+    if (integrationId && Types.ObjectId.isValid(integrationId)) {
+      filter.integrationRef = new Types.ObjectId(integrationId);
     }
 
     if (typeFilter && typeFilter !== "All") {

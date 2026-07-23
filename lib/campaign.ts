@@ -89,6 +89,7 @@ export type CampaignListRecord = Pick<
   | "status"
   | "productLabel"
   | "minPrice"
+  | "integrationId"
   | "integrationLabel"
   | "timezone"
   | "buyerLabel"
@@ -480,6 +481,7 @@ export function toCampaignListRecord(record: CampaignRecord): CampaignListRecord
     status: record.status,
     productLabel: record.productLabel,
     minPrice: record.minPrice,
+    integrationId: record.integrationId,
     integrationLabel: record.integrationLabel,
     timezone: record.timezone,
     buyerLabel: record.buyerLabel,

@@ -38,6 +38,8 @@ type ScrollableTableShellProps = {
   overlay?: ReactNode;
   /** Stick header + top scrollbar under app chrome (window) or keep in flow */
   stickyHeader?: boolean;
+  /** Extra offset under app chrome (sticky page actions bar height). */
+  stickyTopOffset?: number;
   /**
    * Reuse the last measured column widths instead of remeasuring.
    * Use while client-side filtering/sorting so columns don't jump as rows reorder.
@@ -180,6 +182,7 @@ export function ScrollableTableShell({
   showMobileHint = false,
   overlay,
   stickyHeader = true,
+  stickyTopOffset = 0,
   freezeColumnWidths = false,
   columnLayoutKey,
   columnWidthHints,
@@ -197,7 +200,7 @@ export function ScrollableTableShell({
   const scrollLeftRef = useRef(0);
   const frozenWidthsRef = useRef<number[] | null>(null);
   const { sentinelRef: stickySentinelRef, stickyTop, headerIsStuck, updateHeaderIsStuck } =
-    useTableStickyHeader(stickyHeader);
+    useTableStickyHeader(stickyHeader, stickyTopOffset);
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
 
   const mergedTableClassName = cn(DEFAULT_TABLE_CLASS, tableClassName);
@@ -442,9 +445,9 @@ export function ScrollableTableShell({
             "border-b border-slate-200 dark:border-slate-700",
             stickyHeader
               ? cn(
-                  "sticky z-20 transition-[box-shadow,background-color,backdrop-filter] duration-300 ease-out",
+                  "sticky z-[24] transition-[box-shadow,background-color,backdrop-filter] duration-300 ease-out",
                   headerIsStuck
-                    ? "bg-white/90 shadow-[0_10px_24px_-14px_rgba(15,23,42,0.35)] backdrop-blur-md dark:bg-slate-900/90 dark:shadow-[0_10px_24px_-14px_rgba(0,0,0,0.65)]"
+                    ? "bg-white/95 shadow-[0_10px_24px_-14px_rgba(15,23,42,0.35)] backdrop-blur-md dark:bg-slate-900/95 dark:shadow-[0_10px_24px_-14px_rgba(0,0,0,0.65)]"
                     : "bg-slate-50 shadow-none backdrop-blur-none dark:bg-slate-800"
                 )
               : "bg-slate-50 dark:bg-slate-800"

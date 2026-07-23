@@ -25,6 +25,7 @@ import { CampaignPlDnplSettings } from "@/components/campaigns/campaign-pl-dnpl-
 import { CampaignScheduleCalendar } from "@/components/campaigns/campaign-schedule-calendar";
 import { CampaignScheduleRuleModal } from "@/components/campaigns/campaign-schedule-rule-modal";
 import { CopyCampaignFiltersPanel } from "@/components/campaigns/copy-campaign-filters-panel";
+import { CopyCampaignIntegrationPanel } from "@/components/campaigns/copy-campaign-integration-panel";
 import { CopyCampaignScheduleModal } from "@/components/campaigns/copy-campaign-schedule-modal";
 import { GeneralFiltersGrid } from "@/components/filters/general-filters-grid";
 import { DualSaveBar, shouldUseDualSaveBar } from "@/components/ui/dual-save-bar";
@@ -112,6 +113,8 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const [copyFiltersToOtherCampaigns, setCopyFiltersToOtherCampaigns] = useState(false);
   const [copyFilterCampaignIds, setCopyFilterCampaignIds] = useState<string[]>([]);
   const [copyPlDnplCampaignIds, setCopyPlDnplCampaignIds] = useState<string[]>([]);
+  const [copyIntegrationToOtherCampaigns, setCopyIntegrationToOtherCampaigns] = useState(false);
+  const [copyIntegrationCampaignIds, setCopyIntegrationCampaignIds] = useState<string[]>([]);
   const [editingScheduleRule, setEditingScheduleRule] = useState<CampaignScheduleRule | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [integrationForm, setIntegrationForm] = useState({
@@ -266,6 +269,8 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     const match = availableBuyerIntegrations.find((item) => item.id === nextId) ?? null;
     setIntegrationSelectError("");
     setIntegrationFieldErrors({});
+    setCopyIntegrationToOtherCampaigns(false);
+    setCopyIntegrationCampaignIds([]);
     setIntegrationForm({
       integrationId: nextId,
       configValues: buildIntegrationConfigDefaults(
@@ -291,7 +296,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     }));
   };
 
-  const handleSaveIntegration = () => {
+  const handleSaveIntegration = async () => {
     if (!selectedIntegration) {
       setIntegrationSelectError("Please select an integration.");
       return;
@@ -307,10 +312,15 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       return;
     }
 
+    if (copyIntegrationToOtherCampaigns && copyIntegrationCampaignIds.length === 0) {
+      toast.error("Please select at least one campaign.", "Copy Integration");
+      return;
+    }
+
     setIntegrationSelectError("");
     setIntegrationFieldErrors({});
 
-    void saveSection(
+    const saved = await saveSection(
       "integration",
       {
         integrationId: integrationForm.integrationId,
@@ -318,6 +328,39 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       },
       "Integration settings saved successfully."
     );
+
+    if (!saved || !copyIntegrationToOtherCampaigns) {
+      return;
+    }
+
+    const copyResponse = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "copy-integration",
+        targetCampaignIds: copyIntegrationCampaignIds,
+        integrationId: integrationForm.integrationId,
+        configValues: integrationForm.configValues,
+      }),
+    });
+
+    const copyData = (await copyResponse.json().catch(() => null)) as {
+      message?: string;
+      updatedCount?: number;
+    } | null;
+
+    if (!copyResponse.ok) {
+      toast.error(copyData?.message ?? "Failed to copy integration settings.", "Copy Integration");
+      return;
+    }
+
+    toast.success(
+      copyData?.message ??
+        `Integration settings copied to ${copyData?.updatedCount ?? copyIntegrationCampaignIds.length} campaign(s).`,
+      "Copy Integration"
+    );
+    setCopyIntegrationToOtherCampaigns(false);
+    setCopyIntegrationCampaignIds([]);
   };
 
   const saveSection = async (
@@ -973,11 +1016,33 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                   />
                 ) : null}
 
+            <div className="space-y-3">
+              <Checkbox
+                checked={copyIntegrationToOtherCampaigns}
+                onChange={(checked) => {
+                  setCopyIntegrationToOtherCampaigns(checked);
+                  if (!checked) {
+                    setCopyIntegrationCampaignIds([]);
+                  }
+                }}
+                label={<>Copy Integration configuration to other campaigns</>}
+                className="w-fit"
+              />
+              <CopyCampaignIntegrationPanel
+                open={copyIntegrationToOtherCampaigns}
+                sourceCampaignId={campaignId}
+                integrationId={integrationForm.integrationId}
+                verticalId={campaign.verticalId}
+                selectedIds={copyIntegrationCampaignIds}
+                onSelectedIdsChange={setCopyIntegrationCampaignIds}
+              />
+            </div>
+
             <div className="flex flex-wrap gap-3">
               <PrimaryButton
                 type="button"
                 disabled={isSaving}
-                onClick={handleSaveIntegration}
+                onClick={() => void handleSaveIntegration()}
                 className="bg-emerald-800 hover:bg-emerald-700"
               >
                 {isSaving ? "Saving..." : "Save Integration Settings"}

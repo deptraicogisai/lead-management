@@ -23,6 +23,7 @@ import {
   getChannelMappingForLeadRef,
   loadPublisherChannelMappingsByIds,
 } from "@/lib/publisher-channel-mapping";
+import { buildPublisherLeadFieldColumnsFromLeads } from "@/lib/publisher-lead-details";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 
 function parsePageSize(value: string | null) {
@@ -341,7 +342,7 @@ export async function GET(req: Request) {
         : excludeDeletedStatusFilter();
 
     const [verticals, sellers, buyers, campaignDocs, pingTreeConfigs, deliveryResult] = await Promise.all([
-      VerticalModel.find().sort({ createdAt: 1 }).select({ _id: 1, name: 1 }).lean(),
+      VerticalModel.find().sort({ createdAt: 1 }).select({ _id: 1, name: 1, fields: 1 }).lean(),
       SellerModel.find().sort({ createdAt: 1 }).select({ _id: 1, name: 1, publisherTag: 1 }).lean(),
       BuyerModel.find(excludeDeletedStatusFilter())
         .sort({ displayId: 1, createdAt: 1 })
@@ -388,7 +389,7 @@ export async function GET(req: Request) {
     const buyerById = new Map(buyers.map((buyer) => [buyer._id.toString(), buyer]));
     const campaignById = new Map(campaignDocs.map((campaign) => [campaign._id.toString(), campaign]));
 
-    const items = docs.map((doc) => {
+    const normalizedDeliveries = docs.map((doc) => {
       const buyer = buyerById.get(String(doc.buyerRef ?? ""));
       const campaign = campaignById.get(String(doc.campaignRef ?? ""));
       const sellerLead = doc.sellerLead as
@@ -403,54 +404,71 @@ export async function GET(req: Request) {
       const sellerId = String(doc.sellerRef ?? "");
       const verticalId = String(doc.verticalRef ?? "");
       const pingTreeType = doc.pingTreeType === "Silent" ? "Silent" : "Redirect";
+      const processingType = typeof doc.processingType === "string" ? doc.processingType.trim() : "";
+      const leadPayload =
+        sellerLead?.payload && typeof sellerLead.payload === "object" && !Array.isArray(sellerLead.payload)
+          ? sellerLead.payload
+          : {};
 
-      return mapBuyerDeliveryToLeadDetailsRow({
-        deliveryId: String(doc._id ?? ""),
-        leadId: String(doc.sellerLeadRef ?? ""),
-        postedAt: doc.postedAt ? new Date(doc.postedAt as string | Date).toISOString() : "",
-        buyerStatus: String(doc.buyerStatus ?? ""),
-        price: typeof doc.price === "number" ? doc.price : null,
-        pingTreeType,
-        redirectConfirmedAt: sellerLead?.redirectConfirmedAt,
-        publisherPayout: typeof doc.publisherPayout === "number" ? doc.publisherPayout : null,
-        soldPrice: sellerLead?.soldPrice,
-        productName: verticalNameById.get(verticalId) ?? "",
-        productIndex: verticalIndexById.get(verticalId) ?? 0,
-        buyerLabel: buyer ? resolveBuyerName(buyer) : "",
-        buyerDisplayId: buyer?.displayId ?? null,
-        campaignName: campaign?.name ?? "",
-        campaignDisplayId: campaign?.displayId ?? null,
-        campaignMinPrice: typeof campaign?.minPrice === "number" ? campaign.minPrice : null,
-        publisherName: sellerNameById.get(sellerId) ?? "",
-        publisherIndex: sellerIndexById.get(sellerId) ?? 0,
-        publisherTag: sellerTagById.get(sellerId) ?? "",
-        leadPayload:
-          sellerLead?.payload && typeof sellerLead.payload === "object" && !Array.isArray(sellerLead.payload)
-            ? sellerLead.payload
-            : null,
-        channelMapping: getChannelMappingForLeadRef(channelMappingById, sellerLead?.mappingRef),
-        responseTimeMs: typeof doc.responseTimeMs === "number" ? doc.responseTimeMs : null,
-        redirectUrl: typeof doc.redirectUrl === "string" ? doc.redirectUrl : "",
-        rejectReason: typeof doc.rejectReason === "string" ? doc.rejectReason : "",
-        errorReason: typeof doc.errorReason === "string" ? doc.errorReason : "",
-        postLeadUrl: typeof doc.postLeadUrl === "string" ? doc.postLeadUrl : "",
-        httpStatus: typeof doc.httpStatus === "number" ? doc.httpStatus : 0,
-        requestPayload:
-          doc.requestPayload && typeof doc.requestPayload === "object" && !Array.isArray(doc.requestPayload)
-            ? (doc.requestPayload as Record<string, unknown>)
-            : null,
-        responseBody: typeof doc.responseBody === "string" ? doc.responseBody : "",
-        responseHeaders:
-          doc.responseHeaders && typeof doc.responseHeaders === "object" && !Array.isArray(doc.responseHeaders)
-            ? (doc.responseHeaders as Record<string, string>)
-            : {},
-        validationErrors: Array.isArray(doc.validationErrors) ? doc.validationErrors : [],
-        campaignId: String(doc.campaignRef ?? ""),
-        buyerId: String(doc.buyerRef ?? ""),
-        campaignOrder: Number(doc.campaignOrder ?? 0),
-        pingTreeAllocations: sellerLead?.pingTreeAllocations,
-      });
+      return {
+        verticalRef: verticalId,
+        payload: leadPayload,
+        row: mapBuyerDeliveryToLeadDetailsRow({
+          deliveryId: String(doc._id ?? ""),
+          leadId: String(doc.sellerLeadRef ?? ""),
+          postedAt: doc.postedAt ? new Date(doc.postedAt as string | Date).toISOString() : "",
+          buyerStatus: String(doc.buyerStatus ?? ""),
+          price: typeof doc.price === "number" ? doc.price : null,
+          pingTreeType,
+          processingType: processingType || null,
+          redirectConfirmedAt: sellerLead?.redirectConfirmedAt,
+          publisherPayout: typeof doc.publisherPayout === "number" ? doc.publisherPayout : null,
+          soldPrice: sellerLead?.soldPrice,
+          productName: verticalNameById.get(verticalId) ?? "",
+          productIndex: verticalIndexById.get(verticalId) ?? 0,
+          buyerLabel: buyer ? resolveBuyerName(buyer) : "",
+          buyerDisplayId: buyer?.displayId ?? null,
+          campaignName: campaign?.name ?? "",
+          campaignDisplayId: campaign?.displayId ?? null,
+          campaignMinPrice: typeof campaign?.minPrice === "number" ? campaign.minPrice : null,
+          publisherName: sellerNameById.get(sellerId) ?? "",
+          publisherIndex: sellerIndexById.get(sellerId) ?? 0,
+          publisherTag: sellerTagById.get(sellerId) ?? "",
+          leadPayload,
+          channelMapping: getChannelMappingForLeadRef(channelMappingById, sellerLead?.mappingRef),
+          responseTimeMs: typeof doc.responseTimeMs === "number" ? doc.responseTimeMs : null,
+          redirectUrl: typeof doc.redirectUrl === "string" ? doc.redirectUrl : "",
+          rejectReason: typeof doc.rejectReason === "string" ? doc.rejectReason : "",
+          errorReason: typeof doc.errorReason === "string" ? doc.errorReason : "",
+          postLeadUrl: typeof doc.postLeadUrl === "string" ? doc.postLeadUrl : "",
+          httpStatus: typeof doc.httpStatus === "number" ? doc.httpStatus : 0,
+          requestPayload:
+            doc.requestPayload && typeof doc.requestPayload === "object" && !Array.isArray(doc.requestPayload)
+              ? (doc.requestPayload as Record<string, unknown>)
+              : null,
+          responseBody: typeof doc.responseBody === "string" ? doc.responseBody : "",
+          responseHeaders:
+            doc.responseHeaders && typeof doc.responseHeaders === "object" && !Array.isArray(doc.responseHeaders)
+              ? (doc.responseHeaders as Record<string, string>)
+              : {},
+          validationErrors: Array.isArray(doc.validationErrors) ? doc.validationErrors : [],
+          campaignId: String(doc.campaignRef ?? ""),
+          buyerId: String(doc.buyerRef ?? ""),
+          campaignOrder: Number(doc.campaignOrder ?? 0),
+          pingTreeAllocations: sellerLead?.pingTreeAllocations,
+        }),
+      };
     });
+
+    const fieldColumns = buildPublisherLeadFieldColumnsFromLeads(
+      normalizedDeliveries.map((delivery) => ({
+        verticalRef: delivery.verticalRef,
+        payload: delivery.payload,
+      })),
+      verticals,
+      productId
+    );
+    const items = normalizedDeliveries.map((delivery) => delivery.row);
 
     const publisherTagOptions = [
       ...new Set(
@@ -464,6 +482,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       items,
+      fieldColumns,
       page,
       pageSize,
       totalItems: total,
@@ -508,6 +527,7 @@ export async function GET(req: Request) {
 function buildEmptyResponse(page: number, pageSize: number) {
   return {
     items: [],
+    fieldColumns: [],
     page,
     pageSize,
     totalItems: 0,

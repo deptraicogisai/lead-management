@@ -2,6 +2,7 @@
 
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
+import { StickyActionsBar } from "@/components/ui/sticky-actions-bar";
 
 type ListTableToolbarProps = {
   /** @deprecated Showing summary removed from toolbar. */
@@ -22,6 +23,10 @@ type ListTableToolbarProps = {
   filterPlaceholder?: string;
   actions?: ReactNode;
   selectedCount?: number;
+  /** Stick filter/actions under app chrome while scrolling the grid. */
+  sticky?: boolean;
+  stuckLabel?: ReactNode;
+  onStickyOffsetChange?: (offset: number) => void;
 };
 
 export function ListTableToolbar({
@@ -31,12 +36,15 @@ export function ListTableToolbar({
   filterPlaceholder = "",
   actions,
   selectedCount = 0,
+  sticky = false,
+  stuckLabel,
+  onStickyOffsetChange,
 }: ListTableToolbarProps) {
   const hasContent = Boolean(onTableFilterChange || actions || selectedCount > 0);
   if (!hasContent) return null;
 
-  return (
-    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+  const body = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         {onTableFilterChange ? (
           <div className="inline-flex min-h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:min-h-0 sm:w-auto dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -71,4 +79,18 @@ export function ListTableToolbar({
       </div>
     </div>
   );
+
+  if (sticky) {
+    return (
+      <StickyActionsBar
+        layout="content"
+        stuckLabel={stuckLabel}
+        onStickyOffsetChange={onStickyOffsetChange}
+      >
+        {body}
+      </StickyActionsBar>
+    );
+  }
+
+  return <div className="mb-4">{body}</div>;
 }

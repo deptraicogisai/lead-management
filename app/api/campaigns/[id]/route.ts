@@ -241,6 +241,8 @@ export async function POST(req: Request, context: Params) {
       targetCampaignIds?: string[];
       plDnplListIds?: string[];
       generalFilters?: CampaignGeneralFilter[];
+      integrationId?: string;
+      configValues?: Record<string, string>;
     };
 
     if (!Types.ObjectId.isValid(id)) {
@@ -472,6 +474,110 @@ export async function POST(req: Request, context: Params) {
       return NextResponse.json({
         message: `Filter settings copied to ${updatedCount} campaign(s).`,
         updatedCount,
+      });
+    }
+
+    if (body.action === "copy-integration") {
+      const targetCampaignIds = Array.isArray(body.targetCampaignIds)
+        ? body.targetCampaignIds.filter(
+            (value): value is string => typeof value === "string" && value.trim().length > 0
+          )
+        : [];
+
+      if (targetCampaignIds.length === 0) {
+        return NextResponse.json({ message: "Please select at least one campaign." }, { status: 400 });
+      }
+
+      const sourceIntegrationId =
+        typeof body.integrationId === "string" && body.integrationId.trim()
+          ? body.integrationId.trim()
+          : campaign.integrationRef?.toString() ?? "";
+
+      if (!sourceIntegrationId || !Types.ObjectId.isValid(sourceIntegrationId)) {
+        return NextResponse.json(
+          { message: "Source campaign does not have a valid integration configured." },
+          { status: 400 }
+        );
+      }
+
+      await ensureVerticalCollectionMigrated();
+      const integration = await IntegrationBuilderModel.findById(sourceIntegrationId).lean();
+      if (!integration) {
+        return NextResponse.json({ message: "Integration not found." }, { status: 404 });
+      }
+
+      const verticals = await VerticalModel.find().select({ _id: 1, name: 1 }).lean();
+      const verticalNameById = new Map(verticals.map((vertical) => [vertical._id.toString(), vertical.name]));
+      const configFields = toIntegrationBuilderRecord(integration, verticalNameById).configFields;
+      const sourceConfigValues =
+        body.configValues && typeof body.configValues === "object" && !Array.isArray(body.configValues)
+          ? (body.configValues as Record<string, string>)
+          : ((campaign.integrationSettings?.configValues ?? {}) as Record<string, string>);
+      const sanitizedValues = sanitizeIntegrationConfigValues(configFields, sourceConfigValues);
+      const postUrl = sanitizedValues.url?.trim() ?? "";
+      const parsedTimeout = Number(sanitizedValues.timeout);
+      const postTimeout =
+        Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_POST_TIMEOUT_SECONDS;
+
+      const integrationOptions = await getAvailableIntegrationOptions();
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      for (const targetCampaignId of targetCampaignIds) {
+        if (!Types.ObjectId.isValid(targetCampaignId) || targetCampaignId === id) {
+          continue;
+        }
+
+        const targetCampaign = await CampaignModel.findById(targetCampaignId);
+        if (!targetCampaign) {
+          continue;
+        }
+
+        const buyer = await BuyerModel.findById(targetCampaign.buyerRef).lean();
+        if (!buyer) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const { integrationIds: allowedIntegrationIds } = resolveBuyerIntegrations(
+          buyer,
+          integrationOptions
+        );
+        if (!allowedIntegrationIds.includes(sourceIntegrationId)) {
+          skippedCount += 1;
+          continue;
+        }
+
+        targetCampaign.integrationRef = new Types.ObjectId(sourceIntegrationId);
+        targetCampaign.integrationSettings = {
+          postUrl,
+          postTimeout,
+          configValues: sanitizedValues,
+        };
+        targetCampaign.markModified("integrationSettings");
+        await targetCampaign.save();
+        updatedCount += 1;
+      }
+
+      if (updatedCount === 0) {
+        return NextResponse.json(
+          {
+            message:
+              skippedCount > 0
+                ? "No campaigns were updated. Selected campaigns may not have this integration assigned to their buyer."
+                : "No valid target campaigns were updated.",
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        message:
+          skippedCount > 0
+            ? `Integration settings copied to ${updatedCount} campaign(s). ${skippedCount} skipped (integration not assigned to buyer).`
+            : `Integration settings copied to ${updatedCount} campaign(s).`,
+        updatedCount,
+        skippedCount,
       });
     }
 

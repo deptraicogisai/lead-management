@@ -53,6 +53,8 @@ export type PublisherLeadPingTreeAllocation = {
   configId: string;
   configName: string;
   displayId: number | null;
+  /** Silent tree strategy at allocation time (Priority / Parallel Pings). */
+  silentPostingMode?: string;
 };
 
 export const formatPublisherLeadTableTime = formatDateTimeDisplay;
@@ -524,6 +526,7 @@ export function normalizePublisherLeadPingTreeAllocations(
       configId?: unknown;
       configName?: unknown;
       displayId?: unknown;
+      silentPostingMode?: unknown;
     };
     const configId = typeof raw.configId === "string" ? raw.configId.trim() : "";
     if (!configId) continue;
@@ -534,10 +537,75 @@ export function normalizePublisherLeadPingTreeAllocations(
       configId,
       configName: typeof raw.configName === "string" ? raw.configName.trim() : "",
       displayId: typeof raw.displayId === "number" ? raw.displayId : null,
+      silentPostingMode:
+        typeof raw.silentPostingMode === "string" ? raw.silentPostingMode.trim() : "",
     });
   }
 
   return allocations;
+}
+
+/** Filter Log / Buyer Report shared titles for processing or ping-tree type. */
+export function formatPingTreeSnapshotTreeTitle(processingOrPingTreeType: string) {
+  const value = processingOrPingTreeType.trim();
+  if (value === "Main processing" || value === "Redirect") return "Main Tree";
+  if (value === "Silent") return "Second Tree";
+  return value || "Tree";
+}
+
+export function resolvePingTreeAllocationForDelivery(
+  allocations: PublisherLeadPingTreeAllocation[],
+  params: {
+    pingTreeType: "Redirect" | "Silent";
+    processingType?: string | null;
+  }
+) {
+  const processingType = params.processingType?.trim() || "";
+  if (processingType) {
+    const exact = allocations.find(
+      (allocation) =>
+        allocation.processingType === processingType &&
+        allocation.pingTreeType === params.pingTreeType
+    );
+    if (exact) return exact;
+
+    const byProcessing = allocations.find(
+      (allocation) => allocation.processingType === processingType
+    );
+    if (byProcessing) return byProcessing;
+  }
+
+  return allocations.find((allocation) => allocation.pingTreeType === params.pingTreeType) ?? null;
+}
+
+/**
+ * Same display language as Lead Detail → Filter Log:
+ * `{configName} [displayId]` (falls back to Main/Second Tree from type when name is missing).
+ */
+export function formatPingTreeSnapshotDisplayLabel(
+  allocation: PublisherLeadPingTreeAllocation | null | undefined,
+  fallback?: {
+    pingTreeType?: "Redirect" | "Silent";
+    processingType?: string | null;
+  }
+) {
+  if (!allocation) return "—";
+
+  const configName = allocation.configName?.trim() || "";
+  const processingKey =
+    allocation.processingType?.trim() ||
+    fallback?.processingType?.trim() ||
+    (allocation.pingTreeType === "Silent" || fallback?.pingTreeType === "Silent"
+      ? "Silent"
+      : "Main processing");
+  // Prefer the saved tree name (e.g. "Second Tree") over inventing Main/Second from processing type.
+  const treeTitle = configName || formatPingTreeSnapshotTreeTitle(processingKey);
+
+  if (allocation.displayId != null) {
+    return `${treeTitle} [${allocation.displayId}]`;
+  }
+
+  return treeTitle || "—";
 }
 
 export function formatPublisherLeadPingTreeLabel(allocations: PublisherLeadPingTreeAllocation[]) {

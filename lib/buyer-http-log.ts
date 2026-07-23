@@ -1,4 +1,5 @@
 import type { BuyerHttpRequestSnapshot, BuyerHttpResponseSnapshot } from "@/lib/buyer-post-request";
+import { MOCK_BUYER_POST_BODY_KEY } from "@/lib/mock-buyer-post";
 
 export type BuyerHttpExchangeLog = {
   request: BuyerHttpRequestSnapshot | null;
@@ -30,6 +31,22 @@ export function parseResponseBodyForDisplay(body: string): unknown {
   }
 }
 
+/** Strip internal/mock-only keys before showing request/response JSON in the UI. */
+export function sanitizeLogPayloadForDisplay(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === MOCK_BUYER_POST_BODY_KEY || key.startsWith("__")) {
+      continue;
+    }
+    next[key] = entry;
+  }
+  return next;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -46,7 +63,8 @@ function readRequestSnapshot(value: unknown): BuyerHttpRequestSnapshot | null {
         Object.entries(value.headers).map(([key, headerValue]) => [key, String(headerValue ?? "")])
       )
     : {};
-  const body = isRecord(value.body) ? value.body : {};
+  const rawBody = isRecord(value.body) ? value.body : {};
+  const body = sanitizeLogPayloadForDisplay(rawBody) as Record<string, unknown>;
 
   if (!url && Object.keys(body).length === 0 && Object.keys(headers).length === 0) {
     return null;

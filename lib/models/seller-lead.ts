@@ -33,6 +33,7 @@ const sellerLeadSchema = new Schema(
             configId: { type: String, required: true },
             configName: { type: String, required: false, default: "" },
             displayId: { type: Number, required: false, default: null },
+            silentPostingMode: { type: String, required: false, trim: true, default: "" },
           },
           { _id: false }
         ),

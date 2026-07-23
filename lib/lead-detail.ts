@@ -1,8 +1,11 @@
 import {
   buildPublisherLeadDisplayCode,
+  formatPingTreeSnapshotDisplayLabel,
+  formatPingTreeSnapshotTreeTitle,
   formatPublisherLeadMoney,
   formatPublisherLeadRedirectDelivery,
   normalizePublisherLeadPingTreeAllocations,
+  resolvePingTreeAllocationForDelivery,
   resolvePublisherChannelLabel,
   resolvePublisherLeadDetailStatus,
   resolvePublisherLeadMoneyMetrics,
@@ -16,14 +19,19 @@ import {
 } from "@/lib/buyer-lead-details";
 import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
+import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
+import { SILENT_API_NO_BUYER_MESSAGE, type MappingApiType } from "@/lib/mapping-api-type";
+import { buildPublisherRejectedResponse } from "@/lib/publisher-response-status";
+import { parseResponseBodyForDisplay } from "@/lib/buyer-http-log";
 import {
   PING_TREE_PROCESSING_TYPES,
   isPingTreeProcessingType,
+  normalizeSilentPostingMode,
   type PingTreeProcessingType,
 } from "@/lib/ping-tree-config";
 import type { BuyerPostTraceStep } from "@/lib/buyer-post-trace";
 
-export type LeadDetailTab = "lead-body" | "redirect" | "filter-log";
+export type LeadDetailTab = "lead-body" | "redirect" | "filter-log" | "get-log";
 export type LeadDetailFilterProcessingKey = string;
 
 export type LeadDetailFieldRow = {
@@ -77,6 +85,8 @@ export type LeadDetailFilterLogRow = {
   campaignDisabled: boolean;
   /** True when this row has an actual buyer delivery / HTTP attempt. */
   hasDelivery: boolean;
+  /** True when the buyer was actually HTTP-posted (not skipped/filtered). */
+  wasPosted: boolean;
 };
 
 /** Snapshot of a campaign that was on the allocated ping tree for this lead. */
@@ -95,6 +105,12 @@ export type LeadDetailFilterProcessingSection = {
   key: LeadDetailFilterProcessingKey;
   label: string;
   pingTreeLabel: string;
+  /** Short ping tree name/id for compact UI (without "Ping Tree:" prefix). */
+  pingTreeName: string;
+  /** Snapshot config id used when this lead was allocated (for linking to the tree editor). */
+  pingTreeConfigId: string;
+  /** Silent strategy when this section is Silent; otherwise empty. */
+  silentPostingMode: string;
   minPriceLabel: string;
   /** Total campaigns configured on the ping tree. */
   campaignCount: number;
@@ -123,18 +139,100 @@ export type LeadDetailRecord = {
   publisherChannel: string;
   publisherSource: string;
   method: string;
+  /** Publisher mapping API type (Redirect / Silent). */
+  apiType: MappingApiType;
   buyerLabel: string;
   adm: string;
   ttl: string;
   publisherPayout: string;
   fields: LeadDetailFieldRow[];
   validationErrors: string[];
+  /** Raw payload the publisher sent to our intake. */
+  publisherRequest: Record<string, unknown>;
   /** JSON body returned to the publisher for this lead intake. */
   publisherResponse: Record<string, unknown> | null;
   filterLog: LeadDetailFilterLogEntry[];
   filterProcessing: LeadDetailFilterProcessingSection[];
   redirects: LeadDetailRedirectRow[];
 };
+
+/** Normalize stored publisher response (object or JSON string). */
+export function normalizePublisherResponseValue(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = parseResponseBodyForDisplay(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Prefer the stored intake response; otherwise rebuild a concise publisher API
+ * JSON from lead status fields (covers older rows before publisherResponse was saved).
+ */
+export function resolvePublisherResponseForLeadDetail(params: {
+  leadId: string;
+  publisherResponse?: unknown;
+  intakeLogResponseBody?: string | null;
+  validationStatus: "success" | "fail";
+  publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
+  validationErrors?: string[];
+  soldPrice?: number | null;
+  redirectUrl?: string | null;
+  isSilentApi?: boolean;
+}): Record<string, unknown> | null {
+  const stored = normalizePublisherResponseValue(params.publisherResponse);
+  if (stored && Object.keys(stored).length > 0) {
+    return stored;
+  }
+
+  const fromLog = normalizePublisherResponseValue(params.intakeLogResponseBody);
+  if (fromLog && Object.keys(fromLog).length > 0) {
+    return fromLog;
+  }
+
+  if (params.validationStatus === "fail") {
+    return buildLeadRejectResponse(params.validationErrors ?? ["Lead validation failed."]);
+  }
+
+  if (params.publisherStatus === "Sold") {
+    const response: Record<string, unknown> = {
+      status: 1,
+      status_text: "Accepted",
+      lead_id: params.leadId,
+    };
+    const redirectUrl = params.redirectUrl?.trim() || "";
+    if (redirectUrl && !params.isSilentApi) {
+      response.redirect_url = redirectUrl;
+    }
+    if (typeof params.soldPrice === "number" && Number.isFinite(params.soldPrice)) {
+      response.price = params.soldPrice;
+    }
+    return response;
+  }
+
+  if (params.publisherStatus === "Test") {
+    return buildPublisherRejectedResponse([SILENT_API_NO_BUYER_MESSAGE]);
+  }
+
+  if (params.publisherStatus === "Post Error" || params.publisherStatus === "Reject") {
+    const reasons =
+      params.validationErrors && params.validationErrors.length > 0
+        ? params.validationErrors
+        : params.publisherStatus === "Post Error"
+          ? ["Buyer post error."]
+          : ["Lead was rejected."];
+    return buildPublisherRejectedResponse(reasons);
+  }
+
+  return null;
+}
 
 export function buildLeadSequenceId(mongoId: string) {
   const hex = mongoId.replace(/[^a-fA-F0-9]/g, "").slice(-7);
@@ -322,9 +420,7 @@ export function formatFilterProcessingTabLabel(processingType: string) {
 }
 
 export function formatFilterProcessingTreeTitle(processingType: string) {
-  if (processingType === "Main processing") return "Main Tree";
-  if (processingType === "Silent") return "Second Tree";
-  return processingType.trim() || "Tree";
+  return formatPingTreeSnapshotTreeTitle(processingType);
 }
 
 function resolveDeliveryProcessingType(params: {
@@ -351,11 +447,10 @@ function resolveAllocationForProcessingType(
   allocations: PublisherLeadPingTreeAllocation[],
   processingType: PingTreeProcessingType
 ) {
-  const exact = allocations.find((allocation) => allocation.processingType === processingType);
-  if (exact) return exact;
-
-  const pingTreeType = processingType === "Silent" ? "Silent" : "Redirect";
-  return allocations.find((allocation) => allocation.pingTreeType === pingTreeType) ?? null;
+  return resolvePingTreeAllocationForDelivery(allocations, {
+    processingType,
+    pingTreeType: processingType === "Silent" ? "Silent" : "Redirect",
+  });
 }
 
 function isCampaignDisabledStatus(status: string) {
@@ -422,6 +517,11 @@ function buildFilterLogRowFromDelivery(
     errorReason: delivery.errorReason?.trim() || "",
     campaignDisabled: Boolean(options?.campaignDisabled),
     hasDelivery: true,
+    wasPosted: wasBuyerDeliveryPosted({
+      httpStatus: delivery.httpStatus,
+      requestPayload: delivery.requestPayload,
+      responseBody: delivery.responseBody,
+    }),
   };
 }
 
@@ -452,6 +552,7 @@ function buildPlaceholderFilterLogRow(campaign: LeadDetailTreeCampaign): LeadDet
     errorReason: disabled ? "Campaign is disabled." : "",
     campaignDisabled: disabled,
     hasDelivery: false,
+    wasPosted: false,
   };
 }
 
@@ -484,6 +585,8 @@ export function buildLeadFilterProcessing(params: {
   campaignCountByConfigId?: Record<string, number>;
   /** Campaigns from allocated ping trees, ordered top → bottom. */
   treeCampaigns?: LeadDetailTreeCampaign[];
+  /** Optional silent strategy by ping tree config id (fallback when allocation omits it). */
+  silentPostingModeByConfigId?: Record<string, string>;
 }): LeadDetailFilterProcessingSection[] {
   const allocations = normalizePublisherLeadPingTreeAllocations(params.pingTreeAllocations);
   const treeCampaigns = params.treeCampaigns ?? [];
@@ -563,11 +666,7 @@ export function buildLeadFilterProcessing(params: {
       );
     }
 
-    const postedRows = rows.filter((row) => row.hasDelivery && wasBuyerDeliveryPosted({
-      httpStatus: row.httpStatus,
-      requestPayload: row.requestPayload,
-      responseBody: row.responseBody,
-    }));
+    const postedRows = rows.filter((row) => row.wasPosted);
     const filteredRows = rows.filter(
       (row) =>
         !postedRows.some((posted) => posted.id === row.id) &&
@@ -575,13 +674,22 @@ export function buildLeadFilterProcessing(params: {
     );
 
     const allocation = resolveAllocationForProcessingType(allocations, processingType);
-    const treeTitle = formatFilterProcessingTreeTitle(processingType);
-    const pingTreeLabel =
-      allocation?.displayId != null
-        ? `Ping Tree: ${treeTitle} [${allocation.displayId}]`
-        : allocation?.configName?.trim()
-          ? `Ping Tree: ${treeTitle} · ${allocation.configName.trim()}`
-          : `Ping Tree: ${treeTitle}`;
+    const pingTreeName = formatPingTreeSnapshotDisplayLabel(allocation, {
+      processingType,
+      pingTreeType: processingType === "Silent" ? "Silent" : "Redirect",
+    });
+    const pingTreeLabel = pingTreeName === "—" ? "Ping Tree: —" : `Ping Tree: ${pingTreeName}`;
+
+    const silentPostingMode =
+      processingType === "Silent"
+        ? normalizeSilentPostingMode(
+            allocation?.silentPostingMode ||
+              (allocation?.configId
+                ? params.silentPostingModeByConfigId?.[allocation.configId]
+                : "") ||
+              ""
+          )
+        : "";
 
     const postedCount = postedRows.length;
     const configCampaignCount =
@@ -605,6 +713,9 @@ export function buildLeadFilterProcessing(params: {
       key: processingType,
       label: formatFilterProcessingTabLabel(processingType),
       pingTreeLabel,
+      pingTreeName,
+      pingTreeConfigId: allocation?.configId?.trim() || "",
+      silentPostingMode,
       minPriceLabel,
       campaignCount,
       filteredCount,
@@ -691,7 +802,10 @@ export function buildLeadDetailRecord(params: {
   validationStatus: "success" | "fail";
   publisherStatus?: "Sold" | "Reject" | "Post Error" | "Test" | null;
   isTestLead?: boolean;
-  publisherResponse?: Record<string, unknown> | null;
+  publisherResponse?: unknown;
+  intakeLogResponseBody?: string | null;
+  isSilentApi?: boolean;
+  apiType?: MappingApiType;
   redirectConfirmedAt?: Date | string | null;
   redirectUrl?: string | null;
   redirectClientIp?: string | null;
@@ -766,13 +880,25 @@ export function buildLeadDetailRecord(params: {
     publisherChannel,
     publisherSource,
     method,
+    apiType: params.apiType ?? (params.isSilentApi ? "Silent" : "Redirect"),
     buyerLabel: params.buyerLabel?.trim() || "",
     adm: money.adm,
     ttl: money.ttl,
     publisherPayout: money.publisherPayout,
     fields: buildLeadBodyFields(params.payload, params.fieldLabelsByName),
     validationErrors: params.validationErrors ?? [],
-    publisherResponse: params.publisherResponse ?? null,
+    publisherRequest: params.payload ?? {},
+    publisherResponse: resolvePublisherResponseForLeadDetail({
+      leadId: params.id,
+      publisherResponse: params.publisherResponse,
+      intakeLogResponseBody: params.intakeLogResponseBody,
+      validationStatus: params.validationStatus,
+      publisherStatus: params.publisherStatus,
+      validationErrors: params.validationErrors,
+      soldPrice: params.soldPrice,
+      redirectUrl: params.redirectUrl,
+      isSilentApi: params.isSilentApi,
+    }),
     filterLog: params.filterLog ?? [],
     filterProcessing: params.filterProcessing ?? [],
     redirects: buildLeadRedirectRows({

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -11,6 +11,8 @@ import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageSection } from "@/components/ui/state";
+import { StickyActionsBar } from "@/components/ui/sticky-actions-bar";
+import { FloatingActionButton, floatingActionIcons } from "@/components/ui/floating-action-button";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
 import { toast } from "@/lib/toast";
@@ -106,6 +108,27 @@ export default function IndustryFieldsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [isOrderDirty, setIsOrderDirty] = useState(false);
+  const [stickyActionsOffset, setStickyActionsOffset] = useState(0);
+  const [isAddFieldButtonVisible, setIsAddFieldButtonVisible] = useState(true);
+  const addFieldButtonRef = useRef<HTMLButtonElement>(null);
+  const handleStickyOffsetChange = useCallback((offset: number) => {
+    setStickyActionsOffset(offset);
+  }, []);
+
+  useEffect(() => {
+    const target = addFieldButtonRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsAddFieldButtonVisible(entry.isIntersecting && entry.intersectionRatio > 0);
+      },
+      { root: null, threshold: [0, 0.01, 1] }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [verticalId]);
 
   const fetchFields = async () => {
     if (!verticalId) return;
@@ -735,16 +758,19 @@ export default function IndustryFieldsPage() {
         </div>
       )}
 
-      <PageSection
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <PrimaryButton
-              type="button"
-              disabled={!verticalId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
-              onClick={() => void saveFieldOrder()}
-            >
-              {isSavingOrder ? "Saving..." : "Save Order"}
-            </PrimaryButton>
+      <PageSection>
+        <StickyActionsBar
+          stuckLabel={verticalName ? `Fields · ${verticalName}` : "Fields Configuration"}
+          onStickyOffsetChange={handleStickyOffsetChange}
+        >
+          <PrimaryButton
+            type="button"
+            disabled={!verticalId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
+            onClick={() => void saveFieldOrder()}
+          >
+            {isSavingOrder ? "Saving..." : "Save Order"}
+          </PrimaryButton>
+          <span ref={addFieldButtonRef} className="inline-flex">
             <PrimaryButton
               type="button"
               disabled={!verticalId || Boolean(editingFieldId)}
@@ -753,31 +779,31 @@ export default function IndustryFieldsPage() {
               <Plus size={15} />
               <span>Add Field</span>
             </PrimaryButton>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(event) => void handleImportFile(event)}
-            />
-            <PrimaryButton
-              type="button"
-              disabled={!verticalId || isImporting}
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-            >
-              <Upload size={15} />
-              <span>{isImporting ? "Importing..." : "Upload JSON"}</span>
-            </PrimaryButton>
-            <Link
-              href="/verticals"
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Back to Vertical List
-            </Link>
-          </div>
-        }
-      >
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void handleImportFile(event)}
+          />
+          <PrimaryButton
+            type="button"
+            disabled={!verticalId || isImporting}
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            <Upload size={15} />
+            <span>{isImporting ? "Importing..." : "Upload JSON"}</span>
+          </PrimaryButton>
+          <Link
+            href="/verticals"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            Back to Vertical List
+          </Link>
+        </StickyActionsBar>
+
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
@@ -824,6 +850,9 @@ export default function IndustryFieldsPage() {
               onReorder: handleReorderFields,
               disabled: Boolean(editingFieldId) || isTableLoading,
             }}
+            stickyHeader
+            stickyTopOffset={stickyActionsOffset}
+            scrollShell
           />
         </ListTableContainer>
       </PageSection>
@@ -1075,6 +1104,33 @@ export default function IndustryFieldsPage() {
           </>
         }
       />
+
+      {verticalId &&
+      !isAddFieldButtonVisible &&
+      !isCreateModalOpen &&
+      !optionsModalFieldId &&
+      !deleteConfirm ? (
+        <FloatingActionButton
+          label="Field actions"
+          disabled={Boolean(editingFieldId)}
+          actions={[
+            {
+              id: "add-field",
+              label: "Add Field",
+              icon: floatingActionIcons.plus,
+              disabled: Boolean(editingFieldId),
+              onClick: openCreateModal,
+            },
+            {
+              id: "upload-json",
+              label: isImporting ? "Importing..." : "Upload JSON",
+              icon: floatingActionIcons.upload,
+              disabled: isImporting || Boolean(editingFieldId),
+              onClick: () => fileInputRef.current?.click(),
+            },
+          ]}
+        />
+      ) : null}
     </div>
   );
 }

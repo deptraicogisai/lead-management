@@ -51,6 +51,7 @@ export function CopyToTargetsPanel({
           searchPlaceholder={searchPlaceholder}
           isLoading={isLoading}
           emptyMessage={emptyMessage}
+          showSelectedDisplayId={false}
         />
         {description ? (
           <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">{description}</p>

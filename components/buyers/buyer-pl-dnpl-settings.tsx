@@ -26,8 +26,7 @@ function toOption(list: PresentListRecord): SearchableMultiSelectOption {
   return {
     id: list.id,
     displayId: list.displayId,
-    label: `${list.listType}: ${list.name}`,
-    description: list.productLabel,
+    label: list.name,
   };
 }
 
@@ -83,7 +82,6 @@ export function BuyerPlDnplSettings({
             id: buyer.id,
             displayId: buyer.displayId,
             label: buyer.name,
-            description: buyer.email,
           }))
         );
       } finally {

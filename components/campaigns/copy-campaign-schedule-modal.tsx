@@ -62,7 +62,6 @@ export function CopyCampaignScheduleModal({
             id: campaign.id,
             displayId: campaign.displayId,
             label: campaign.name,
-            description: `[${campaign.displayId}] ${campaign.buyerLabel} · ${campaign.productLabel}`,
           }))
         );
       } finally {
@@ -139,6 +138,7 @@ export function CopyCampaignScheduleModal({
         searchPlaceholder="Search campaigns..."
         isLoading={isLoadingCampaigns}
         emptyMessage="No other campaigns available."
+        showSelectedDisplayId={false}
       />
     </Modal>
   );

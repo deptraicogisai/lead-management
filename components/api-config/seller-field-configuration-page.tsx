@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { Calendar, Copy, Filter, FlaskConical, List, ListFilter, Pencil, Percent, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Calendar, Copy, Filter, FlaskConical, List, ListFilter, Pencil, Percent, Plus, Trash2, Upload } from "lucide-react";
 import { MappingIntakeSettingsTabs } from "@/components/api-config/mapping-intake-settings-tabs";
 import { MappingPlDnplSettingsTab } from "@/components/api-config/mapping-pl-dnpl-settings-tab";
 import { MappingRevShareSettingsTab } from "@/components/api-config/mapping-rev-share-settings-tab";
@@ -10,10 +10,12 @@ import { useParams, useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { FieldLabel, FormError, Input, PrimaryButton } from "@/components/ui/form-controls";
+import { FloatingActionButton, floatingActionIcons } from "@/components/ui/floating-action-button";
 import { ListTableContainer } from "@/components/ui/list-table-container";
 import { Modal } from "@/components/ui/modal";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
+import { StickyActionsBar } from "@/components/ui/sticky-actions-bar";
 import { reorderItemsByIds } from "@/lib/reorder-fields";
 import { toast } from "@/lib/toast";
 import { useListLoadState } from "@/lib/use-list-load-state";
@@ -141,9 +143,13 @@ export function SellerFieldConfigurationPage() {
   const verticalName = searchParams.get("verticalName");
   const apiName = searchParams.get("apiName");
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const addFieldButtonRef = useRef<HTMLSpanElement>(null);
   const [fields, setFields] = useState<ApiField[]>([]);
   const { isInitialLoad, isRefreshing, beginLoad, endLoad } = useListLoadState();
   const isTableLoading = isInitialLoad || isRefreshing;
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState("");
   const [actionError, setActionError] = useState("");
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -163,6 +169,32 @@ export function SellerFieldConfigurationPage() {
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [isOrderDirty, setIsOrderDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<FieldConfigurationTab>("fields");
+  const [stickyActionsOffset, setStickyActionsOffset] = useState(0);
+  const [isAddFieldButtonVisible, setIsAddFieldButtonVisible] = useState(true);
+
+  const handleStickyOffsetChange = useCallback((offset: number) => {
+    setStickyActionsOffset(offset);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "fields") {
+      setIsAddFieldButtonVisible(true);
+      return;
+    }
+
+    const target = addFieldButtonRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsAddFieldButtonVisible(entry.isIntersecting && entry.intersectionRatio > 0);
+      },
+      { root: null, threshold: [0, 0.01, 1] }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeTab, sellerId, mappingId]);
 
   const fetchFields = async () => {
     if (!sellerId || !mappingId) return;
@@ -200,6 +232,7 @@ export function SellerFieldConfigurationPage() {
 
   const clearActionFeedback = () => {
     setActionError("");
+    setImportError("");
   };
 
   const saveField = async (field: ApiField): Promise<{ ok: true; data: ApiField } | { ok: false; message: string }> => {
@@ -251,6 +284,59 @@ export function SellerFieldConfigurationPage() {
     setEditingFieldId(null);
     setEditDraft(null);
     setIsSavingEdit(false);
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !sellerId || !mappingId) return;
+
+    clearActionFeedback();
+    setImportError("");
+    setIsImporting(true);
+    cancelEdit();
+
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as unknown;
+
+      const response = await fetch(
+        `/api/sellers/${encodeURIComponent(sellerId)}/verticals/mappings/${encodeURIComponent(mappingId)}/field-configuration`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const responseText = await response.text();
+      let result: { message?: string; count?: number } | null = null;
+
+      try {
+        result = JSON.parse(responseText) as { message?: string; count?: number };
+      } catch {
+        setImportError(
+          response.ok
+            ? "Import completed but the server returned an unexpected response."
+            : "Import failed. Please restart the dev server and try again."
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        setImportError(result?.message ?? "Failed to import fields.");
+        return;
+      }
+
+      toast.success(result?.message ?? `Imported ${result?.count ?? 0} field(s).`);
+      setSelectedFieldIds([]);
+      await fetchFields();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Invalid JSON file.");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const updateEditDraft = (patch: Partial<ApiField>) => {
@@ -795,28 +881,7 @@ export function SellerFieldConfigurationPage() {
         </div>
       ) : null}
 
-      <PageSection
-        actions={
-          activeTab === "fields" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <PrimaryButton
-                type="button"
-                disabled={!sellerId || !mappingId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
-                onClick={() => void saveFieldOrder()}
-              >
-                {isSavingOrder ? "Saving..." : "Save Order"}
-              </PrimaryButton>
-              <PrimaryButton
-                type="button"
-                disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
-                onClick={openCreateModal}
-              >
-                Add Field
-              </PrimaryButton>
-            </div>
-          ) : null
-        }
-      >
+      <PageSection>
         <PageTabBar
           className="mb-4"
           tabs={fieldConfigTabs}
@@ -841,11 +906,51 @@ export function SellerFieldConfigurationPage() {
           />
         ) : activeTab === "fields" ? (
         <>
+        <StickyActionsBar
+          stuckLabel={apiName ? `Fields · ${apiName}` : "Field Configuration"}
+          onStickyOffsetChange={handleStickyOffsetChange}
+        >
+          <PrimaryButton
+            type="button"
+            disabled={!sellerId || !mappingId || !isOrderDirty || isSavingOrder || Boolean(editingFieldId)}
+            onClick={() => void saveFieldOrder()}
+          >
+            {isSavingOrder ? "Saving..." : "Save Order"}
+          </PrimaryButton>
+          <span ref={addFieldButtonRef} className="inline-flex">
+            <PrimaryButton
+              type="button"
+              disabled={!sellerId || !mappingId || Boolean(editingFieldId)}
+              onClick={openCreateModal}
+            >
+              <Plus size={15} />
+              <span>Add Field</span>
+            </PrimaryButton>
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void handleImportFile(event)}
+          />
+          <PrimaryButton
+            type="button"
+            disabled={!sellerId || !mappingId || isImporting}
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          >
+            <Upload size={15} />
+            <span>{isImporting ? "Importing..." : "Upload JSON"}</span>
+          </PrimaryButton>
+        </StickyActionsBar>
+
         <div className="mb-4 space-y-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             Click <span className="font-medium">Add Field</span> to create a new field, or{" "}
             <span className="font-medium">Edit</span> on a row to update it directly in the grid. Drag the handle on the left to reorder
             fields, then click <span className="font-medium">Save Order</span> to persist the new order. Use checkboxes to select fields and delete them in bulk. Click Options to view or edit option values.
+            Upload JSON accepts a lead sample object: every key in the file becomes a field using the exact key name.
           </p>
 
           {selectedFieldIds.length > 0 ? (
@@ -863,6 +968,7 @@ export function SellerFieldConfigurationPage() {
             </div>
           ) : null}
 
+          <FormError error={importError} />
           <FormError error={actionError} />
         </div>
 
@@ -882,6 +988,9 @@ export function SellerFieldConfigurationPage() {
               onReorder: handleReorderFields,
               disabled: Boolean(editingFieldId) || isTableLoading,
             }}
+            stickyHeader
+            stickyTopOffset={stickyActionsOffset}
+            scrollShell
           />
         </ListTableContainer>
         </>
@@ -1163,6 +1272,35 @@ export function SellerFieldConfigurationPage() {
           </>
         }
       />
+
+      {activeTab === "fields" &&
+      sellerId &&
+      mappingId &&
+      !isAddFieldButtonVisible &&
+      !isCreateModalOpen &&
+      !optionsModalFieldId &&
+      !deleteConfirm ? (
+        <FloatingActionButton
+          label="Field actions"
+          disabled={Boolean(editingFieldId)}
+          actions={[
+            {
+              id: "add-field",
+              label: "Add Field",
+              icon: floatingActionIcons.plus,
+              disabled: Boolean(editingFieldId),
+              onClick: openCreateModal,
+            },
+            {
+              id: "upload-json",
+              label: isImporting ? "Importing..." : "Upload JSON",
+              icon: floatingActionIcons.upload,
+              disabled: isImporting || Boolean(editingFieldId),
+              onClick: () => fileInputRef.current?.click(),
+            },
+          ]}
+        />
+      ) : null}
     </div>
   );
 }

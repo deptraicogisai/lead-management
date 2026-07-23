@@ -5,6 +5,7 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { ensureSellerCollectionMigrated, SellerModel } from "@/lib/models/seller";
 import { ensureSellerLeadReferencesMigrated, SellerLeadModel } from "@/lib/models/seller-lead";
 import { LeadDeliveryModel } from "@/lib/models/lead-delivery";
+import { BuyerRequestLogModel } from "@/lib/models/buyer-request-log";
 import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
 import { PingTreeConfigModel } from "@/lib/models/ping-tree-config";
@@ -14,6 +15,7 @@ import {
   buildLeadDetailRecord,
   buildLeadFilterLog,
   buildLeadFilterProcessing,
+  normalizePublisherResponseValue,
   type LeadDetailTreeCampaign,
 } from "@/lib/lead-detail";
 import {
@@ -56,6 +58,10 @@ type LeadDoc = {
   postedAt?: Date | string;
   createdAt?: Date | string;
 };
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function buildLeadIdCondition(leadId: string) {
   const trimmed = leadId.trim();
@@ -164,7 +170,14 @@ export async function GET(_req: Request, context: Params) {
     const pingTreeConfigs =
       pingTreeConfigIds.length > 0
         ? await PingTreeConfigModel.find({ _id: { $in: pingTreeConfigIds } })
-            .select({ activeCampaignIds: 1, inactiveCampaignIds: 1, processingType: 1 })
+            .select({
+              activeCampaignIds: 1,
+              inactiveCampaignIds: 1,
+              processingType: 1,
+              silentPostingMode: 1,
+              name: 1,
+              displayId: 1,
+            })
             .lean()
         : [];
 
@@ -285,11 +298,17 @@ export async function GET(_req: Request, context: Params) {
     }
 
     const campaignCountByConfigId: Record<string, number> = {};
+    const silentPostingModeByConfigId: Record<string, string> = {};
     const configById = new Map(pingTreeConfigs.map((config) => [config._id.toString(), config]));
 
     for (const config of pingTreeConfigs) {
       const active = Array.isArray(config.activeCampaignIds) ? config.activeCampaignIds.length : 0;
       campaignCountByConfigId[config._id.toString()] = active;
+      if (typeof (config as { silentPostingMode?: unknown }).silentPostingMode === "string") {
+        silentPostingModeByConfigId[config._id.toString()] = String(
+          (config as { silentPostingMode?: string }).silentPostingMode ?? ""
+        );
+      }
     }
 
     const treeCampaigns: LeadDetailTreeCampaign[] = pingTreeAllocations.flatMap((allocation) => {
@@ -343,6 +362,7 @@ export async function GET(_req: Request, context: Params) {
     const filterProcessing = buildLeadFilterProcessing({
       pingTreeAllocations,
       campaignCountByConfigId,
+      silentPostingModeByConfigId,
       treeCampaigns,
       deliveries: deliveries.map((delivery) => {
         const campaign = campaignById.get(delivery.campaignRef?.toString() ?? "");
@@ -396,15 +416,33 @@ export async function GET(_req: Request, context: Params) {
     const channelMappingById = await loadPublisherChannelMappingsByIds([mappingRef]);
     const channelMapping = getChannelMappingForLeadRef(channelMappingById, mappingRef);
 
+    const needsPublisherResponseFallback = !normalizePublisherResponseValue(lead.publisherResponse);
+    let intakeLogResponseBody: string | null = null;
+    if (needsPublisherResponseFallback) {
+      const intakeQuery: Record<string, unknown> = {
+        requestType: "seller-intake",
+        responseBody: { $regex: escapeRegex(leadId) },
+      };
+      if (sellerRef && Types.ObjectId.isValid(sellerRef)) {
+        intakeQuery.sellerRef = new Types.ObjectId(sellerRef);
+      }
+
+      const intakeLog = await BuyerRequestLogModel.findOne(intakeQuery)
+        .sort({ createdAt: -1 })
+        .select({ responseBody: 1 })
+        .lean();
+      intakeLogResponseBody = typeof intakeLog?.responseBody === "string" ? intakeLog.responseBody : null;
+    }
+
     const detail = buildLeadDetailRecord({
       id: leadId,
       validationStatus: lead.validationStatus,
       publisherStatus: lead.publisherStatus,
       isTestLead: Boolean(lead.isTestLead),
-      publisherResponse:
-        lead.publisherResponse && typeof lead.publisherResponse === "object"
-          ? (lead.publisherResponse as Record<string, unknown>)
-          : null,
+      publisherResponse: lead.publisherResponse,
+      intakeLogResponseBody,
+      isSilentApi: apiType === "Silent",
+      apiType,
       redirectConfirmedAt: lead.redirectConfirmedAt,
       redirectUrl: lead.redirectUrl,
       redirectClientIp: lead.redirectClientIp,

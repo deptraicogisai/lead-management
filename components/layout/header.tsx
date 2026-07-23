@@ -210,21 +210,9 @@ export function Header({ session, onOpenSettings }: HeaderProps) {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    onOpenSettings();
-                  }}
-                  className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition active:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:active:bg-slate-700"
-                >
-                  <Settings size={16} />
-                  Settings
-                </button>
-
-                <button
-                  type="button"
                   onClick={handleLogout}
                   disabled={isLoggingOut}
-                  className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-600 transition active:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-600 transition active:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <LogOut size={16} />
                   {isLoggingOut ? "Signing out..." : "Logout"}

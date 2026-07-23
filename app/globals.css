@@ -656,7 +656,8 @@ select:disabled {
   min-width: 0;
   padding: 0.75rem;
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  overflow-x: hidden;
+  /* clip avoids creating a scroll container (unlike overflow-x: hidden), so sticky headers keep working */
+  overflow-x: clip;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
 }

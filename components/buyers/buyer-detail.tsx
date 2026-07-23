@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   CircleHelp,
   ExternalLink,
@@ -14,7 +15,6 @@ import {
   Megaphone,
   Plug,
   Share2,
-  X,
 } from "lucide-react";
 import { FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
@@ -99,6 +99,7 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { testMode } = useSystemSettings();
   const activeTabId = resolveBuyerTabId(searchParams.get("tab"));
   const [name, setName] = useState(buyer.name);
   const [email, setEmail] = useState(buyer.email);
@@ -109,7 +110,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const [integrationOptions, setIntegrationOptions] = useState<IntegrationOption[]>([]);
   const [activeIntegrationIds, setActiveIntegrationIds] = useState<Set<string>>(new Set());
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(true);
-  const [integrationPickerValue, setIntegrationPickerValue] = useState("");
   const [isSavingIntegrations, setIsSavingIntegrations] = useState(false);
   const [blockedPublisherIds, setBlockedPublisherIds] = useState<string[]>(buyer.blockedPublisherIds);
   const [publisherOptions, setPublisherOptions] = useState<PublisherOption[]>([]);
@@ -214,7 +214,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               email: record.email,
               status: record.status,
               label: record.name,
-              description: `${record.email} · ${record.status}`,
             };
           })
         );
@@ -243,21 +242,18 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     void fetchPresentLists();
   }, []);
 
-  const selectedIntegrations = useMemo(
-    () =>
-      selectedIntegrationIds
-        .map((id) => integrationOptions.find((option) => option.id === id))
-        .filter((option): option is IntegrationOption => Boolean(option)),
-    [integrationOptions, selectedIntegrationIds]
-  );
-
-  const availableIntegrationOptions = useMemo(
-    () =>
-      integrationOptions.filter(
-        (option) => !selectedIntegrationIds.includes(option.id) && activeIntegrationIds.has(option.id)
-      ),
-    [integrationOptions, selectedIntegrationIds, activeIntegrationIds]
-  );
+  const integrationSelectOptions = useMemo((): SearchableMultiSelectOption[] => {
+    return integrationOptions
+      .filter(
+        (option) =>
+          activeIntegrationIds.has(option.id) || selectedIntegrationIds.includes(option.id)
+      )
+      .map((option) => ({
+        id: option.id,
+        displayId: option.displayId,
+        label: option.name,
+      }));
+  }, [activeIntegrationIds, integrationOptions, selectedIntegrationIds]);
 
   const renderDetailRow = (labelText: string, control: ReactNode, showLinkIcon = false) => (
     <div className="grid gap-2 py-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center sm:gap-6">
@@ -428,16 +424,6 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
     }
   };
 
-  const addIntegration = (integrationId: string) => {
-    if (!integrationId || selectedIntegrationIds.includes(integrationId)) return;
-    setSelectedIntegrationIds((current) => [...current, integrationId]);
-    setIntegrationPickerValue("");
-  };
-
-  const removeIntegration = (integrationId: string) => {
-    setSelectedIntegrationIds((current) => current.filter((id) => id !== integrationId));
-  };
-
   const handleDuplicate = async () => {
     setIsDuplicating(true);
     setSaveError("");
@@ -549,38 +535,40 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
               className={selectClassName}
             />
           )}
-          {renderDetailRow(
-            "Lead API",
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Post to <code className="text-[11px]">/api/lists/addlead</code>. Set{" "}
-                  <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
-                </p>
-                <SecondaryButton type="button" onClick={handleGenerateApi}>
-                  Generate API
-                </SecondaryButton>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API Key</p>
-                  {apiKey ? (
-                    <CopyableValue value={apiKey} copyLabel="Copy API key" />
-                  ) : (
-                    <Input id="buyer-api-key" value="" readOnly placeholder="Not generated yet" />
-                  )}
+          {!testMode
+            ? renderDetailRow(
+                "Lead API",
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Post to <code className="text-[11px]">/api/lists/addlead</code>. Set{" "}
+                      <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
+                    </p>
+                    <SecondaryButton type="button" onClick={handleGenerateApi}>
+                      Generate API
+                    </SecondaryButton>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API Key</p>
+                      {apiKey ? (
+                        <CopyableValue value={apiKey} copyLabel="Copy API key" />
+                      ) : (
+                        <Input id="buyer-api-key" value="" readOnly placeholder="Not generated yet" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API URL</p>
+                      {postLeadUrl ? (
+                        <CopyableValue value={postLeadUrl} copyLabel="Copy API URL" />
+                      ) : (
+                        <Input id="buyer-post-lead-url" value="" readOnly placeholder="Generated automatically" />
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API URL</p>
-                  {postLeadUrl ? (
-                    <CopyableValue value={postLeadUrl} copyLabel="Copy API URL" />
-                  ) : (
-                    <Input id="buyer-post-lead-url" value="" readOnly placeholder="Generated automatically" />
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+              )
+            : null}
           <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">
             <div aria-hidden />
             <div className="space-y-2">
@@ -606,50 +594,17 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
         <div className="mx-auto w-full max-w-4xl space-y-1">
           {renderDetailRow(
             "Available integrations",
-            <div className="flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-800">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                {selectedIntegrations.map((integration) => (
-                  <span
-                    key={integration.id}
-                    className="inline-flex max-w-full items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                  >
-                    <span className="truncate">{integration.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeIntegration(integration.id)}
-                      className="shrink-0 rounded p-0.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-                      aria-label={`Remove ${integration.label}`}
-                    >
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
-
-                <DropdownSelect
-                  id="buyer-available-integrations"
-                  value={integrationPickerValue}
-                  options={availableIntegrationOptions.map((option) => ({
-                    value: option.id,
-                    label: option.label,
-                  }))}
-                  onChange={(value) => {
-                    setIntegrationPickerValue(value);
-                    addIntegration(value);
-                  }}
-                  placeholder={
-                    isLoadingIntegrations
-                      ? "Loading integrations..."
-                      : availableIntegrationOptions.length === 0
-                        ? selectedIntegrations.length > 0
-                          ? ""
-                          : "No integrations available"
-                        : "Select integration"
-                  }
-                  disabled={isLoadingIntegrations || availableIntegrationOptions.length === 0}
-                  className="min-w-[12rem] flex-1"
-                />
-              </div>
-            </div>
+            <SearchableMultiSelect
+              id="buyer-available-integrations"
+              selectedIds={selectedIntegrationIds}
+              onChange={setSelectedIntegrationIds}
+              options={integrationSelectOptions}
+              labelOptions={integrationSelectOptions}
+              isLoading={isLoadingIntegrations}
+              placeholder="Select integrations..."
+              searchPlaceholder="Search integrations..."
+              emptyMessage="No integrations available."
+            />
           )}
 
           <div className="grid gap-2 pt-6 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-6">

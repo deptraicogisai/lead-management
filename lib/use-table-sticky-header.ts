@@ -2,7 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export function useTableStickyHeader(enabled: boolean) {
+function getScrollParents(el: HTMLElement | null): Array<HTMLElement | Window> {
+  const parents: Array<HTMLElement | Window> = [window];
+  let node = el?.parentElement ?? null;
+
+  while (node && node !== document.body && node !== document.documentElement) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+      parents.push(node);
+    }
+    node = node.parentElement;
+  }
+
+  return parents;
+}
+
+export function useTableStickyHeader(enabled: boolean, extraOffset = 0) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const stickyTopRef = useRef(0);
   const [stickyTop, setStickyTop] = useState(0);
@@ -26,12 +42,12 @@ export function useTableStickyHeader(enabled: boolean) {
 
     const chrome = document.querySelector<HTMLElement>(".mobile-app-header");
     if (!chrome) {
-      setStickyTop(0);
+      setStickyTop(Math.max(0, Math.ceil(extraOffset)));
       return;
     }
 
     const updateStickyTop = () => {
-      setStickyTop(Math.ceil(chrome.getBoundingClientRect().height));
+      setStickyTop(Math.ceil(chrome.getBoundingClientRect().height) + Math.max(0, Math.ceil(extraOffset)));
     };
 
     updateStickyTop();
@@ -43,7 +59,7 @@ export function useTableStickyHeader(enabled: boolean) {
       observer.disconnect();
       window.removeEventListener("resize", updateStickyTop);
     };
-  }, [enabled]);
+  }, [enabled, extraOffset]);
 
   useEffect(() => {
     if (!enabled) {
@@ -61,13 +77,19 @@ export function useTableStickyHeader(enabled: boolean) {
     };
 
     scheduleUpdate();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true, capture: true });
+
+    const scrollParents = getScrollParents(sentinelRef.current);
+    for (const parent of scrollParents) {
+      parent.addEventListener("scroll", scheduleUpdate, { passive: true });
+    }
     window.addEventListener("resize", scheduleUpdate);
     window.visualViewport?.addEventListener("resize", scheduleUpdate);
 
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", scheduleUpdate, { capture: true });
+      for (const parent of scrollParents) {
+        parent.removeEventListener("scroll", scheduleUpdate);
+      }
       window.removeEventListener("resize", scheduleUpdate);
       window.visualViewport?.removeEventListener("resize", scheduleUpdate);
     };

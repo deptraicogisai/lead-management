@@ -11,7 +11,8 @@ import {
   Search,
   Settings2,
 } from "lucide-react";
-import { Input, PrimaryButton, Select, ToggleSwitch, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
+import { useSystemSettings } from "@/components/settings/system-settings-context";
+import { Input, PrimaryButton, Select, cancelButtonClassName, compactPrimaryButtonClassName } from "@/components/ui/form-controls";
 import { CampaignTestMockModal } from "@/components/ping-trees/campaign-test-mock-modal";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
 import { LoadingOverlay } from "@/components/ui/loading-indicator";
@@ -607,6 +608,7 @@ export function PingTreeSettingsPage({
   initialCampaignType?: PingTreeCampaignType;
   configId?: string;
 } = {}) {
+  const { testMode } = useSystemSettings();
   const [activeTab, setActiveTab] = useState<PingTreeCampaignType>(initialCampaignType);
   const [trees, setTrees] = useState<PingTreeRecord[]>([]);
   const [tree, setTree] = useState<PingTreeRecord | null>(null);
@@ -623,14 +625,6 @@ export function PingTreeSettingsPage({
   const [isDirty, setIsDirty] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [silentPostingMode, setSilentPostingMode] = useState<SilentPostingMode>(DEFAULT_SILENT_POSTING_MODE);
-  const [testMode, setTestMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("ping-tree-test-mode") === "1";
-    } catch {
-      return false;
-    }
-  });
   const [mockModalCard, setMockModalCard] = useState<PingTreeCampaignCard | null>(null);
   const [isSavingMock, setIsSavingMock] = useState(false);
   const [highlightedCampaignId, setHighlightedCampaignId] = useState<string | null>(null);
@@ -684,6 +678,12 @@ export function PingTreeSettingsPage({
   useEffect(() => {
     prioritiesRef.current = priorities;
   }, [priorities]);
+
+  useEffect(() => {
+    if (!testMode) {
+      setMockModalCard(null);
+    }
+  }, [testMode]);
 
   const activeStats = useMemo(() => countByStatus(pingTreeList), [pingTreeList]);
   const inactiveStats = useMemo(() => countByStatus(notInPingTree), [notInPingTree]);
@@ -1464,28 +1464,6 @@ export function PingTreeSettingsPage({
                 </Select>
               </label>
             ) : null}
-            <label
-              htmlFor="ping-tree-test-mode"
-              className="mr-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-              title="Shows mock settings buttons. Mock responses are used after you Save mock on each campaign."
-            >
-              <span className="font-medium">Test Mode</span>
-              <ToggleSwitch
-                id="ping-tree-test-mode"
-                checked={testMode}
-                onChange={(checked) => {
-                  setTestMode(checked);
-                  try {
-                    window.localStorage.setItem("ping-tree-test-mode", checked ? "1" : "0");
-                  } catch {
-                    // Ignore storage errors (private mode, quota, etc.).
-                  }
-                  if (!checked) {
-                    setMockModalCard(null);
-                  }
-                }}
-              />
-            </label>
             <PrimaryButton type="button" onClick={handleSave} disabled={!isDirty || isSaving}>
               {isSaving ? "Saving..." : "Save"}
             </PrimaryButton>

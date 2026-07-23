@@ -27,8 +27,7 @@ function toOption(list: PresentListRecord): SearchableMultiSelectOption {
   return {
     id: list.id,
     displayId: list.displayId,
-    label: `${list.listType}: ${list.name}`,
-    description: list.productLabel,
+    label: list.name,
   };
 }
 
@@ -111,7 +110,6 @@ export function MappingPlDnplSettingsTab({ sellerId, mappingId }: MappingPlDnplS
             .map((seller) => ({
               id: seller.id,
               label: seller.name,
-              description: seller.email,
               displayId: seller.displayId,
             }))
         );

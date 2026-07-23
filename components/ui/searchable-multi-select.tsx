@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/form-controls";
-import { IdBadge } from "@/components/ui/id-badge";
 import {
   FILTER_DROPDOWN_ITEM_CLASS,
   FILTER_DROPDOWN_MAX_VISIBLE_ITEMS,
@@ -32,21 +30,30 @@ type SearchableMultiSelectProps = {
   isLoading?: boolean;
   emptyMessage?: string;
   className?: string;
+  /** When false, selected chips show only `label` (e.g. campaign name). Default true. */
+  showSelectedDisplayId?: boolean;
 };
 
-type MenuPosition = {
-  top?: number;
-  bottom?: number;
-  left: number;
-  width: number;
-  maxHeight: number;
+type MenuLayout = {
+  openUpward: boolean;
+  maxHeight?: number;
 };
 
 const MENU_GAP = 4;
-const MENU_MIN_WIDTH = 448;
 const VIEWPORT_PADDING = 8;
-const SEARCH_HEADER_HEIGHT = 52;
+const SEARCH_HEADER_HEIGHT = 48;
 const ESTIMATED_ITEM_HEIGHT = 36;
+const ESTIMATED_ITEM_WITH_DESCRIPTION_HEIGHT = 52;
+const MAX_VISIBLE_SELECTED_CHIPS = 5;
+const SELECTED_CHIPS_SCROLL_CLASS =
+  "max-h-[calc(1.75rem*5+0.375rem*4)] overflow-y-auto overscroll-contain pr-0.5";
+
+function formatOptionText(option: SearchableMultiSelectOption, includeDisplayId: boolean) {
+  if (includeDisplayId && option.displayId !== undefined) {
+    return `[${option.displayId}] ${option.label}`;
+  }
+  return option.label;
+}
 
 export function SearchableMultiSelect({
   id,
@@ -60,13 +67,13 @@ export function SearchableMultiSelect({
   isLoading = false,
   emptyMessage = "No items available.",
   className,
+  showSelectedDisplayId = true,
 }: SearchableMultiSelectProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [menuLayout, setMenuLayout] = useState<MenuLayout | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const labelOptionMap = useMemo(
     () => new Map((labelOptions ?? options).map((option) => [option.id, option])),
@@ -91,72 +98,71 @@ export function SearchableMultiSelect({
     });
   }, [options, search]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
-        return;
-      }
+  const listNeedsScroll = filteredOptions.length > FILTER_DROPDOWN_MAX_VISIBLE_ITEMS;
+  const estimatedItemHeight = useMemo(
+    () =>
+      filteredOptions.some((option) => Boolean(option.description))
+        ? ESTIMATED_ITEM_WITH_DESCRIPTION_HEIGHT
+        : ESTIMATED_ITEM_HEIGHT,
+    [filteredOptions]
+  );
 
+  useEffect(() => {
+    if (!dropdownOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
       setDropdownOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [dropdownOpen]);
 
   useEffect(() => {
     if (!dropdownOpen) {
-      setMenuPosition(null);
+      setMenuLayout(null);
       return;
     }
 
-    const updateMenuPosition = () => {
+    const updateMenuLayout = () => {
       const trigger = triggerRef.current;
       if (!trigger) return;
 
       const rect = trigger.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
       const spaceBelow = viewportHeight - rect.bottom - VIEWPORT_PADDING;
       const spaceAbove = rect.top - VIEWPORT_PADDING;
-      const preferredListHeight =
-        Math.min(filteredOptions.length, FILTER_DROPDOWN_MAX_VISIBLE_ITEMS) * ESTIMATED_ITEM_HEIGHT +
-        SEARCH_HEADER_HEIGHT;
+      const visibleCount = listNeedsScroll
+        ? FILTER_DROPDOWN_MAX_VISIBLE_ITEMS
+        : Math.max(filteredOptions.length, 1);
+      const preferredListHeight = visibleCount * estimatedItemHeight + SEARCH_HEADER_HEIGHT + 8;
       const openUpward = spaceBelow < preferredListHeight && spaceAbove > spaceBelow;
-      const availableSpace = openUpward ? spaceAbove : spaceBelow;
-      const maxHeight = Math.max(160, Math.min(preferredListHeight, availableSpace - MENU_GAP));
-      const width = Math.min(Math.max(rect.width, MENU_MIN_WIDTH), viewportWidth - VIEWPORT_PADDING * 2);
-      const left = Math.min(
-        Math.max(VIEWPORT_PADDING, rect.left),
-        viewportWidth - width - VIEWPORT_PADDING
-      );
+      const availableSpace = (openUpward ? spaceAbove : spaceBelow) - MENU_GAP;
+      const fitsInViewport = preferredListHeight <= availableSpace;
+      const maxHeight =
+        listNeedsScroll || !fitsInViewport
+          ? Math.min(preferredListHeight, Math.max(listNeedsScroll ? 160 : 96, availableSpace))
+          : undefined;
 
-      setMenuPosition({
-        top: openUpward ? undefined : rect.bottom + MENU_GAP,
-        bottom: openUpward ? viewportHeight - rect.top + MENU_GAP : undefined,
-        left,
-        width,
-        maxHeight,
-      });
+      setMenuLayout({ openUpward, maxHeight });
     };
 
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
+    updateMenuLayout();
+    window.addEventListener("resize", updateMenuLayout);
+    window.addEventListener("scroll", updateMenuLayout, true);
 
     return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
+      window.removeEventListener("resize", updateMenuLayout);
+      window.removeEventListener("scroll", updateMenuLayout, true);
     };
-  }, [dropdownOpen, filteredOptions.length]);
+  }, [dropdownOpen, filteredOptions.length, estimatedItemHeight, listNeedsScroll]);
 
   const toggleOption = (optionId: string, checked: boolean) => {
     if (checked) {
       onChange(selectedIds.includes(optionId) ? selectedIds : [...selectedIds, optionId]);
       return;
     }
-
     onChange(selectedIds.filter((id) => id !== optionId));
   };
 
@@ -165,7 +171,7 @@ export function SearchableMultiSelect({
   };
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn("relative", dropdownOpen && "z-[400]", className)}>
       <button
         id={id}
         ref={triggerRef}
@@ -175,10 +181,16 @@ export function SearchableMultiSelect({
         className={cn(
           "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-sm dark:border-slate-500 dark:bg-slate-800",
           CONTROL_TEXT_CLASS,
+          dropdownOpen && "border-blue-400 ring-2 ring-blue-100 dark:border-blue-400 dark:ring-blue-400/25",
           (disabled || isLoading) && "cursor-not-allowed opacity-60"
         )}
       >
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            "flex min-w-0 flex-1 flex-wrap items-center gap-1.5",
+            selectedOptions.length > MAX_VISIBLE_SELECTED_CHIPS && SELECTED_CHIPS_SCROLL_CLASS
+          )}
+        >
           {isLoading ? (
             <span className={CONTROL_MUTED_CLASS}>Loading...</span>
           ) : selectedOptions.length === 0 ? (
@@ -190,7 +202,7 @@ export function SearchableMultiSelect({
                 className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
               >
                 <span className="break-words whitespace-normal">
-                  {option.displayId !== undefined ? `[${option.displayId}] ${option.label}` : option.label}
+                  {formatOptionText(option, showSelectedDisplayId)}
                 </span>
                 <span
                   role="button"
@@ -224,75 +236,69 @@ export function SearchableMultiSelect({
         />
       </button>
 
-      {dropdownOpen && menuPosition && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              ref={menuRef}
-              style={{
-                position: "fixed",
-                top: menuPosition.top,
-                bottom: menuPosition.bottom,
-                left: menuPosition.left,
-                width: menuPosition.width,
-                maxHeight: menuPosition.maxHeight,
-              }}
-              className="z-[300] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
-            >
-              <div className="shrink-0 border-b border-slate-200 p-2 dark:border-slate-700">
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-300 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
-                />
-              </div>
+      {dropdownOpen && menuLayout ? (
+        <div
+          style={menuLayout.maxHeight ? { maxHeight: menuLayout.maxHeight } : undefined}
+          className={cn(
+            "absolute left-0 right-0 z-[400] flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-600 dark:bg-slate-900",
+            menuLayout.openUpward ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
+          )}
+        >
+          <div className="shrink-0 border-b border-slate-200 p-2 dark:border-slate-700">
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-300 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+            />
+          </div>
 
-              <div
-                className={cn(
-                  "min-h-0 flex-1 overflow-y-auto py-1 overscroll-contain",
-                  filteredOptions.length > FILTER_DROPDOWN_MAX_VISIBLE_ITEMS && FILTER_DROPDOWN_SCROLL_CLASS
-                )}
-              >
-                {filteredOptions.length === 0 ? (
-                  <p className={cn("px-3 py-2 text-sm", CONTROL_MUTED_CLASS)}>{emptyMessage}</p>
-                ) : (
-                  filteredOptions.map((option) => {
-                    const checked = selectedIds.includes(option.id);
-                    return (
-                      <Checkbox
-                        key={option.id}
-                        id={`${id ?? "multi-select"}-${option.id}`}
-                        checked={checked}
-                        onChange={(nextChecked) => toggleOption(option.id, nextChecked)}
-                        className={cn(
-                          "rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70",
-                          FILTER_DROPDOWN_ITEM_CLASS
-                        )}
-                        label={
-                          option.displayId !== undefined || option.description ? (
-                            <span className="flex min-w-0 items-start gap-2.5">
-                              {option.displayId !== undefined ? <IdBadge id={option.displayId} /> : null}
-                              <span className="flex min-w-0 flex-col">
-                                <span className="font-medium text-slate-800 dark:text-slate-100">{option.label}</span>
-                                {option.description ? (
-                                  <span className={cn("text-xs", CONTROL_HINT_CLASS)}>{option.description}</span>
-                                ) : null}
-                              </span>
-                            </span>
-                          ) : (
-                            option.label
-                          )
-                        }
-                      />
-                    );
-                  })
-                )}
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
+          <div
+            className={cn(
+              "py-1",
+              (listNeedsScroll || Boolean(menuLayout.maxHeight)) &&
+                cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", listNeedsScroll && FILTER_DROPDOWN_SCROLL_CLASS)
+            )}
+          >
+            {filteredOptions.length === 0 ? (
+              <p className={cn("px-3 py-2 text-sm", CONTROL_MUTED_CLASS)}>{emptyMessage}</p>
+            ) : (
+              filteredOptions.map((option) => {
+                const checked = selectedIds.includes(option.id);
+                return (
+                  <Checkbox
+                    key={option.id}
+                    id={`${id ?? "multi-select"}-${option.id}`}
+                    checked={checked}
+                    onChange={(nextChecked) => toggleOption(option.id, nextChecked)}
+                    className={cn(
+                      "rounded-none px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/70",
+                      FILTER_DROPDOWN_ITEM_CLASS
+                    )}
+                    label={
+                      option.description ? (
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate text-sm text-slate-800 dark:text-slate-100">
+                            {formatOptionText(option, true)}
+                          </span>
+                          <span className={cn("truncate text-xs", CONTROL_HINT_CLASS)}>
+                            {option.description}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="truncate text-sm text-slate-800 dark:text-slate-100">
+                          {formatOptionText(option, true)}
+                        </span>
+                      )
+                    }
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

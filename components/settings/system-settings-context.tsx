@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   APP_TIME_ZONE_OPTIONS,
   DEFAULT_APP_TIME_ZONE,
@@ -16,6 +24,7 @@ export type SystemTimeZone = AppTimeZoneId;
 export const DEFAULT_SYSTEM_TIME_ZONE: SystemTimeZone = DEFAULT_APP_TIME_ZONE;
 export const SYSTEM_FONT_SCALE_STORAGE_KEY = "lead-management-font-scale";
 export const SYSTEM_TIME_ZONE_STORAGE_KEY = "lead-management-time-zone";
+export const SYSTEM_TEST_MODE_STORAGE_KEY = "lead-management-test-mode";
 
 export const SYSTEM_FONT_SCALE_OPTIONS: Array<{ value: SystemFontScale; label: string }> = [
   { value: "default", label: "Default" },
@@ -39,8 +48,12 @@ export const SYSTEM_TIME_ZONE_OPTIONS: Array<{
 type SystemSettingsContextValue = {
   fontScale: SystemFontScale;
   timeZone: SystemTimeZone;
+  testMode: boolean;
+  testModeReady: boolean;
+  isSavingTestMode: boolean;
   setFontScale: (scale: SystemFontScale) => void;
   setTimeZone: (timeZone: SystemTimeZone) => void;
+  setTestMode: (enabled: boolean) => Promise<boolean>;
 };
 
 const SystemSettingsContext = createContext<SystemSettingsContextValue | null>(null);
@@ -51,6 +64,23 @@ function isFontScale(value: string | null): value is SystemFontScale {
 
 function isTimeZone(value: string | null): value is SystemTimeZone {
   return Boolean(value && isAppTimeZoneId(value));
+}
+
+function readCachedTestMode() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SYSTEM_TEST_MODE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCachedTestMode(enabled: boolean) {
+  try {
+    window.localStorage.setItem(SYSTEM_TEST_MODE_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Ignore storage errors (private mode, quota, etc.).
+  }
 }
 
 export function getSystemFontScaleFactor(scale: SystemFontScale) {
@@ -100,6 +130,9 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     const storedTimeZone = window.localStorage.getItem(SYSTEM_TIME_ZONE_STORAGE_KEY);
     return isTimeZone(storedTimeZone) ? storedTimeZone : DEFAULT_SYSTEM_TIME_ZONE;
   });
+  const [testMode, setTestModeState] = useState(false);
+  const [testModeReady, setTestModeReady] = useState(false);
+  const [isSavingTestMode, setIsSavingTestMode] = useState(false);
 
   useEffect(() => {
     applyFontScale(fontScale);
@@ -111,10 +144,77 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTestMode = async () => {
+      try {
+        const response = await fetch("/api/settings/system", { cache: "no-store" });
+        if (!response.ok) {
+          if (!cancelled) {
+            setTestModeState(readCachedTestMode());
+            setTestModeReady(true);
+          }
+          return;
+        }
+        const data = (await response.json()) as { testMode?: boolean };
+        if (cancelled) return;
+        const enabled = Boolean(data.testMode);
+        setTestModeState(enabled);
+        writeCachedTestMode(enabled);
+        setTestModeReady(true);
+      } catch {
+        if (!cancelled) {
+          setTestModeState(readCachedTestMode());
+          setTestModeReady(true);
+        }
+      }
+    };
+
+    void loadTestMode();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setTestMode = useCallback(async (enabled: boolean) => {
+    setIsSavingTestMode(true);
+    const previous = testMode;
+    setTestModeState(enabled);
+    writeCachedTestMode(enabled);
+
+    try {
+      const response = await fetch("/api/settings/system", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testMode: enabled }),
+      });
+      if (!response.ok) {
+        setTestModeState(previous);
+        writeCachedTestMode(previous);
+        return false;
+      }
+      const data = (await response.json()) as { testMode?: boolean };
+      const next = Boolean(data.testMode);
+      setTestModeState(next);
+      writeCachedTestMode(next);
+      return true;
+    } catch {
+      setTestModeState(previous);
+      writeCachedTestMode(previous);
+      return false;
+    } finally {
+      setIsSavingTestMode(false);
+    }
+  }, [testMode]);
+
   const value = useMemo<SystemSettingsContextValue>(
     () => ({
       fontScale,
       timeZone,
+      testMode,
+      testModeReady,
+      isSavingTestMode,
       setFontScale: (scale) => {
         setFontScaleState(scale);
         applyFontScale(scale);
@@ -124,8 +224,9 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
         setTimeZoneState(nextTimeZone);
         window.localStorage.setItem(SYSTEM_TIME_ZONE_STORAGE_KEY, nextTimeZone);
       },
+      setTestMode,
     }),
-    [fontScale, timeZone]
+    [fontScale, timeZone, testMode, testModeReady, isSavingTestMode, setTestMode]
   );
 
   return <SystemSettingsContext.Provider value={value}>{children}</SystemSettingsContext.Provider>;
