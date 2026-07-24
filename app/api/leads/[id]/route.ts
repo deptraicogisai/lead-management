@@ -409,6 +409,12 @@ export async function GET(_req: Request, context: Params) {
             const date = raw instanceof Date ? raw : new Date(raw);
             return Number.isNaN(date.getTime()) ? "" : date.toISOString();
           })(),
+          delayQueuedAt: (() => {
+            const raw = (delivery as { delayQueuedAt?: Date | string | null }).delayQueuedAt;
+            if (!raw) return "";
+            const date = raw instanceof Date ? raw : new Date(raw);
+            return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+          })(),
           price: typeof delivery.price === "number" ? delivery.price : null,
           campaignMinPrice: typeof campaign?.minPrice === "number" ? campaign.minPrice : null,
           buyerDisplayId: typeof buyer?.displayId === "number" ? buyer.displayId : null,

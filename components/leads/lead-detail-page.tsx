@@ -39,6 +39,10 @@ import { formatRedirectClickDateLabel } from "@/lib/lead-detail";
 import type { JsonLogPanelTone } from "@/components/logs/json-log-panel";
 import { cn } from "@/lib/utils";
 import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
+import {
+  formatDelayPostingDuration,
+  isDelayPostingStatus,
+} from "@/lib/delay-posting-countdown";
 
 function resolveCampaignResponseTone(row: LeadDetailFilterLogRow): JsonLogPanelTone {
   if (!row.hasDelivery && !row.responseBody.trim()) return "neutral";
@@ -178,21 +182,36 @@ function CopyableValue({ value }: { value: string }) {
   );
 }
 
-function FilterLogMessageCell({ message }: { message: string }) {
+function FilterLogMessageCell({
+  message,
+  wasDelayedPost,
+  delayQueuedAt,
+  scheduledPostAt,
+  buyerPostedAt,
+  buyerStatus,
+}: {
+  message: string;
+  wasDelayedPost?: boolean;
+  delayQueuedAt?: string;
+  scheduledPostAt?: string;
+  buyerPostedAt?: string;
+  buyerStatus?: string;
+}) {
+  const { timeZone } = useSystemSettings();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const trimmed = message.trim();
-  const hasMessage = Boolean(trimmed) && trimmed !== "—";
+  const hasDelayDetails = Boolean(wasDelayedPost);
+  const hasMessage = hasDelayDetails || (Boolean(trimmed) && trimmed !== "—");
 
   const updatePosition = useCallback(() => {
     const button = buttonRef.current;
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    const popoverWidth = 280;
+    const popoverWidth = 300;
     const gap = 8;
-    // Anchor to top-right of the icon.
     const preferredLeft = rect.right - popoverWidth;
     const left = Math.min(
       Math.max(12, preferredLeft),
@@ -237,6 +256,19 @@ function FilterLogMessageCell({ message }: { message: string }) {
     return <span className="text-slate-500 dark:text-slate-300">—</span>;
   }
 
+  const delayLabel = formatDelayPostingDuration(delayQueuedAt, scheduledPostAt);
+  const stillWaiting = isDelayPostingStatus(buyerStatus);
+  const enteredLabel = delayQueuedAt
+    ? formatDateTimeDisplay(delayQueuedAt, timeZone) || delayQueuedAt
+    : "—";
+  const buyerPostLabel = stillWaiting
+    ? scheduledPostAt
+      ? `Scheduled ${formatDateTimeDisplay(scheduledPostAt, timeZone) || scheduledPostAt}`
+      : "Pending"
+    : buyerPostedAt
+      ? formatDateTimeDisplay(buyerPostedAt, timeZone) || buyerPostedAt
+      : "—";
+
   return (
     <>
       <button
@@ -245,12 +277,16 @@ function FilterLogMessageCell({ message }: { message: string }) {
         onClick={() => setOpen((current) => !current)}
         className={cn(
           "inline-flex h-7 w-7 items-center justify-center rounded-full transition",
-          open
-            ? "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300"
-            : "text-sky-600 hover:bg-sky-50 hover:text-sky-700 dark:text-sky-400 dark:hover:bg-sky-500/15 dark:hover:text-sky-300"
+          wasDelayedPost
+            ? open
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200"
+              : "text-amber-600 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:hover:bg-amber-500/15 dark:hover:text-amber-200"
+            : open
+              ? "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300"
+              : "text-sky-600 hover:bg-sky-50 hover:text-sky-700 dark:text-sky-400 dark:hover:bg-sky-500/15 dark:hover:text-sky-300"
         )}
-        title="View message"
-        aria-label="View message"
+        title={wasDelayedPost ? "View delay posting details" : "View message"}
+        aria-label={wasDelayedPost ? "View delay posting details" : "View message"}
         aria-expanded={open}
       >
         <MessageSquareText size={16} strokeWidth={1.75} />
@@ -260,12 +296,50 @@ function FilterLogMessageCell({ message }: { message: string }) {
             <div
               ref={popoverRef}
               style={{ top: position.top, left: position.left }}
-              className="fixed z-[120] w-[280px] -translate-y-full rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-700 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              className="fixed z-[120] w-[300px] -translate-y-full rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-700 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
             >
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                Reason
-              </p>
-              <p className="break-words">{trimmed}</p>
+              {wasDelayedPost ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                    Delay Posting
+                  </p>
+                  <div className="space-y-1.5">
+                    <p>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">
+                        Lead entered:{" "}
+                      </span>
+                      {enteredLabel}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">
+                        Delay:{" "}
+                      </span>
+                      {delayLabel || "—"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">
+                        Buyer post:{" "}
+                      </span>
+                      {buyerPostLabel}
+                    </p>
+                  </div>
+                  {trimmed && trimmed !== "—" ? (
+                    <div className="border-t border-slate-200 pt-2 dark:border-slate-600">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        Note
+                      </p>
+                      <p className="break-words">{trimmed}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                    Reason
+                  </p>
+                  <p className="break-words">{trimmed}</p>
+                </>
+              )}
             </div>,
             document.body
           )
@@ -286,10 +360,13 @@ function FilterLogDetailRow({
   const { timeZone } = useSystemSettings();
   const statusNormalized = row.status.trim().toLowerCase();
   const showMessageIcon =
+    row.wasDelayedPost ||
     statusNormalized.includes("reject") ||
     statusNormalized === "skipped" ||
     statusNormalized === "disabled" ||
-    statusNormalized === "delay posting";
+    statusNormalized === "delay posting" ||
+    statusNormalized === "error" ||
+    statusNormalized === "timeout";
 
   return (
     <tr
@@ -300,8 +377,10 @@ function FilterLogDetailRow({
           : statusNormalized === "accept"
             ? "bg-emerald-50/70 dark:bg-emerald-500/10"
             : statusNormalized === "delay posting"
-              ? "bg-sky-50/70 dark:bg-sky-500/10"
-              : undefined
+              ? "bg-amber-50/70 dark:bg-amber-500/10"
+              : row.wasDelayedPost
+                ? "bg-amber-50/40 dark:bg-amber-500/5"
+                : undefined
       )}
     >
       <td className="whitespace-nowrap px-4 py-2.5 align-middle tabular-nums text-slate-700 dark:text-slate-200">
@@ -341,12 +420,22 @@ function FilterLogDetailRow({
         {row.soldPrice}
       </td>
       <td className="px-4 py-2.5 align-middle">
-        <span className="relative inline-flex max-w-full items-start pt-2.5 pr-2">
+        <span className="relative inline-flex max-w-full flex-wrap items-start gap-1.5 pt-2.5 pr-2">
           <DelayPostingStatusBadge
             status={row.status}
-            scheduledPostAt={row.scheduledPostAt || null}
+            scheduledPostAt={
+              isDelayPostingStatus(row.status) ? row.scheduledPostAt || null : null
+            }
             onDue={onDelayDue}
           />
+          {row.wasDelayedPost && !isDelayPostingStatus(row.status) ? (
+            <span
+              className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-200"
+              title="This buyer post used Delay Scheduling"
+            >
+              Delayed
+            </span>
+          ) : null}
           {row.offeredPriceLabel ? (
             <span className="absolute right-0 top-0 rounded border border-amber-200 bg-amber-50 px-1 py-px text-[11px] font-semibold leading-none text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
               {row.offeredPriceLabel}
@@ -356,7 +445,14 @@ function FilterLogDetailRow({
       </td>
       <td className="px-4 py-2.5 align-middle text-center">
         {showMessageIcon ? (
-          <FilterLogMessageCell message={row.message} />
+          <FilterLogMessageCell
+            message={row.message}
+            wasDelayedPost={row.wasDelayedPost}
+            delayQueuedAt={row.delayQueuedAt}
+            scheduledPostAt={row.scheduledPostAt}
+            buyerPostedAt={row.date}
+            buyerStatus={row.status}
+          />
         ) : (
           <span className="text-slate-500 dark:text-slate-300">—</span>
         )}

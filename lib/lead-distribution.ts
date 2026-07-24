@@ -1073,6 +1073,7 @@ async function processCampaignAttempt(params: {
       deliveryTrace: traceSteps,
       duplicateFingerprint,
       scheduledPostAt,
+      delayQueuedAt: params.postedAt,
       postedAt: params.postedAt,
     });
 

@@ -90,6 +90,7 @@ export async function cancelPendingDelayedSilentPosts(
       $set: {
         buyerStatus: "Skipped",
         errorReason: reason,
+        postedAt: new Date(),
       },
     }
   );
@@ -141,7 +142,8 @@ async function isCampaignEligibleForSilentPost(
 async function skipDelayedDelivery(
   deliveryId: Types.ObjectId,
   reason: string,
-  traceSteps: BuyerPostTraceStep[]
+  traceSteps: BuyerPostTraceStep[],
+  delayQueuedAt?: Date | null
 ) {
   const nextTrace = appendBuyerPostTraceStep(traceSteps, {
     key: "delay-scheduling-skip",
@@ -158,6 +160,8 @@ async function skipDelayedDelivery(
         buyerStatus: "Skipped",
         errorReason: reason,
         deliveryTrace: nextTrace,
+        ...(delayQueuedAt ? { delayQueuedAt } : {}),
+        postedAt: new Date(),
       },
     }
   );
@@ -183,6 +187,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
     origin: "",
     mockBuyerPost: false,
   };
+  const resolvedDelayQueuedAt =
+    (claimed as { delayQueuedAt?: Date | null }).delayQueuedAt ?? claimed.postedAt ?? null;
 
   try {
     const campaign = await CampaignModel.findById(campaignId).lean();
@@ -192,7 +198,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
         !campaign
           ? "Campaign not found — delayed post cancelled."
           : `Campaign is "${campaign.status}" — delayed post cancelled.`,
-        existingTrace
+        existingTrace,
+        resolvedDelayQueuedAt
       );
       return "skipped";
     }
@@ -201,7 +208,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
       await skipDelayedDelivery(
         claimed._id,
         "Campaign is no longer Silent — delayed post cancelled.",
-        existingTrace
+        existingTrace,
+        resolvedDelayQueuedAt
       );
       return "skipped";
     }
@@ -215,14 +223,20 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
       await skipDelayedDelivery(
         claimed._id,
         "Campaign left Silent Ping Tree — delayed post cancelled.",
-        existingTrace
+        existingTrace,
+        resolvedDelayQueuedAt
       );
       return "skipped";
     }
 
     const sellerLead = await SellerLeadModel.findById(sellerLeadId).lean();
     if (!sellerLead) {
-      await skipDelayedDelivery(claimed._id, "Seller lead not found — delayed post cancelled.", existingTrace);
+      await skipDelayedDelivery(
+        claimed._id,
+        "Seller lead not found — delayed post cancelled.",
+        existingTrace,
+        resolvedDelayQueuedAt
+      );
       return "skipped";
     }
 
@@ -231,14 +245,20 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
       await skipDelayedDelivery(
         claimed._id,
         !buyer ? "Buyer not found — delayed post cancelled." : `Buyer is "${buyer.status}" — delayed post cancelled.`,
-        existingTrace
+        existingTrace,
+        resolvedDelayQueuedAt
       );
       return "skipped";
     }
 
     const integrationId = campaign.integrationRef?.toString() ?? "";
     if (!integrationId) {
-      await skipDelayedDelivery(claimed._id, "Campaign integration is not configured.", existingTrace);
+      await skipDelayedDelivery(
+        claimed._id,
+        "Campaign integration is not configured.",
+        existingTrace,
+        resolvedDelayQueuedAt
+      );
       return "skipped";
     }
 
@@ -249,7 +269,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
         !integration
           ? "Integration builder record not found."
           : `Integration "${integration.name}" is "${integration.status}".`,
-        existingTrace
+        existingTrace,
+        resolvedDelayQueuedAt
       );
       return "skipped";
     }
@@ -356,7 +377,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
       request: delivery.buyerRequest,
     });
 
-    // Keep original postedAt (intake / Delay Posting date) — only status and post result change.
+    // Update Date to actual buyer post time; delayQueuedAt keeps intake time for Filter Log.
+    const buyerPostedAt = new Date();
     await LeadDeliveryModel.updateOne(
       { _id: claimed._id, buyerStatus: "Delay Posting" },
       {
@@ -377,6 +399,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
           responseTimeMs: delivery.responseTimeMs,
           integrationRef: new Types.ObjectId(integrationId),
           scheduledPostAt: claimed.scheduledPostAt ?? null,
+          delayQueuedAt: resolvedDelayQueuedAt,
+          postedAt: buyerPostedAt,
         },
       }
     );
@@ -399,6 +423,8 @@ async function processOneDelayedDelivery(deliveryId: string): Promise<"posted" |
           buyerStatus: "Error",
           errorReason: message,
           deliveryTrace: nextTrace,
+          delayQueuedAt: resolvedDelayQueuedAt,
+          postedAt: new Date(),
         },
       }
     );

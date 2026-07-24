@@ -34,6 +34,8 @@ const leadDeliverySchema = new Schema(
     duplicateFingerprint: { type: String, required: false, trim: true, index: true },
     /** When buyerStatus is Delay Posting — calendar time the Silent post should run. */
     scheduledPostAt: { type: Date, required: false, default: null, index: true },
+    /** Original lead intake time when this delivery was queued for Delay Scheduling. */
+    delayQueuedAt: { type: Date, required: false, default: null },
     postedAt: { type: Date, required: true, index: true },
   },
   { timestamps: true }

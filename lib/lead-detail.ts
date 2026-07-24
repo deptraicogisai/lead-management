@@ -18,6 +18,7 @@ import {
   resolveBuyerLeadMoneyMetrics,
 } from "@/lib/buyer-lead-details";
 import { formatDateDisplay, formatDateTimeDisplay } from "@/lib/date-range";
+import { isDelayPostingStatus } from "@/lib/delay-posting-countdown";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
 import { buildLeadRejectResponse } from "@/lib/mapping-lead-validation";
 import { SILENT_API_NO_BUYER_MESSAGE, type MappingApiType } from "@/lib/mapping-api-type";
@@ -71,8 +72,12 @@ export type LeadDetailFilterLogRow = {
   postPrice: string;
   soldPrice: string;
   status: string;
-  /** ISO time when Delay Posting is due; empty when not delayed. */
+  /** ISO time when Delay Posting is/was due. */
   scheduledPostAt: string;
+  /** ISO intake time when delayed; empty when not a delayed delivery. */
+  delayQueuedAt: string;
+  /** True when this delivery used Delay Scheduling (pending or completed). */
+  wasDelayedPost: boolean;
   message: string;
   offeredPriceLabel: string;
   timeLabel: string;
@@ -483,6 +488,7 @@ function buildFilterLogRowFromDelivery(
     postedAt: string;
     buyerStatus: string;
     scheduledPostAt?: string | null;
+    delayQueuedAt?: string | null;
     price: number | null;
     campaignMinPrice: number | null;
     buyerDisplayId: number | null;
@@ -514,10 +520,23 @@ function buildFilterLogRowFromDelivery(
     Number.isFinite(delivery.price)
       ? formatBuyerLeadPrice(delivery.price)
       : "";
-  const scheduledPostAt =
-    delivery.buyerStatus === "Delay Posting" && delivery.scheduledPostAt
-      ? delivery.scheduledPostAt
-      : "";
+
+  const scheduledPostAt = delivery.scheduledPostAt?.trim() || "";
+  const delayQueuedAt =
+    delivery.delayQueuedAt?.trim() ||
+    (isDelayPostingStatus(delivery.buyerStatus) ? delivery.postedAt : "") ||
+    "";
+  const wasDelayedPost = Boolean(delayQueuedAt || scheduledPostAt);
+  const statusReason = resolveFilterLogMessage(delivery);
+  const message =
+    wasDelayedPost &&
+    statusReason &&
+    statusReason !== delivery.buyerStatus &&
+    !statusReason.startsWith("Scheduled for")
+      ? statusReason
+      : wasDelayedPost
+        ? ""
+        : statusReason;
 
   return {
     id: delivery.id,
@@ -530,7 +549,9 @@ function buildFilterLogRowFromDelivery(
     soldPrice: isAccept ? money.ttl : "—",
     status: delivery.buyerStatus,
     scheduledPostAt,
-    message: resolveFilterLogMessage(delivery),
+    delayQueuedAt,
+    wasDelayedPost,
+    message,
     offeredPriceLabel: offeredPrice,
     timeLabel: formatFilterLogResponseTime(delivery.responseTimeMs),
     postLeadUrl: delivery.postLeadUrl?.trim() || "",
@@ -567,6 +588,8 @@ function buildPlaceholderFilterLogRow(campaign: LeadDetailTreeCampaign): LeadDet
     soldPrice: "—",
     status: disabled ? "Disabled" : "—",
     scheduledPostAt: "",
+    delayQueuedAt: "",
+    wasDelayedPost: false,
     message: disabled ? "Campaign is disabled." : "",
     offeredPriceLabel: "",
     timeLabel: "—",
@@ -591,6 +614,7 @@ export function buildLeadFilterProcessing(params: {
     postedAt: string;
     buyerStatus: string;
     scheduledPostAt?: string | null;
+    delayQueuedAt?: string | null;
     price: number | null;
     campaignMinPrice: number | null;
     buyerDisplayId: number | null;
