@@ -5,7 +5,7 @@ import { CancelButton, FieldLabel, FormError, Input, PrimaryButton } from "@/com
 import { Modal } from "@/components/ui/modal";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
-import { CAMPAIGN_TYPE_OPTIONS } from "@/lib/campaign";
+import { CAMPAIGN_DELAY_SCHEDULING_OPTIONS, CAMPAIGN_TYPE_OPTIONS, type CampaignDelayScheduling } from "@/lib/campaign";
 import type { CampaignExportPayload } from "@/lib/campaign-export";
 import { parseCampaignImportSchema } from "@/lib/campaign-import";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,7 @@ export function CampaignCreateModal({
     verticalId: "",
     buyerId: "",
     campaignType: "",
+    delayScheduling: "Off" as CampaignDelayScheduling,
     timezone: "",
     minPrice: "0",
   });
@@ -51,7 +52,15 @@ export function CampaignCreateModal({
 
   const reset = () => {
     setCreateType("new");
-    setForm({ name: "", verticalId: "", buyerId: "", campaignType: "", timezone: "", minPrice: "0" });
+    setForm({
+      name: "",
+      verticalId: "",
+      buyerId: "",
+      campaignType: "",
+      delayScheduling: "Off",
+      timezone: "",
+      minPrice: "0",
+    });
     setImportSchema(null);
     setImportSchemaFileName("");
     setErrors({});
@@ -127,6 +136,8 @@ export function CampaignCreateModal({
                 verticalId: form.verticalId,
                 buyerId: form.buyerId,
                 campaignType: form.campaignType,
+                delayScheduling:
+                  form.campaignType === "Silent" ? form.delayScheduling : "Off",
                 timezone: form.timezone,
                 minPrice: Number(form.minPrice),
                 status: "Active",
@@ -154,7 +165,7 @@ export function CampaignCreateModal({
       open={open}
       title="Create New Campaign"
       onClose={handleClose}
-      panelClassName="max-w-2xl"
+      panelClassName="max-w-3xl"
       actions={
         <>
           <CancelButton type="button" disabled={isSaving} onClick={handleClose}>
@@ -166,32 +177,31 @@ export function CampaignCreateModal({
         </>
       }
     >
-      <div className="grid gap-4">
+      <div className="grid gap-3">
         <FormError error={errors.form} />
-        <div>
-          <FieldLabel htmlFor="campaign-create-type" label="Type" />
-          <DropdownSelect
-            id="campaign-create-type"
-            value={createType}
-            options={[
-              { value: "new", label: "New" },
-              { value: "import", label: "Import" },
-            ]}
-            onChange={(value) => {
-              const nextType = value as CampaignCreateType;
-              setCreateType(nextType);
-              setErrors((current) => ({ ...current, schemaFile: "" }));
-              if (nextType === "new") {
-                setImportSchema(null);
-                setImportSchemaFileName("");
-              }
-            }}
-            className={formSelectClassName}
-          />
-        </div>
-
-        {createType === "new" ? (
-          <>
+        <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+          <div>
+            <FieldLabel htmlFor="campaign-create-type" label="Type" />
+            <DropdownSelect
+              id="campaign-create-type"
+              value={createType}
+              options={[
+                { value: "new", label: "New" },
+                { value: "import", label: "Import" },
+              ]}
+              onChange={(value) => {
+                const nextType = value as CampaignCreateType;
+                setCreateType(nextType);
+                setErrors((current) => ({ ...current, schemaFile: "" }));
+                if (nextType === "new") {
+                  setImportSchema(null);
+                  setImportSchemaFileName("");
+                }
+              }}
+              className={formSelectClassName}
+            />
+          </div>
+          {createType === "new" ? (
             <div>
               <FieldLabel htmlFor="campaign-name" label="Name" />
               <FormError error={errors.name} />
@@ -202,68 +212,122 @@ export function CampaignCreateModal({
                 onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
               />
             </div>
-            <div>
-              <FieldLabel htmlFor="campaign-product" label="Product" />
-              <FormError error={errors.verticalId} />
-              <DropdownSelect
-                id="campaign-product"
-                value={form.verticalId}
-                options={verticalOptions.map((option) => ({
-                  value: option.id,
-                  label: option.label,
-                }))}
-                onChange={(verticalId) => setForm((current) => ({ ...current, verticalId }))}
-                placeholder="Please select product"
-                className={cn(formSelectClassName, Boolean(errors.verticalId) && fieldErrorBorderClassName)}
-              />
+          ) : (
+            <div className="hidden sm:block" aria-hidden />
+          )}
+        </div>
+
+        {createType === "new" ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+              <div>
+                <FieldLabel htmlFor="campaign-product" label="Product" />
+                <FormError error={errors.verticalId} />
+                <DropdownSelect
+                  id="campaign-product"
+                  value={form.verticalId}
+                  options={verticalOptions.map((option) => ({
+                    value: option.id,
+                    label: option.label,
+                  }))}
+                  onChange={(verticalId) => setForm((current) => ({ ...current, verticalId }))}
+                  placeholder="Please select product"
+                  className={cn(formSelectClassName, Boolean(errors.verticalId) && fieldErrorBorderClassName)}
+                />
+              </div>
+              <div>
+                <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
+                <FormError error={errors.buyerId} />
+                <DropdownSelect
+                  id="campaign-buyer"
+                  value={form.buyerId}
+                  options={buyerOptions.map((option) => ({
+                    value: option.id,
+                    label: option.label,
+                  }))}
+                  onChange={(buyerId) => setForm((current) => ({ ...current, buyerId }))}
+                  placeholder="Please select buyer"
+                  className={cn(formSelectClassName, Boolean(errors.buyerId) && fieldErrorBorderClassName)}
+                />
+              </div>
             </div>
-            <div>
-              <FieldLabel htmlFor="campaign-buyer" label="Buyer" />
-              <FormError error={errors.buyerId} />
-              <DropdownSelect
-                id="campaign-buyer"
-                value={form.buyerId}
-                options={buyerOptions.map((option) => ({
-                  value: option.id,
-                  label: option.label,
-                }))}
-                onChange={(buyerId) => setForm((current) => ({ ...current, buyerId }))}
-                placeholder="Please select buyer"
-                className={cn(formSelectClassName, Boolean(errors.buyerId) && fieldErrorBorderClassName)}
-              />
+
+            <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+              <div>
+                <FieldLabel htmlFor="campaign-type" label="Campaign type" />
+                <FormError error={errors.campaignType} />
+                <DropdownSelect
+                  id="campaign-type"
+                  value={form.campaignType}
+                  options={CAMPAIGN_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))}
+                  onChange={(campaignType) =>
+                    setForm((current) => ({
+                      ...current,
+                      campaignType,
+                      delayScheduling: campaignType === "Silent" ? current.delayScheduling : "Off",
+                    }))
+                  }
+                  placeholder="Please select Campaign type"
+                  className={cn(formSelectClassName, Boolean(errors.campaignType) && fieldErrorBorderClassName)}
+                />
+              </div>
+              {form.campaignType === "Silent" ? (
+                <div>
+                  <FieldLabel htmlFor="campaign-delay-scheduling" label="Delay Scheduling" />
+                  <DropdownSelect
+                    id="campaign-delay-scheduling"
+                    value={form.delayScheduling}
+                    options={CAMPAIGN_DELAY_SCHEDULING_OPTIONS.map((option) => ({
+                      value: option,
+                      label: option,
+                    }))}
+                    onChange={(delayScheduling) =>
+                      setForm((current) => ({
+                        ...current,
+                        delayScheduling: delayScheduling as CampaignDelayScheduling,
+                      }))
+                    }
+                    className={formSelectClassName}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
+                  <FormError error={errors.timezone} />
+                  <TimezoneSelect
+                    id="campaign-timezone"
+                    value={form.timezone}
+                    onChange={(timezone) => setForm((current) => ({ ...current, timezone }))}
+                    className={cn(formSelectClassName, Boolean(errors.timezone) && fieldErrorBorderClassName)}
+                  />
+                </div>
+              )}
             </div>
-            <div>
-              <FieldLabel htmlFor="campaign-type" label="Campaign type" />
-              <FormError error={errors.campaignType} />
-              <DropdownSelect
-                id="campaign-type"
-                value={form.campaignType}
-                options={CAMPAIGN_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))}
-                onChange={(campaignType) => setForm((current) => ({ ...current, campaignType }))}
-                placeholder="Please select Campaign type"
-                className={cn(formSelectClassName, Boolean(errors.campaignType) && fieldErrorBorderClassName)}
-              />
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
-              <FormError error={errors.timezone} />
-              <TimezoneSelect
-                id="campaign-timezone"
-                value={form.timezone}
-                onChange={(timezone) => setForm((current) => ({ ...current, timezone }))}
-                className={cn(formSelectClassName, Boolean(errors.timezone) && fieldErrorBorderClassName)}
-              />
-            </div>
-            <div>
-              <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />
-              <Input
-                id="campaign-min-price"
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.minPrice}
-                onChange={(e) => setForm((c) => ({ ...c, minPrice: e.target.value }))}
-              />
+
+            <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+              {form.campaignType === "Silent" ? (
+                <div>
+                  <FieldLabel htmlFor="campaign-timezone" label="Timezone" />
+                  <FormError error={errors.timezone} />
+                  <TimezoneSelect
+                    id="campaign-timezone"
+                    value={form.timezone}
+                    onChange={(timezone) => setForm((current) => ({ ...current, timezone }))}
+                    className={cn(formSelectClassName, Boolean(errors.timezone) && fieldErrorBorderClassName)}
+                  />
+                </div>
+              ) : null}
+              <div className={form.campaignType === "Silent" ? undefined : "sm:col-span-2 sm:max-w-[calc(50%-0.375rem)]"}>
+                <FieldLabel htmlFor="campaign-min-price" label="MinPrice" />
+                <Input
+                  id="campaign-min-price"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.minPrice}
+                  onChange={(e) => setForm((c) => ({ ...c, minPrice: e.target.value }))}
+                />
+              </div>
             </div>
           </>
         ) : (

@@ -78,10 +78,21 @@ const integrationBuilderSchema = new Schema(
     displayId: { type: Number, required: true, unique: true, index: true },
     name: { type: String, required: true, trim: true },
     status: { type: String, enum: ["Active", "Disabled", "Deleted"], required: true, default: "Active" },
+    postModel: {
+      type: String,
+      enum: ["Direct Post", "Ping Post"],
+      required: false,
+      default: "Direct Post",
+      index: true,
+    },
     verticalRef: { type: Schema.Types.ObjectId, ref: "Vertical", required: true, index: true },
     arrayMappings: { type: [arrayMappingEntrySchema], default: [] },
     requestMapping: { type: requestMappingSchema, required: false, default: undefined },
+    /** Ping-phase request mapping when postModel is Ping Post. */
+    pingRequestMapping: { type: requestMappingSchema, required: false, default: undefined },
     responseMapping: { type: responseMappingSchema, required: false, default: undefined },
+    /** Ping-phase response mapping when postModel is Ping Post. */
+    pingResponseMapping: { type: responseMappingSchema, required: false, default: undefined },
     configFields: { type: [configFieldSchema], default: [] },
   },
   { timestamps: true }

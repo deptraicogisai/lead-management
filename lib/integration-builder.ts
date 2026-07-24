@@ -1,4 +1,26 @@
 import { normalizeResponseMapping } from "@/lib/response-mapping";
+import {
+  createDefaultRequestMapping,
+  createDefaultResponseMapping,
+  getDefaultConfigFields,
+  normalizeIntegrationPostModel,
+  type IntegrationPostModel,
+} from "@/lib/integration-post-model";
+
+export type { IntegrationPostModel } from "@/lib/integration-post-model";
+export {
+  INTEGRATION_POST_MODELS,
+  DEFAULT_CONFIG_FIELDS_DIRECT,
+  DEFAULT_CONFIG_FIELDS_PING_POST,
+  convertConfigFieldsForPostModel,
+  createDefaultRequestMapping,
+  createDefaultResponseMapping,
+  getDefaultConfigFields,
+  getDefaultRequestUrl,
+  isIntegrationPostModel,
+  normalizeIntegrationPostModel,
+  rewriteRequestUrlForPostModel,
+} from "@/lib/integration-post-model";
 
 export type IntegrationBuilderStatus = "Active" | "Disabled" | "Deleted";
 
@@ -69,12 +91,17 @@ export type IntegrationBuilderRecord = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
+  postModel: IntegrationPostModel;
   verticalId: string;
   product: string;
   productLabel: string;
   arrayMappings: IntegrationBuilderArrayMappingEntry[];
   requestMapping: IntegrationBuilderRequestMapping;
+  /** Present when postModel is Ping Post; otherwise null. */
+  pingRequestMapping: IntegrationBuilderRequestMapping | null;
   responseMapping: IntegrationBuilderResponseMapping;
+  /** Present when postModel is Ping Post; otherwise null. */
+  pingResponseMapping: IntegrationBuilderResponseMapping | null;
   configFields: IntegrationBuilderConfigField[];
   createdAt: string;
   updatedAt: string;
@@ -85,23 +112,26 @@ type IntegrationBuilderDoc = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
+  postModel?: string | null;
   verticalRef?: { toString(): string } | string | null;
   arrayMappings?: unknown;
   requestMapping?: unknown;
+  pingRequestMapping?: unknown;
   responseMapping?: unknown;
+  pingResponseMapping?: unknown;
   configFields?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 };
 
-export const DEFAULT_CONFIG_FIELDS: IntegrationBuilderConfigField[] = [
-  { variableName: "url", label: "URL", type: "string", required: true },
-  { variableName: "timeout", label: "Post timeout (seconds)", type: "number", required: false },
-];
+/** @deprecated Prefer getDefaultConfigFields(postModel) — kept for Direct Post create/import. */
+export const DEFAULT_CONFIG_FIELDS: IntegrationBuilderConfigField[] = getDefaultConfigFields("Direct Post");
 
 export function normalizeConfigFields(
-  configFields?: IntegrationBuilderConfigField[] | null
+  configFields?: IntegrationBuilderConfigField[] | null,
+  postModel: IntegrationPostModel = "Direct Post"
 ): IntegrationBuilderConfigField[] {
+  const defaults = getDefaultConfigFields(postModel);
   const savedFields = Array.isArray(configFields) ? configFields : [];
   const savedByVariable = new Map(
     savedFields
@@ -116,12 +146,12 @@ export function normalizeConfigFields(
   );
 
   if (savedByVariable.size === 0) {
-    return DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field }));
+    return defaults.map((field) => ({ ...field }));
   }
 
-  const defaultVariables = new Set(DEFAULT_CONFIG_FIELDS.map((field) => field.variableName));
+  const defaultVariables = new Set(defaults.map((field) => field.variableName));
   return [
-    ...DEFAULT_CONFIG_FIELDS.map((field) => {
+    ...defaults.map((field) => {
       const saved = savedByVariable.get(field.variableName);
       return {
         variableName: field.variableName,
@@ -141,11 +171,12 @@ export function normalizeConfigFields(
   ];
 }
 
-function normalizeRequestMapping(
-  requestMapping?: IntegrationBuilderRequestMapping | null
+export function normalizeRequestMapping(
+  requestMapping?: IntegrationBuilderRequestMapping | null,
+  fallbackUrl = "{{ config.url }}"
 ): IntegrationBuilderRequestMapping {
   return {
-    requestUrl: requestMapping?.requestUrl?.trim() || "{{ config.url }}",
+    requestUrl: requestMapping?.requestUrl?.trim() || fallbackUrl,
     methodType: requestMapping?.methodType?.trim() || "POST",
     dataType: requestMapping?.dataType?.trim() || "JSON",
     payloadType: requestMapping?.payloadType?.trim() || "Object",
@@ -186,12 +217,15 @@ export function toIntegrationBuilderRecord(
     typeof doc.verticalRef === "string" ? doc.verticalRef : doc.verticalRef?.toString() ?? "";
   const product = verticalNameById.get(verticalId) ?? "";
   const verticalIndex = verticalIndexById?.get(verticalId);
+  const postModel = normalizeIntegrationPostModel(doc.postModel);
+  const isPingPost = postModel === "Ping Post";
 
   return {
     id: doc._id?.toString() ?? "",
     displayId: doc.displayId,
     name: doc.name,
     status: doc.status,
+    postModel,
     verticalId,
     product,
     productLabel: formatProductLabel(product, verticalIndex),
@@ -211,12 +245,29 @@ export function toIntegrationBuilderRecord(
         })
       : [],
     requestMapping: normalizeRequestMapping(
-      doc.requestMapping as IntegrationBuilderRequestMapping | null | undefined
+      doc.requestMapping as IntegrationBuilderRequestMapping | null | undefined,
+      isPingPost ? "{{ config.post_url }}" : "{{ config.url }}"
     ),
+    pingRequestMapping: isPingPost
+      ? normalizeRequestMapping(
+          (doc.pingRequestMapping as IntegrationBuilderRequestMapping | null | undefined) ??
+            createDefaultRequestMapping("Ping Post", "PING"),
+          "{{ config.ping_url }}"
+        )
+      : null,
     responseMapping: normalizeResponseMapping(
       doc.responseMapping as IntegrationBuilderResponseMapping | null | undefined
     ),
-    configFields: normalizeConfigFields(doc.configFields as IntegrationBuilderConfigField[] | null | undefined),
+    pingResponseMapping: isPingPost
+      ? normalizeResponseMapping(
+          (doc.pingResponseMapping as IntegrationBuilderResponseMapping | null | undefined) ??
+            createDefaultResponseMapping()
+        )
+      : null,
+    configFields: normalizeConfigFields(
+      doc.configFields as IntegrationBuilderConfigField[] | null | undefined,
+      postModel
+    ),
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : "",
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : "",
   };

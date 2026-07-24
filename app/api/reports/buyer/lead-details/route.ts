@@ -418,6 +418,9 @@ export async function GET(req: Request) {
           leadId: String(doc.sellerLeadRef ?? ""),
           postedAt: doc.postedAt ? new Date(doc.postedAt as string | Date).toISOString() : "",
           buyerStatus: String(doc.buyerStatus ?? ""),
+          scheduledPostAt: doc.scheduledPostAt
+            ? new Date(doc.scheduledPostAt as string | Date).toISOString()
+            : null,
           price: typeof doc.price === "number" ? doc.price : null,
           pingTreeType,
           processingType: processingType || null,

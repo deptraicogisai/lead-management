@@ -594,7 +594,7 @@ function buyerStatusBadgeClass(status: string, queueState?: BuyerPostQueueState)
   if (status === "Accept") return "bg-emerald-700 dark:bg-emerald-600";
   if (status === "Skipped") return "bg-slate-500";
   if (status === "Timeout" || status === "Error") return "bg-amber-700 dark:bg-amber-600";
-  if (status === "Price Reject" || status === "Price Conflict") return "bg-orange-700 dark:bg-orange-600";
+  if (status === "Price Reject" || status === "Price Conflict" || status === "Ping Reject") return "bg-orange-700 dark:bg-orange-600";
   return "bg-red-700 dark:bg-red-600";
 }
 

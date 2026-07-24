@@ -6,12 +6,17 @@ import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/in
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
   buildVerticalIndexMap,
+  createDefaultRequestMapping,
+  isIntegrationPostModel,
+  normalizeIntegrationPostModel,
+  normalizeRequestMapping,
   toIntegrationBuilderRecord,
   type IntegrationBuilderArrayMappingEntry,
   type IntegrationBuilderConfigField,
   type IntegrationBuilderRequestMapping,
   type IntegrationBuilderResponseMapping,
   type IntegrationBuilderStatus,
+  type IntegrationPostModel,
 } from "@/lib/integration-builder";
 import { validateRequestMappingTwigPayload, validateResponseMappingTwigPayload, buildTwigConfigFieldsFromIntegration } from "@/lib/twig-template";
 
@@ -20,9 +25,12 @@ type Params = { params: Promise<{ id: string }> };
 type IntegrationBuilderPayload = {
   name?: string;
   status?: IntegrationBuilderStatus;
+  postModel?: IntegrationPostModel;
   arrayMappings?: IntegrationBuilderArrayMappingEntry[];
   requestMapping?: Partial<IntegrationBuilderRequestMapping>;
+  pingRequestMapping?: Partial<IntegrationBuilderRequestMapping> | null;
   responseMapping?: IntegrationBuilderResponseMapping;
+  pingResponseMapping?: IntegrationBuilderResponseMapping | null;
   configFields?: IntegrationBuilderConfigField[];
 };
 
@@ -31,10 +39,13 @@ type IntegrationBuilderDoc = {
   displayId: number;
   name: string;
   status: IntegrationBuilderStatus;
+  postModel?: string | null;
   verticalRef?: { toString(): string } | string | null;
   arrayMappings?: IntegrationBuilderArrayMappingEntry[] | null;
   requestMapping?: IntegrationBuilderRequestMapping | null;
+  pingRequestMapping?: IntegrationBuilderRequestMapping | null;
   responseMapping?: IntegrationBuilderResponseMapping | null;
+  pingResponseMapping?: IntegrationBuilderResponseMapping | null;
   configFields?: IntegrationBuilderConfigField[] | null;
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -137,9 +148,12 @@ export async function PATCH(req: Request, context: Params) {
     if (
       !body.name?.trim() &&
       !body.status &&
+      body.postModel === undefined &&
       !body.arrayMappings &&
       !body.requestMapping &&
+      body.pingRequestMapping === undefined &&
       !body.responseMapping &&
+      body.pingResponseMapping === undefined &&
       !body.configFields
     ) {
       return NextResponse.json({ message: "Name is required." }, { status: 400 });
@@ -159,6 +173,18 @@ export async function PATCH(req: Request, context: Params) {
 
     if (body.status) {
       existing.status = body.status;
+    }
+
+    if (body.postModel !== undefined) {
+      if (!isIntegrationPostModel(body.postModel)) {
+        return NextResponse.json({ message: "Invalid post model." }, { status: 400 });
+      }
+      existing.set("postModel", body.postModel);
+
+      if (body.postModel === "Direct Post") {
+        existing.set("pingRequestMapping", undefined);
+        existing.set("pingResponseMapping", undefined);
+      }
     }
 
     if (body.arrayMappings) {
@@ -204,6 +230,92 @@ export async function PATCH(req: Request, context: Params) {
       });
     }
 
+    if (body.pingResponseMapping !== undefined) {
+      const postModel = normalizeIntegrationPostModel(
+        body.postModel ?? (existing as { postModel?: string }).postModel
+      );
+      if (body.pingResponseMapping === null || postModel === "Direct Post") {
+        existing.set("pingResponseMapping", undefined);
+      } else {
+        const twigValidationContext = await buildTwigValidationContext(existing, body);
+        const twigError = validateResponseMappingTwigPayload(
+          body.pingResponseMapping,
+          twigValidationContext
+        );
+        if (twigError) {
+          return NextResponse.json({ message: twigError }, { status: 400 });
+        }
+        existing.set("pingResponseMapping", {
+          dataType: body.pingResponseMapping.dataType?.trim() || "JSON",
+          fields: body.pingResponseMapping.fields.map((field) => ({
+            key: field.key.trim(),
+            value: field.value ?? "",
+          })),
+        });
+      }
+    }
+
+    const applyRequestMappingPatch = (
+      fieldName: "requestMapping" | "pingRequestMapping",
+      patch: Partial<IntegrationBuilderRequestMapping> | null | undefined,
+      fallbackUrl: string
+    ) => {
+      if (patch === undefined) return;
+      if (patch === null) {
+        existing.set(fieldName, undefined);
+        return;
+      }
+
+      const currentRaw = existing.get(fieldName) as
+        | IntegrationBuilderRequestMapping
+        | ({ toObject(): IntegrationBuilderRequestMapping } & IntegrationBuilderRequestMapping)
+        | null
+        | undefined;
+      const current: Partial<IntegrationBuilderRequestMapping> = currentRaw
+        ? "toObject" in currentRaw &&
+          typeof (currentRaw as { toObject?: unknown }).toObject === "function"
+          ? (currentRaw as { toObject(): IntegrationBuilderRequestMapping }).toObject()
+          : currentRaw
+        : {};
+
+      existing.set(
+        fieldName,
+        normalizeRequestMapping(
+          {
+            requestUrl:
+              patch.requestUrl !== undefined ? patch.requestUrl.trim() : (current.requestUrl ?? fallbackUrl),
+            methodType:
+              patch.methodType !== undefined ? patch.methodType.trim() : (current.methodType ?? "POST"),
+            dataType: patch.dataType !== undefined ? patch.dataType.trim() : (current.dataType ?? "JSON"),
+            payloadType:
+              patch.payloadType !== undefined
+                ? patch.payloadType.trim()
+                : (current.payloadType ?? "Object"),
+            isPrePingEnabled:
+              patch.isPrePingEnabled !== undefined
+                ? Boolean(patch.isPrePingEnabled)
+                : Boolean(current.isPrePingEnabled),
+            headers:
+              patch.headers !== undefined
+                ? patch.headers.map((row) => ({
+                    key: row.key.trim(),
+                    value: row.value ?? "",
+                  }))
+                : (current.headers ?? []),
+            dataRows:
+              patch.dataRows !== undefined
+                ? patch.dataRows.map((row) => ({
+                    name: row.name.trim(),
+                    type: row.type.trim() || "String",
+                    value: row.value ?? "",
+                  }))
+                : (current.dataRows ?? []),
+          },
+          fallbackUrl
+        )
+      );
+    };
+
     if (body.requestMapping) {
       const twigValidationContext = await buildTwigValidationContext(existing, body);
       const twigError = validateRequestMappingTwigPayload(body.requestMapping, twigValidationContext);
@@ -212,54 +324,60 @@ export async function PATCH(req: Request, context: Params) {
         return NextResponse.json({ message: twigError }, { status: 400 });
       }
 
-      const currentRequestMapping = existing.requestMapping as
-        | IntegrationBuilderRequestMapping
-        | ({ toObject(): IntegrationBuilderRequestMapping } & IntegrationBuilderRequestMapping)
-        | null
-        | undefined;
-      const current: Partial<IntegrationBuilderRequestMapping> = currentRequestMapping
-        ? "toObject" in currentRequestMapping && typeof (currentRequestMapping as { toObject?: unknown }).toObject === "function"
-          ? (currentRequestMapping as { toObject(): IntegrationBuilderRequestMapping }).toObject()
-          : currentRequestMapping
-        : {};
+      const postModel = normalizeIntegrationPostModel(
+        body.postModel ?? (existing as { postModel?: string }).postModel
+      );
+      applyRequestMappingPatch(
+        "requestMapping",
+        body.requestMapping,
+        postModel === "Ping Post" ? "{{ config.post_url }}" : "{{ config.url }}"
+      );
+    }
 
-      existing.set("requestMapping", {
-        requestUrl:
-          body.requestMapping.requestUrl !== undefined
-            ? body.requestMapping.requestUrl.trim()
-            : (current.requestUrl ?? "{{ config.url }}"),
-        methodType:
-          body.requestMapping.methodType !== undefined
-            ? body.requestMapping.methodType.trim()
-            : (current.methodType ?? "POST"),
-        dataType:
-          body.requestMapping.dataType !== undefined
-            ? body.requestMapping.dataType.trim()
-            : (current.dataType ?? "JSON"),
-        payloadType:
-          body.requestMapping.payloadType !== undefined
-            ? body.requestMapping.payloadType.trim()
-            : (current.payloadType ?? "Object"),
-        isPrePingEnabled:
-          body.requestMapping.isPrePingEnabled !== undefined
-            ? Boolean(body.requestMapping.isPrePingEnabled)
-            : Boolean(current.isPrePingEnabled),
-        headers:
-          body.requestMapping.headers !== undefined
-            ? body.requestMapping.headers.map((row) => ({
-                key: row.key.trim(),
-                value: row.value ?? "",
-              }))
-            : (current.headers ?? []),
-        dataRows:
-          body.requestMapping.dataRows !== undefined
-            ? body.requestMapping.dataRows.map((row) => ({
-                name: row.name.trim(),
-                type: row.type.trim() || "String",
-                value: row.value ?? "",
-              }))
-            : (current.dataRows ?? []),
-      });
+    if (body.pingRequestMapping !== undefined) {
+      const postModel = normalizeIntegrationPostModel(
+        body.postModel ?? (existing as { postModel?: string }).postModel
+      );
+      if (body.pingRequestMapping === null || postModel === "Direct Post") {
+        existing.set("pingRequestMapping", undefined);
+      } else {
+        const twigValidationContext = await buildTwigValidationContext(existing, body);
+        const twigError = validateRequestMappingTwigPayload(
+          body.pingRequestMapping,
+          twigValidationContext
+        );
+        if (twigError) {
+          return NextResponse.json({ message: twigError }, { status: 400 });
+        }
+        applyRequestMappingPatch(
+          "pingRequestMapping",
+          body.pingRequestMapping,
+          "{{ config.ping_url }}"
+        );
+      }
+    }
+
+    // Ensure Ping Post always has ping mappings seeded when switching model without explicit mappings.
+    const resolvedPostModel = normalizeIntegrationPostModel(
+      body.postModel ?? (existing as { postModel?: string }).postModel
+    );
+    if (resolvedPostModel === "Ping Post") {
+      if (!existing.get("pingRequestMapping")) {
+        existing.set("pingRequestMapping", createDefaultRequestMapping("Ping Post", "PING"));
+      }
+      if (!existing.get("pingResponseMapping")) {
+        existing.set("pingResponseMapping", {
+          dataType: "JSON",
+          fields: [
+            { key: "Sold::Sign", value: "" },
+            { key: "Sold::Price", value: "" },
+            { key: "Sold::RedirectUrl", value: "" },
+            { key: "Reject::Sign", value: "" },
+            { key: "Reject::Reason", value: "" },
+            { key: "Error::Reason", value: "Invalid response from buyer" },
+          ],
+        });
+      }
     }
 
     await existing.save();

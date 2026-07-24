@@ -38,10 +38,25 @@ export function resolvePostTimeoutMs(
   config: Record<string, string>,
   fallbackSeconds = DEFAULT_POST_TIMEOUT_SECONDS
 ): number {
-  const raw = config.timeout?.trim() || config.postTimeout?.trim();
+  const raw =
+    config.post_timeout?.trim() ||
+    config.timeout?.trim() ||
+    config.postTimeout?.trim();
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallbackSeconds * 1000;
+  }
+  return parsed * 1000;
+}
+
+export function resolvePingTimeoutMs(
+  config: Record<string, string>,
+  fallbackSeconds = DEFAULT_POST_TIMEOUT_SECONDS
+): number {
+  const raw = config.ping_timeout?.trim() || config.pingTimeout?.trim();
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return resolvePostTimeoutMs(config, fallbackSeconds);
   }
   return parsed * 1000;
 }

@@ -1,5 +1,6 @@
 import type { CampaignType } from "@/lib/campaign";
 import type { CampaignTestMockResponse } from "@/lib/campaign-test-mock";
+import type { IntegrationPostModel } from "@/lib/integration-post-model";
 import {
   DEFAULT_SILENT_POSTING_MODE,
   normalizeSilentPostingMode,
@@ -20,6 +21,8 @@ export type PingTreeCampaignCard = {
   productLabel: string;
   priority: number;
   testMock: CampaignTestMockResponse | null;
+  /** From campaign Integration Builder — drives Ping mock UI when Ping Post. */
+  integrationPostModel: IntegrationPostModel;
 };
 
 export type PingTreeRecord = {

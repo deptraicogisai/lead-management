@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { BuyerRequestLogModel } from "@/lib/models/buyer-request-log";
 import type { BuyerLeadStatus } from "@/lib/models/lead-delivery";
 import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
-import { resolvePostTimeoutMs } from "@/lib/campaign-integration-config";
+import { resolvePingTimeoutMs, resolvePostTimeoutMs } from "@/lib/campaign-integration-config";
 import {
   appendBuyerPostTraceStep,
   errorStepResult,
@@ -63,7 +63,12 @@ export type BuyerDeliveryResult = {
 
 function toTraceStatus(buyerStatus: BuyerLeadStatus): BuyerPostTraceStepStatus {
   if (buyerStatus === "Accept") return "pass";
-  if (buyerStatus === "Reject" || buyerStatus === "Price Reject" || buyerStatus === "Price Conflict") {
+  if (
+    buyerStatus === "Reject" ||
+    buyerStatus === "Ping Reject" ||
+    buyerStatus === "Price Reject" ||
+    buyerStatus === "Price Conflict"
+  ) {
     return "fail";
   }
   return "error";
@@ -151,12 +156,15 @@ export function prepareBuyerIntegrationRequest(params: {
   configValues: Record<string, string>;
   campaign?: Record<string, unknown>;
   mockBuyerPostUrl?: string;
+  /** Override request mapping (Ping phase uses pingRequestMapping). */
+  requestMapping?: IntegrationBuilderRecord["requestMapping"];
 }): PreparedBuyerIntegrationRequest {
   const configValues = buildIntegrationRuntimeConfig(params.integration.configFields, params.configValues);
   const systemLead = buildLeadTemplateContext(params.lead);
   const mappedValues = buildMappedValues(params.integration.arrayMappings, params.lead);
+  const requestMapping = params.requestMapping ?? params.integration.requestMapping;
   const request = buildIntegrationRequest({
-    requestMapping: params.integration.requestMapping,
+    requestMapping,
     lead: systemLead,
     config: configValues,
     mapped: mappedValues,
@@ -179,84 +187,60 @@ export function prepareBuyerIntegrationRequest(params: {
   };
 }
 
-export async function deliverLeadToBuyer(params: {
-  integration: IntegrationBuilderRecord;
+type BuyerHttpPhaseParams = {
   publisherLead: Record<string, unknown>;
   lead: Record<string, unknown>;
+  mappedValues: Record<string, string>;
+  requestMapping: IntegrationBuilderRecord["requestMapping"];
+  responseMapping: IntegrationBuilderRecord["responseMapping"];
+  requestMappingData: Record<string, unknown>;
+  buyerRequest: BuyerHttpRequestSnapshot;
+  targetUrl: string;
   configValues: Record<string, string>;
-  campaign?: Record<string, unknown>;
+  campaign: Record<string, unknown>;
   minPrice: number;
-  pingTreeType?: PingTreeCampaignType;
-  mockBuyerPostUrl?: string;
-  mockBuyerPostOptions?: MockBuyerPostOptions;
-}): Promise<BuyerDeliveryResult> {
-  const campaignType: CampaignPriceMode = resolveDeliveryPriceMode({
-    pingTreeType: params.pingTreeType,
-    campaignType: params.campaign?.campaignType,
-  });
-  let traceSteps: BuyerPostTraceStep[] = [];
-  const prepared = prepareBuyerIntegrationRequest({
-    integration: params.integration,
-    publisherLead: params.publisherLead,
-    lead: params.lead,
-    configValues: params.configValues,
-    campaign: params.campaign ?? {},
-    mockBuyerPostUrl: params.mockBuyerPostUrl,
-  });
-  const { mappedValues, requestMappingData, buyerRequest, postLeadUrl, configValues } = prepared;
-  // Only inject mock response options when we intentionally routed to the mock endpoint.
-  const targetsMockEndpoint = Boolean(params.mockBuyerPostUrl?.trim());
-  const mockBuyerPostOptions = targetsMockEndpoint ? params.mockBuyerPostOptions : undefined;
+  campaignType: CampaignPriceMode;
+  timeoutMs: number;
+  mockOptions?: MockBuyerPostOptions;
+  /** Skip buyer price floor check (Ping phase). */
+  skipPriceValidation?: boolean;
+  phase: "ping" | "post";
+  missingUrlMessage: string;
+  timeoutMessage: string;
+  failedMessage: string;
+  initialTraceSteps: BuyerPostTraceStep[];
+};
 
-  const mappedSummary =
-    Object.keys(mappedValues).length > 0
-      ? Object.entries(mappedValues)
-          .map(([slug, value]) => `${slug}=${value}`)
-          .join(", ")
-      : "No array mapping values applied.";
+async function executeBuyerHttpPhase(params: BuyerHttpPhaseParams): Promise<BuyerDeliveryResult> {
+  let traceSteps = params.initialTraceSteps;
+  const phaseLabel = params.phase === "ping" ? "Ping" : "Post";
+  const targetUrl = params.targetUrl.trim();
 
-  traceSteps = appendBuyerPostTraceStep(traceSteps, {
-    key: "prepare-buyer-payload",
-    label: "Prepare Buyer Payload",
-    status: "info",
-    summary: "Request body is built from Integration Request Mapping data rows.",
-    result: successStepResult(mappedSummary),
-  });
-
-  traceSteps = appendBuyerPostTraceStep(traceSteps, {
-    key: "build-request",
-    label: "Build Integration Request",
-    status: "pass",
-    result: successStepResult(
-      `Request ready: ${buyerRequest.method || "POST"} ${postLeadUrl || "(URL from config)"}`
-    ),
-  });
-
-  if (!postLeadUrl) {
+  if (!targetUrl) {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
-      key: "resolve-post-url",
-      label: "Resolve Post URL",
+      key: `resolve-${params.phase}-url`,
+      label: `Resolve ${phaseLabel} URL`,
       status: "fail",
-      summary: "Post URL is not configured.",
-      result: errorStepResult("Post URL is not configured."),
+      summary: params.missingUrlMessage,
+      result: errorStepResult(params.missingUrlMessage),
     });
 
     return assembleBuyerDeliveryResult({
       publisherLead: params.publisherLead,
       systemLead: params.lead,
-      mappedValues,
+      mappedValues: params.mappedValues,
       buyerRequest: buildBuyerHttpRequestSnapshot({
         url: "",
-        method: buyerRequest.method,
-        headers: buyerRequest.headers,
-        body: requestMappingData,
+        method: params.buyerRequest.method,
+        headers: params.buyerRequest.headers,
+        body: params.requestMappingData,
       }),
       buyerStatus: "Error",
       price: null,
       redirectUrl: "",
       rejectSign: "",
       rejectReason: "",
-      errorReason: "Post URL is not configured.",
+      errorReason: params.missingUrlMessage,
       postLeadUrl: "",
       responseBody: "",
       responseHeaders: {},
@@ -267,48 +251,46 @@ export async function deliverLeadToBuyer(params: {
         redirectUrl: "",
         rejectSign: "",
         rejectReason: "",
-        errorReason: "Post URL is not configured.",
+        errorReason: params.missingUrlMessage,
         mappingError: true,
       },
       traceSteps,
     });
   }
 
-  const requestDataType = params.integration.requestMapping.dataType?.trim().toUpperCase() || "JSON";
-  const outboundRequestBody =
-    mockBuyerPostOptions
-      ? {
-          ...requestMappingData,
-          [MOCK_BUYER_POST_BODY_KEY]: mockBuyerPostOptions,
-        }
-      : requestMappingData;
+  const requestDataType = params.requestMapping.dataType?.trim().toUpperCase() || "JSON";
+  const outboundRequestBody = params.mockOptions
+    ? {
+        ...params.requestMappingData,
+        [MOCK_BUYER_POST_BODY_KEY]: params.mockOptions,
+      }
+    : params.requestMappingData;
   const { body, contentType } = buildRequestBody(requestDataType, outboundRequestBody);
   const headers = {
-    ...buyerRequest.headers,
-    "Content-Type": buyerRequest.headers["Content-Type"] || contentType,
+    ...params.buyerRequest.headers,
+    "Content-Type": params.buyerRequest.headers["Content-Type"] || contentType,
   };
-  const mockHeaders = mockBuyerPostOptions ? buildMockBuyerPostHeaders(mockBuyerPostOptions) : {};
+  const mockHeaders = params.mockOptions ? buildMockBuyerPostHeaders(params.mockOptions) : {};
   const sentHeaders = {
     ...headers,
     ...mockHeaders,
   };
   const outboundRequest = buildBuyerHttpRequestSnapshot({
-    url: postLeadUrl,
-    method: buyerRequest.method,
+    url: targetUrl,
+    method: params.buyerRequest.method,
     headers: sentHeaders,
     body: outboundRequestBody,
   });
-  const timeoutMs = resolvePostTimeoutMs(configValues);
-  const timeoutSeconds = timeoutMs / 1000;
+  const timeoutSeconds = params.timeoutMs / 1000;
   const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutHandle = setTimeout(() => controller.abort(), params.timeoutMs);
 
   traceSteps = appendBuyerPostTraceStep(traceSteps, {
-    key: "post-timeout",
-    label: "Post Timeout",
+    key: `${params.phase}-timeout`,
+    label: `${phaseLabel} Timeout`,
     status: "info",
-    summary: `Buyer post timeout is ${timeoutSeconds}s.`,
-    result: successStepResult(`Waiting up to ${timeoutSeconds}s for buyer response.`),
+    summary: `Buyer ${params.phase} timeout is ${timeoutSeconds}s.`,
+    result: successStepResult(`Waiting up to ${timeoutSeconds}s for buyer ${params.phase} response.`),
   });
 
   let httpStatus = 0;
@@ -318,7 +300,7 @@ export async function deliverLeadToBuyer(params: {
   let responseTimeMs: number | null = null;
 
   try {
-    const response = await fetch(postLeadUrl, {
+    const response = await fetch(targetUrl, {
       method: outboundRequest.method || "POST",
       headers: sentHeaders,
       body,
@@ -332,8 +314,8 @@ export async function deliverLeadToBuyer(params: {
     const httpErrorReason = response.ok ? "" : resolveBuyerPostErrorReason(httpStatus, responseBody);
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
-      key: "http-post",
-      label: "HTTP Post to Buyer",
+      key: `http-${params.phase}`,
+      label: `HTTP ${phaseLabel} to Buyer`,
       status: response.ok ? "pass" : "error",
       summary: response.ok ? `Buyer returned HTTP ${httpStatus}.` : httpErrorReason,
       result: response.ok
@@ -341,29 +323,28 @@ export async function deliverLeadToBuyer(params: {
         : errorStepResult(httpErrorReason, `HTTP ${httpStatus}`),
     });
 
-    const parsed = parseIntegrationResponse(
-      params.integration.responseMapping,
-      responseBody,
-      params.campaign ?? {}
+    const parsed = parseIntegrationResponse(params.responseMapping, responseBody, params.campaign);
+    const inferred = inferBuyerStatusFromParsedResponse(
+      parsed,
+      params.skipPriceValidation ? 0 : params.minPrice,
+      params.skipPriceValidation ? "Silent" : params.campaignType
     );
-    const inferred = inferBuyerStatusFromParsedResponse(parsed, params.minPrice, campaignType);
     const parseSuccess = inferred.status === "Accept";
-    const parseError =
-      inferred.reason || parsed.rejectReason || parsed.errorReason || undefined;
+    const parseError = inferred.reason || parsed.rejectReason || parsed.errorReason || undefined;
     const resolvedPrice =
-      inferred.status === "Accept"
-        ? resolveAcceptedBuyerPrice(parsed, params.minPrice, campaignType)
+      inferred.status === "Accept" && !params.skipPriceValidation
+        ? resolveAcceptedBuyerPrice(parsed, params.minPrice, params.campaignType)
         : parsed.soldPrice;
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
-      key: "parse-response",
-      label: "Parse Buyer Response",
+      key: `parse-${params.phase}-response`,
+      label: `Parse Buyer ${phaseLabel} Response`,
       status: toTraceStatus(inferred.status),
-      summary: inferred.reason || parsed.errorReason || `Buyer status: ${inferred.status}.`,
+      summary: inferred.reason || parsed.errorReason || `Buyer ${params.phase} status: ${inferred.status}.`,
       result: parseSuccess
-        ? successStepResult(`Buyer accepted. Status: ${inferred.status}.`)
+        ? successStepResult(`Buyer ${params.phase} accepted. Status: ${inferred.status}.`)
         : errorStepResult(
-            parseError || `Buyer status: ${inferred.status}.`,
+            parseError || `Buyer ${params.phase} status: ${inferred.status}.`,
             `Buyer status: ${inferred.status}`
           ),
     });
@@ -372,7 +353,7 @@ export async function deliverLeadToBuyer(params: {
       return assembleBuyerDeliveryResult({
         publisherLead: params.publisherLead,
         systemLead: params.lead,
-        mappedValues,
+        mappedValues: params.mappedValues,
         buyerRequest: outboundRequest,
         buyerStatus: "Error",
         price: parsed.soldPrice,
@@ -380,7 +361,7 @@ export async function deliverLeadToBuyer(params: {
         rejectSign: parsed.rejectSign,
         rejectReason: parsed.rejectReason,
         errorReason: httpErrorReason,
-        postLeadUrl,
+        postLeadUrl: targetUrl,
         responseBody,
         responseHeaders,
         httpStatus,
@@ -399,7 +380,7 @@ export async function deliverLeadToBuyer(params: {
       return assembleBuyerDeliveryResult({
         publisherLead: params.publisherLead,
         systemLead: params.lead,
-        mappedValues,
+        mappedValues: params.mappedValues,
         buyerRequest: outboundRequest,
         buyerStatus: "Error",
         price: parsed.soldPrice,
@@ -407,7 +388,7 @@ export async function deliverLeadToBuyer(params: {
         rejectSign: parsed.rejectSign,
         rejectReason: parsed.rejectReason,
         errorReason: httpErrorReason,
-        postLeadUrl,
+        postLeadUrl: targetUrl,
         responseBody,
         responseHeaders,
         httpStatus,
@@ -425,7 +406,7 @@ export async function deliverLeadToBuyer(params: {
     return assembleBuyerDeliveryResult({
       publisherLead: params.publisherLead,
       systemLead: params.lead,
-      mappedValues,
+      mappedValues: params.mappedValues,
       buyerRequest: outboundRequest,
       buyerStatus: inferred.status,
       price: resolvedPrice,
@@ -436,7 +417,7 @@ export async function deliverLeadToBuyer(params: {
           ? parsed.rejectReason
           : inferred.reason || parsed.rejectReason,
       errorReason: resolvedErrorReason,
-      postLeadUrl,
+      postLeadUrl: targetUrl,
       responseBody,
       responseHeaders,
       httpStatus,
@@ -448,11 +429,11 @@ export async function deliverLeadToBuyer(params: {
     responseTimeMs = Date.now() - requestStartedAt;
     const isTimeout = error instanceof Error && error.name === "AbortError";
     const buyerStatus = isTimeout ? "Timeout" : "Error";
-    const errorReason = isTimeout ? "Buyer post request timed out." : "Failed to post lead to buyer.";
+    const errorReason = isTimeout ? params.timeoutMessage : params.failedMessage;
 
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
-      key: "http-post",
-      label: "HTTP Post to Buyer",
+      key: `http-${params.phase}`,
+      label: `HTTP ${phaseLabel} to Buyer`,
       status: "error",
       summary: errorReason,
       result: errorStepResult(errorReason),
@@ -461,7 +442,7 @@ export async function deliverLeadToBuyer(params: {
     return assembleBuyerDeliveryResult({
       publisherLead: params.publisherLead,
       systemLead: params.lead,
-      mappedValues,
+      mappedValues: params.mappedValues,
       buyerRequest: outboundRequest,
       buyerStatus,
       price: null,
@@ -469,7 +450,7 @@ export async function deliverLeadToBuyer(params: {
       rejectSign: "",
       rejectReason: "",
       errorReason,
-      postLeadUrl,
+      postLeadUrl: targetUrl,
       responseBody,
       responseHeaders,
       httpStatus,
@@ -488,6 +469,188 @@ export async function deliverLeadToBuyer(params: {
   } finally {
     clearTimeout(timeoutHandle);
   }
+}
+
+export async function deliverLeadToBuyer(params: {
+  integration: IntegrationBuilderRecord;
+  publisherLead: Record<string, unknown>;
+  lead: Record<string, unknown>;
+  configValues: Record<string, string>;
+  campaign?: Record<string, unknown>;
+  minPrice: number;
+  pingTreeType?: PingTreeCampaignType;
+  mockBuyerPostUrl?: string;
+  mockBuyerPingUrl?: string;
+  mockBuyerPostOptions?: MockBuyerPostOptions;
+  mockBuyerPingOptions?: MockBuyerPostOptions;
+}): Promise<BuyerDeliveryResult> {
+  const campaignType: CampaignPriceMode = resolveDeliveryPriceMode({
+    pingTreeType: params.pingTreeType,
+    campaignType: params.campaign?.campaignType,
+  });
+  const campaign = params.campaign ?? {};
+  const isPingPost = params.integration.postModel === "Ping Post";
+
+  const postPrepared = prepareBuyerIntegrationRequest({
+    integration: params.integration,
+    publisherLead: params.publisherLead,
+    lead: params.lead,
+    configValues: params.configValues,
+    campaign,
+    mockBuyerPostUrl: params.mockBuyerPostUrl,
+    requestMapping: params.integration.requestMapping,
+  });
+  const { mappedValues, configValues } = postPrepared;
+
+  const mappedSummary =
+    Object.keys(mappedValues).length > 0
+      ? Object.entries(mappedValues)
+          .map(([slug, value]) => `${slug}=${value}`)
+          .join(", ")
+      : "No array mapping values applied.";
+
+  let traceSteps = appendBuyerPostTraceStep([], {
+    key: "prepare-buyer-payload",
+    label: "Prepare Buyer Payload",
+    status: "info",
+    summary: isPingPost
+      ? "Request bodies are built from Ping and Post Request Mapping data rows."
+      : "Request body is built from Integration Request Mapping data rows.",
+    result: successStepResult(mappedSummary),
+  });
+
+  const targetsMockEndpoint = Boolean(params.mockBuyerPostUrl?.trim() || params.mockBuyerPingUrl?.trim());
+  const mockBuyerPostOptions = targetsMockEndpoint ? params.mockBuyerPostOptions : undefined;
+  const mockBuyerPingOptions = targetsMockEndpoint ? params.mockBuyerPingOptions : undefined;
+
+  if (isPingPost) {
+    const pingMapping =
+      params.integration.pingRequestMapping ?? params.integration.requestMapping;
+    const pingResponseMapping =
+      params.integration.pingResponseMapping ?? params.integration.responseMapping;
+    const pingPrepared = prepareBuyerIntegrationRequest({
+      integration: params.integration,
+      publisherLead: params.publisherLead,
+      lead: params.lead,
+      configValues: params.configValues,
+      campaign,
+      mockBuyerPostUrl: params.mockBuyerPingUrl,
+      requestMapping: pingMapping,
+    });
+
+    traceSteps = appendBuyerPostTraceStep(traceSteps, {
+      key: "build-ping-request",
+      label: "Build Ping Request",
+      status: "pass",
+      result: successStepResult(
+        `Ping ready: ${pingPrepared.buyerRequest.method || "POST"} ${
+          pingPrepared.postLeadUrl || "(URL from config)"
+        }`
+      ),
+    });
+
+    const pingResult = await executeBuyerHttpPhase({
+      publisherLead: params.publisherLead,
+      lead: params.lead,
+      mappedValues,
+      requestMapping: pingMapping,
+      responseMapping: pingResponseMapping,
+      requestMappingData: pingPrepared.requestMappingData,
+      buyerRequest: pingPrepared.buyerRequest,
+      targetUrl: pingPrepared.postLeadUrl,
+      configValues,
+      campaign,
+      minPrice: params.minPrice,
+      campaignType,
+      timeoutMs: resolvePingTimeoutMs(configValues),
+      mockOptions: mockBuyerPingOptions,
+      skipPriceValidation: true,
+      phase: "ping",
+      missingUrlMessage: "Ping URL is not configured.",
+      timeoutMessage: "Buyer ping request timed out.",
+      failedMessage: "Failed to ping buyer.",
+      initialTraceSteps: traceSteps,
+    });
+
+    if (pingResult.buyerStatus !== "Accept") {
+      const bodyLooksLikeReject = (() => {
+        try {
+          const parsed = JSON.parse(pingResult.responseBody || "{}") as Record<string, unknown>;
+          const status = String(parsed.status ?? parsed.status_text ?? "").trim().toLowerCase();
+          return status === "reject" || status === "rejected" || status === "declined" || status === "2";
+        } catch {
+          return /"status"\s*:\s*("reject"|2)/i.test(pingResult.responseBody || "");
+        }
+      })();
+
+      const isPingReject =
+        pingResult.buyerStatus === "Reject" ||
+        pingResult.buyerStatus === "Price Reject" ||
+        pingResult.buyerStatus === "Ping Reject" ||
+        (pingResult.buyerStatus === "Error" && bodyLooksLikeReject);
+
+      const rejectReason =
+        pingResult.rejectReason?.trim() ||
+        (isPingReject
+          ? pingResult.errorReason?.trim() || "Buyer rejected the ping."
+          : "") ||
+        "Buyer rejected the ping.";
+
+      return {
+        ...pingResult,
+        buyerStatus: isPingReject
+          ? "Ping Reject"
+          : pingResult.buyerStatus === "Timeout"
+            ? "Timeout"
+            : "Error",
+        rejectReason: isPingReject ? rejectReason : pingResult.rejectReason,
+        errorReason: isPingReject
+          ? ""
+          : pingResult.errorReason || "Ping failed unexpectedly.",
+      };
+    }
+
+    traceSteps = appendBuyerPostTraceStep(pingResult.traceSteps, {
+      key: "ping-accepted",
+      label: "Ping Accepted",
+      status: "pass",
+      summary: "Ping accepted. Continuing to Post.",
+      result: successStepResult("Ping Accept — sending Post request."),
+    });
+  }
+
+  traceSteps = appendBuyerPostTraceStep(traceSteps, {
+    key: "build-request",
+    label: "Build Integration Request",
+    status: "pass",
+    result: successStepResult(
+      `Request ready: ${postPrepared.buyerRequest.method || "POST"} ${
+        postPrepared.postLeadUrl || "(URL from config)"
+      }`
+    ),
+  });
+
+  return executeBuyerHttpPhase({
+    publisherLead: params.publisherLead,
+    lead: params.lead,
+    mappedValues,
+    requestMapping: params.integration.requestMapping,
+    responseMapping: params.integration.responseMapping,
+    requestMappingData: postPrepared.requestMappingData,
+    buyerRequest: postPrepared.buyerRequest,
+    targetUrl: postPrepared.postLeadUrl,
+    configValues,
+    campaign,
+    minPrice: params.minPrice,
+    campaignType,
+    timeoutMs: resolvePostTimeoutMs(configValues),
+    mockOptions: mockBuyerPostOptions,
+    phase: "post",
+    missingUrlMessage: "Post URL is not configured.",
+    timeoutMessage: "Buyer post request timed out.",
+    failedMessage: "Failed to post lead to buyer.",
+    initialTraceSteps: traceSteps,
+  });
 }
 
 export async function createBuyerDeliveryLog(params: {

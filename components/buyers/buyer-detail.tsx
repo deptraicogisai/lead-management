@@ -19,7 +19,7 @@ import {
 import { FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
 import { DropdownSelect } from "@/components/ui/dropdown-select";
 import { CopyableValue } from "@/components/ui/copy-button";
-import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
+import { buildBuyerLeadApiUrls, generateBuyerApiKey } from "@/lib/buyer-lead-api";
 import {
   SearchableMultiSelect,
   type SearchableMultiSelectOption,
@@ -265,8 +265,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
   const handleGenerateApi = () => {
     const nextApiKey = generateBuyerApiKey();
     const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const urls = origin ? buildBuyerLeadApiUrls(origin) : null;
     setApiKey(nextApiKey);
-    setPostLeadUrl(origin ? buildBuyerLeadPostUrl(origin) : postLeadUrl);
+    setPostLeadUrl(urls?.postUrl || postLeadUrl);
     if (saveError) setSaveError("");
   };
 
@@ -541,9 +542,9 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Used while Test Mode is on. Post to{" "}
-                      <code className="text-[11px]">/api/lists/addlead</code> with{" "}
-                      <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
+                      Used while Test Mode is on. Use Ping URL for Ping Post phase and Post URL for the
+                      final post. Send <code className="text-[11px]">x-api-key</code> in the integration
+                      request mapping header.
                     </p>
                     <SecondaryButton type="button" onClick={handleGenerateApi}>
                       Generate API
@@ -558,14 +559,49 @@ export function BuyerDetail({ buyer }: BuyerDetailProps) {
                         <Input id="buyer-api-key" value="" readOnly placeholder="Not generated yet" />
                       )}
                     </div>
-                    <div>
-                      <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">API URL</p>
-                      {postLeadUrl ? (
-                        <CopyableValue value={postLeadUrl} copyLabel="Copy API URL" />
-                      ) : (
-                        <Input id="buyer-post-lead-url" value="" readOnly placeholder="Generated automatically" />
-                      )}
-                    </div>
+                    {(() => {
+                      const origin = typeof window !== "undefined" ? window.location.origin : "";
+                      const urls = origin ? buildBuyerLeadApiUrls(origin) : null;
+                      const pingUrl = urls?.pingUrl ?? "";
+                      const postUrl = postLeadUrl || urls?.postUrl || "";
+                      return (
+                        <>
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                              Ping URL
+                            </p>
+                            <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              <code className="text-[11px]">/api/lists/addlead/ping</code> — mock Ping
+                              response
+                            </p>
+                            {pingUrl ? (
+                              <CopyableValue value={pingUrl} copyLabel="Copy Ping URL" />
+                            ) : (
+                              <Input id="buyer-ping-lead-url" value="" readOnly placeholder="Generate API first" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                              Post URL
+                            </p>
+                            <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              <code className="text-[11px]">/api/lists/addlead/post</code> — mock Post
+                              response
+                            </p>
+                            {postUrl ? (
+                              <CopyableValue value={postUrl} copyLabel="Copy Post URL" />
+                            ) : (
+                              <Input
+                                id="buyer-post-lead-url"
+                                value=""
+                                readOnly
+                                placeholder="Generated automatically"
+                              />
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )

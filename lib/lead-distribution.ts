@@ -1,5 +1,9 @@
 import { Types } from "mongoose";
-import { resolveBuyerMockPostUrl, isBuyerLeadMockEndpoint } from "@/lib/buyer-lead-api";
+import {
+  resolveBuyerMockPingUrl,
+  resolveBuyerMockPostUrl,
+  isBuyerLeadMockEndpoint,
+} from "@/lib/buyer-lead-api";
 import { CampaignModel } from "@/lib/models/campaign";
 import { BuyerModel } from "@/lib/models/buyer";
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
@@ -50,7 +54,12 @@ import {
   type MappingRevShareSettingsRecord,
 } from "@/lib/mapping-rev-share-settings";
 import type { MockBuyerPostOptions } from "@/lib/mock-buyer-post";
-import { mergeMockBuyerPostOptions, normalizeCampaignTestMocks, type CampaignTestMockResponse } from "@/lib/campaign-test-mock";
+import {
+  campaignTestMockToPingMockBuyerPostOptions,
+  mergeMockBuyerPostOptions,
+  normalizeCampaignTestMocks,
+  type CampaignTestMockResponse,
+} from "@/lib/campaign-test-mock";
 import type { MappingFieldDoc } from "@/lib/mapping-field-api";
 import {
   buildBuyerPostAttemptSnapshot,
@@ -64,6 +73,15 @@ import {
 import type { BuyerPostValidationCheck } from "@/lib/buyer-post-trace";
 import type { CampaignIntakeRuleGroup } from "@/lib/campaign-test-lead-intake";
 import { sortBuyerPostAttemptViews, type PendingBuyerPostCampaign } from "@/lib/test-lead-buyer-progress";
+import {
+  computeDelayedPostAt,
+  resolveCampaignDelayMs,
+} from "@/lib/campaign-delay-scheduling";
+import {
+  buildDelayedSilentPostRequestPayload,
+  processDueDelayedSilentPosts,
+  type DelayedSilentPostContext,
+} from "@/lib/delayed-silent-post";
 
 export type PublisherLeadStatus = "Sold" | "Reject" | "Post Error" | "Test";
 
@@ -98,6 +116,8 @@ export type CampaignDeliveryLog = {
   campaignTimezone?: string;
   campaignMinPrice?: number;
   postedAt?: string;
+  /** ISO time when a delayed Silent post is scheduled to run. */
+  scheduledPostAt?: string;
   responseTimeMs?: number | null;
 };
 
@@ -262,6 +282,7 @@ function hasAttemptedBuyerResponse(deliveries: CampaignDeliveryLog[]) {
     (entry) =>
       entry.buyerStatus === "Accept" ||
       entry.buyerStatus === "Reject" ||
+      entry.buyerStatus === "Ping Reject" ||
       entry.buyerStatus === "Price Reject" ||
       entry.buyerStatus === "Price Conflict" ||
       entry.buyerStatus === "Error" ||
@@ -959,20 +980,25 @@ async function processCampaignAttempt(params: {
   const mockBuyerPostUrl = params.mockBuyerPost
     ? resolveBuyerMockPostUrl(buyer, params.origin, buyerId)
     : undefined;
-  const campaignMockOptions = mergeMockBuyerPostOptions(
-    params.mockBuyerPostOptions,
-    params.campaignTestMocks?.[params.campaignId] ?? null
-  );
+  const mockBuyerPingUrl = params.mockBuyerPost
+    ? resolveBuyerMockPingUrl(buyer, params.origin)
+    : undefined;
+  const campaignMock = params.campaignTestMocks?.[params.campaignId] ?? null;
+  const campaignMockOptions = mergeMockBuyerPostOptions(params.mockBuyerPostOptions, campaignMock);
+  const campaignPingMockOptions = campaignTestMockToPingMockBuyerPostOptions(campaignMock);
   const resolvedPostUrl =
     mockBuyerPostUrl?.trim() ||
     normalizeCampaignIntegrationConfigValues(campaign.integrationSettings).url?.trim() ||
+    normalizeCampaignIntegrationConfigValues(campaign.integrationSettings).post_url?.trim() ||
     buyer.postLeadUrl?.trim() ||
     "";
   // Only treat the request as a mock buyer post when Test Mode / explicit mock is on.
   // A leftover /api/lists/addlead URL must not apply campaign mock data in live mode.
   const usesMockEndpoint =
     params.mockBuyerPost &&
-    (Boolean(mockBuyerPostUrl) || isBuyerLeadMockEndpoint(resolvedPostUrl));
+    (Boolean(mockBuyerPostUrl) ||
+      Boolean(mockBuyerPingUrl) ||
+      isBuyerLeadMockEndpoint(resolvedPostUrl));
 
   if (usesMockEndpoint) {
     traceSteps = appendBuyerPostTraceStep(traceSteps, {
@@ -982,6 +1008,75 @@ async function processCampaignAttempt(params: {
       summary: "Test mode is using the internal mock buyer endpoint.",
       result: skippedStepResult("Using internal mock buyer endpoint."),
     });
+  }
+
+  const delayMs = resolveCampaignDelayMs(campaign.delayScheduling, campaign.campaignType);
+  if (delayMs > 0 && params.pingTreeType === "Silent") {
+    const scheduledPostAt = computeDelayedPostAt(params.postedAt, delayMs);
+    const delayContext: DelayedSilentPostContext = {
+      kind: "delayed_silent_post",
+      origin: params.origin,
+      mockBuyerPost: params.mockBuyerPost,
+      mockBuyerPostOptions: params.mockBuyerPostOptions,
+      campaignTestMocks: params.campaignTestMocks,
+      revShareSettings: params.revShareSettings,
+      publisherApiType: params.publisherApiType,
+    };
+
+    traceSteps = appendBuyerPostTraceStep(traceSteps, {
+      key: "delay-scheduling",
+      label: "Delay Scheduling",
+      status: "info",
+      summary: `Silent post delayed until ${scheduledPostAt.toISOString()}.`,
+      result: successStepResult(`Silent post delayed until ${scheduledPostAt.toISOString()}.`),
+    });
+
+    const delayedLog: CampaignDeliveryLog = {
+      campaignId: params.campaignId,
+      campaignName,
+      buyerId,
+      buyerCompany,
+      pingTreeType: params.pingTreeType,
+      campaignOrder: params.campaignOrder,
+      buyerStatus: "Delay Posting",
+      validationErrors: [],
+      price: null,
+      redirectUrl: "",
+      rejectSign: "",
+      rejectReason: "",
+      errorReason: `Scheduled for ${scheduledPostAt.toISOString()}`,
+      postLeadUrl: resolvedPostUrl,
+      httpStatus: 0,
+      traceSteps,
+      campaignValidationChecks,
+      campaignIntakeRuleGroups,
+      campaignTimezone,
+      campaignMinPrice,
+      postedAt: params.postedAt.toISOString(),
+      scheduledPostAt: scheduledPostAt.toISOString(),
+    };
+
+    await LeadDeliveryModel.create({
+      sellerLeadRef: new Types.ObjectId(params.sellerLeadId),
+      sellerRef: new Types.ObjectId(params.sellerRefId),
+      verticalRef: new Types.ObjectId(params.verticalRefId),
+      campaignRef: new Types.ObjectId(params.campaignId),
+      buyerRef: new Types.ObjectId(buyerId),
+      integrationRef: new Types.ObjectId(integrationId),
+      pingTreeType: params.pingTreeType,
+      processingType,
+      campaignOrder: params.campaignOrder,
+      buyerStatus: "Delay Posting",
+      errorReason: delayedLog.errorReason,
+      postLeadUrl: resolvedPostUrl,
+      requestPayload: buildDelayedSilentPostRequestPayload(delayContext),
+      deliveryTrace: traceSteps,
+      duplicateFingerprint,
+      scheduledPostAt,
+      postedAt: params.postedAt,
+    });
+
+    return delayedLog;
   }
 
   const buyerApiKey = buyer.apiKey?.trim() ?? "";
@@ -1008,7 +1103,9 @@ async function processCampaignAttempt(params: {
     minPrice: campaign.minPrice ?? 0,
     pingTreeType: params.pingTreeType,
     mockBuyerPostUrl,
+    mockBuyerPingUrl: usesMockEndpoint ? mockBuyerPingUrl : undefined,
     mockBuyerPostOptions: usesMockEndpoint ? campaignMockOptions : undefined,
+    mockBuyerPingOptions: usesMockEndpoint ? campaignPingMockOptions : undefined,
   });
 
   traceSteps = [...traceSteps, ...delivery.traceSteps];
@@ -1842,6 +1939,9 @@ export async function distributeLeadAfterIntake(params: {
             (entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout")
         )
       : coreDeliveries.find((entry) => entry.buyerStatus === "Error" || entry.buyerStatus === "Timeout");
+
+  // Opportunistically flush any due delayed Silent posts (non-blocking).
+  void processDueDelayedSilentPosts().catch(() => undefined);
 
   return {
     publisherStatus,

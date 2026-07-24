@@ -7,9 +7,11 @@ import {
   defaultScheduleRule,
   findScheduleRuleOverlap,
   getScheduleRuleOverlapMessage,
+  normalizeCampaignDelayScheduling,
   normalizeGeneralFiltersForStorage,
   toCampaignRecord,
   validateScheduleRulesNoOverlap,
+  type CampaignDelayScheduling,
   type CampaignDuplicatesSettings,
   type CampaignGeneralFilter,
   type CampaignScheduleRule,
@@ -24,6 +26,7 @@ import { DEFAULT_POST_TIMEOUT_SECONDS, sanitizeIntegrationConfigValues } from "@
 import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import { toIntegrationBuilderRecord, type IntegrationBuilderConfigField } from "@/lib/integration-builder";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
+import { cancelPendingDelayedSilentPosts } from "@/lib/delayed-silent-post";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -32,6 +35,7 @@ type CampaignUpdatePayload = {
   name?: string;
   status?: CampaignStatus;
   campaignType?: string;
+  delayScheduling?: CampaignDelayScheduling | string;
   timezone?: string;
   minPrice?: number | string;
   duplicates?: CampaignDuplicatesSettings;
@@ -82,11 +86,24 @@ export async function PATCH(req: Request, context: Params) {
       return NextResponse.json({ message: "Campaign not found." }, { status: 404 });
     }
 
+    const previousStatus = campaign.status;
+    const previousCampaignType = campaign.campaignType;
+
     if (body.section === "general" || !body.section) {
       if (body.name?.trim()) campaign.name = body.name.trim();
       if (body.status) campaign.status = body.status;
       if (body.campaignType === "Redirect" || body.campaignType === "Silent") {
         campaign.campaignType = body.campaignType;
+      }
+      if (body.delayScheduling !== undefined || body.campaignType === "Redirect") {
+        const nextType =
+          body.campaignType === "Redirect" || body.campaignType === "Silent"
+            ? body.campaignType
+            : campaign.campaignType;
+        campaign.delayScheduling =
+          nextType === "Silent"
+            ? normalizeCampaignDelayScheduling(body.delayScheduling ?? campaign.delayScheduling)
+            : "Off";
       }
       if (body.timezone?.trim()) campaign.timezone = body.timezone.trim();
       if (body.minPrice !== undefined) {
@@ -203,6 +220,21 @@ export async function PATCH(req: Request, context: Params) {
 
     await campaign.save();
 
+    const becameInactive =
+      previousStatus === "Active" &&
+      (campaign.status === "Disabled" || campaign.status === "Deleted");
+    const leftSilent =
+      previousCampaignType === "Silent" && campaign.campaignType !== "Silent";
+
+    if (becameInactive || leftSilent) {
+      await cancelPendingDelayedSilentPosts(
+        id,
+        becameInactive
+          ? "Campaign disabled — delayed post cancelled."
+          : "Campaign is no longer Silent — delayed post cancelled."
+      );
+    }
+
     const lookup = await buildCampaignLookupContext();
 
     return NextResponse.json(toCampaignRecord(campaign.toObject(), lookup));
@@ -225,6 +257,8 @@ export async function DELETE(_: Request, context: Params) {
     if (!campaign) {
       return NextResponse.json({ message: "Campaign not found." }, { status: 404 });
     }
+
+    await cancelPendingDelayedSilentPosts(id, "Campaign deleted — delayed post cancelled.");
 
     return NextResponse.json({ message: "Campaign deleted." });
   } catch {

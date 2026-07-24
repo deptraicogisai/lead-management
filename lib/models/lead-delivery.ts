@@ -32,12 +32,15 @@ const leadDeliverySchema = new Schema(
     httpStatus: { type: Number, required: false, default: 0 },
     responseTimeMs: { type: Number, required: false, default: null },
     duplicateFingerprint: { type: String, required: false, trim: true, index: true },
+    /** When buyerStatus is Delay Posting — calendar time the Silent post should run. */
+    scheduledPostAt: { type: Date, required: false, default: null, index: true },
     postedAt: { type: Date, required: true, index: true },
   },
   { timestamps: true }
 );
 
 leadDeliverySchema.index({ sellerLeadRef: 1, campaignOrder: 1 });
+leadDeliverySchema.index({ buyerStatus: 1, scheduledPostAt: 1 });
 
 if (models.LeadDelivery) {
   delete mongoose.models.LeadDelivery;

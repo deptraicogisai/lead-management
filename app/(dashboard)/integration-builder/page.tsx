@@ -40,7 +40,11 @@ import {
   downloadJsonFile,
   resolveIntegrationExportProductId,
 } from "@/lib/integration-builder-export";
-import type { IntegrationBuilderRecord } from "@/lib/integration-builder";
+import {
+  INTEGRATION_POST_MODELS,
+  type IntegrationBuilderRecord,
+  type IntegrationPostModel,
+} from "@/lib/integration-builder";
 import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
 import { parseIntegrationBuilderImportSchema } from "@/lib/integration-builder-import";
 
@@ -80,6 +84,7 @@ export default function IntegrationBuilderPage() {
   const [addForm, setAddForm] = useState({
     name: "",
     verticalId: "",
+    postModel: "Direct Post" as IntegrationPostModel,
     type: "new" as IntegrationBuilderCreateType,
   });
   const [importSchema, setImportSchema] = useState<IntegrationBuilderExportPayload | null>(null);
@@ -328,6 +333,7 @@ export default function IntegrationBuilderPage() {
     setAddForm({
       name: "",
       verticalId: "",
+      postModel: "Direct Post",
       type: "new",
     });
     setImportSchema(null);
@@ -541,6 +547,7 @@ export default function IntegrationBuilderPage() {
             : {
                 name: addForm.name.trim(),
                 verticalId: addForm.verticalId,
+                postModel: addForm.postModel,
                 createType: "new",
               }
         ),
@@ -729,6 +736,25 @@ export default function IntegrationBuilderPage() {
                   }
                   placeholder={isLoadingVerticals ? "Loading verticals..." : "Please select product"}
                   className={cn(addFormSelectClassName, Boolean(addFormErrors.verticalId) && fieldErrorBorderClassName)}
+                />
+              </div>
+
+              <div>
+                <FieldLabel htmlFor="integration-builder-post-model" label="Post Model" />
+                <DropdownSelect
+                  id="integration-builder-post-model"
+                  value={addForm.postModel}
+                  options={INTEGRATION_POST_MODELS.map((model) => ({
+                    value: model,
+                    label: model,
+                  }))}
+                  onChange={(postModel) =>
+                    setAddForm((current) => ({
+                      ...current,
+                      postModel: postModel as IntegrationPostModel,
+                    }))
+                  }
+                  className={addFormSelectClassName}
                 />
               </div>
             </>

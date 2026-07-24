@@ -1,5 +1,6 @@
 import {
   defaultCampaignDuplicates,
+  normalizeCampaignDelayScheduling,
   normalizeGeneralFiltersForStorage,
   resolveCampaignTimezone,
   type CampaignGeneralFilter,
@@ -85,6 +86,10 @@ export function buildCampaignImportCreateData(schema: CampaignExportPayload, ver
     buyerRef: schema.buyerId.trim(),
     integrationRef: schema.integrationId?.trim() || undefined,
     campaignType: schema.campaignType as CampaignType,
+    delayScheduling:
+      schema.campaignType === "Silent"
+        ? normalizeCampaignDelayScheduling(schema.delayScheduling)
+        : "Off",
     timezone: resolveCampaignTimezone(schema.timezone),
     minPrice: Number.isFinite(minPrice) ? minPrice : 0,
     duplicates: schema.duplicates ?? defaultCampaignDuplicates(),

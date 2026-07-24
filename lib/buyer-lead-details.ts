@@ -5,6 +5,7 @@ import {
 import { BUYER_LEAD_DETAILS_STATUS_OPTIONS, BUYER_LEAD_REJECT_GROUP_STATUSES } from "@/lib/buyer-lead-status";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { isLeadRedirectConfirmed } from "@/lib/publisher-redirect";
+import { isDelayPostingStatus } from "@/lib/delay-posting-countdown";
 import {
   buildPublisherLeadDisplayCode,
   formatPingTreeSnapshotDisplayLabel,
@@ -22,6 +23,8 @@ export type BuyerLeadDetailsRow = {
   displayLeadCode: string;
   postedAt: string;
   postStatus: string;
+  /** ISO time when Delay Posting is due; null when not delayed. */
+  scheduledPostAt: string | null;
   productLabel: string;
   buyerLabel: string;
   campaignLabel: string;
@@ -234,6 +237,7 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
   leadId: string;
   postedAt: string;
   buyerStatus: string;
+  scheduledPostAt?: string | Date | null;
   price: number | null;
   pingTreeType: "Redirect" | "Silent";
   processingType?: string | null;
@@ -288,12 +292,20 @@ export function mapBuyerDeliveryToLeadDetailsRow(input: {
     soldPrice: input.soldPrice,
   });
 
+  const scheduledPostAtIso =
+    isDelayPostingStatus(input.buyerStatus) && input.scheduledPostAt
+      ? input.scheduledPostAt instanceof Date
+        ? input.scheduledPostAt.toISOString()
+        : String(input.scheduledPostAt)
+      : null;
+
   return {
     id: input.deliveryId,
     leadId: input.leadId,
     displayLeadCode: buildPublisherLeadDisplayCode(input.leadId),
     postedAt: input.postedAt,
     postStatus: formatBuyerLeadPostStatus(input.buyerStatus),
+    scheduledPostAt: scheduledPostAtIso,
     productLabel: formatProductLabel(input.productName, input.productIndex),
     buyerLabel: input.buyerLabel,
     campaignLabel: input.campaignName || "—",

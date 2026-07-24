@@ -2,6 +2,10 @@ import { formatDateTimeDisplay } from "@/lib/date-range";
 import { formatProductLabel } from "@/lib/integration-builder";
 import { normalizeCampaignIntegrationConfigValues } from "@/lib/campaign-integration-config";
 import { getMaxRangeOptions, isGeneralFilterRangeValid } from "@/lib/lead-field-value";
+import {
+  normalizeCampaignDelayScheduling,
+  type CampaignDelayScheduling,
+} from "@/lib/campaign-delay-scheduling";
 
 export { getMaxRangeOptions, isGeneralFilterRangeValid };
 
@@ -64,6 +68,8 @@ export type CampaignRecord = {
   buyerId: string;
   buyerLabel: string;
   campaignType: CampaignType;
+  /** Silent only — Off posts immediately; otherwise delays Silent buyer post. */
+  delayScheduling: CampaignDelayScheduling;
   timezone: string;
   minPrice: number;
   integrationId: string;
@@ -127,6 +133,13 @@ export function buildCampaignListStatusFilter(statusFilter?: string | null): Rec
   return { status: { $in: statuses } };
 }
 export const CAMPAIGN_TYPE_OPTIONS: CampaignType[] = ["Redirect", "Silent"];
+export {
+  CAMPAIGN_DELAY_SCHEDULING_OPTIONS,
+  DEFAULT_CAMPAIGN_DELAY_SCHEDULING,
+  normalizeCampaignDelayScheduling,
+  resolveCampaignDelayMs,
+  type CampaignDelayScheduling,
+} from "@/lib/campaign-delay-scheduling";
 export const DUPLICATE_METHOD_OPTIONS: DuplicateMethod[] = ["Email", "SSN + Email"];
 export const SCHEDULE_DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export const SCHEDULE_ACTION_OPTIONS: ScheduleAction[] = ["Post", "Do not post"];
@@ -381,6 +394,7 @@ type CampaignDoc = {
     configValues?: Record<string, string> | null;
   } | null;
   campaignType: CampaignType;
+  delayScheduling?: CampaignDelayScheduling | string | null;
   timezone: string;
   minPrice: number;
   duplicates?: CampaignDuplicatesSettings;
@@ -428,6 +442,7 @@ export function toCampaignRecord(
     buyerId,
     buyerLabel: context.buyerLabelById.get(buyerId) ?? "Unknown",
     campaignType: doc.campaignType,
+    delayScheduling: normalizeCampaignDelayScheduling(doc.delayScheduling),
     timezone: resolveCampaignTimezone(doc.timezone),
     minPrice: doc.minPrice,
     integrationId,

@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import {
   defaultCampaignDuplicates,
+  normalizeCampaignDelayScheduling,
   normalizeGeneralFiltersForStorage,
   type CampaignDuplicatesSettings,
   type CampaignGeneralFilter,
@@ -15,6 +16,7 @@ export type CloneableCampaign = {
   buyerRef?: Types.ObjectId | { toString(): string } | string | null;
   integrationRef?: Types.ObjectId | { toString(): string } | string | null;
   campaignType: CampaignType;
+  delayScheduling?: string | null;
   timezone: string;
   duplicates?: CampaignDuplicatesSettings;
   generalFilters?: CampaignGeneralFilter[] | null;
@@ -85,6 +87,10 @@ export function buildClonedCampaignCreateData(
       ? resolveObjectId(source.integrationRef, "Source campaign has an invalid integration.")
       : undefined,
     campaignType: source.campaignType,
+    delayScheduling:
+      source.campaignType === "Silent"
+        ? normalizeCampaignDelayScheduling(source.delayScheduling)
+        : "Off",
     timezone: source.timezone,
     minPrice: Number.isFinite(minPrice) ? Math.round(minPrice * 100) / 100 : 0,
     duplicates: source.duplicates ?? defaultCampaignDuplicates(),

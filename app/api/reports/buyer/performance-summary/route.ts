@@ -66,7 +66,7 @@ function createAccumulator(): BuyerAccumulator {
 }
 
 function isRejectedStatus(status: string) {
-  return status === "Reject" || status === "Price Reject" || status === "Price Conflict";
+  return status === "Reject" || status === "Ping Reject" || status === "Price Reject" || status === "Price Conflict";
 }
 
 export async function GET(req: Request) {

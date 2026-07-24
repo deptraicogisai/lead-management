@@ -71,6 +71,8 @@ export type LeadDetailFilterLogRow = {
   postPrice: string;
   soldPrice: string;
   status: string;
+  /** ISO time when Delay Posting is due; empty when not delayed. */
+  scheduledPostAt: string;
   message: string;
   offeredPriceLabel: string;
   timeLabel: string;
@@ -385,10 +387,22 @@ function formatIndexedLabel(name: string, displayId?: number | null) {
 }
 
 function wasBuyerDeliveryPosted(delivery: {
+  buyerStatus?: string | null;
   httpStatus?: number | null;
   requestPayload?: unknown;
   responseBody?: string | null;
 }) {
+  if ((delivery.buyerStatus ?? "").trim().toLowerCase() === "delay posting") {
+    return false;
+  }
+  if (
+    delivery.requestPayload &&
+    typeof delivery.requestPayload === "object" &&
+    !Array.isArray(delivery.requestPayload) &&
+    (delivery.requestPayload as Record<string, unknown>).__delayScheduling
+  ) {
+    return false;
+  }
   if (typeof delivery.httpStatus === "number" && delivery.httpStatus > 0) return true;
   if (typeof delivery.responseBody === "string" && delivery.responseBody.trim()) return true;
   if (delivery.requestPayload && typeof delivery.requestPayload === "object") return true;
@@ -468,6 +482,7 @@ function buildFilterLogRowFromDelivery(
     id: string;
     postedAt: string;
     buyerStatus: string;
+    scheduledPostAt?: string | null;
     price: number | null;
     campaignMinPrice: number | null;
     buyerDisplayId: number | null;
@@ -499,6 +514,10 @@ function buildFilterLogRowFromDelivery(
     Number.isFinite(delivery.price)
       ? formatBuyerLeadPrice(delivery.price)
       : "";
+  const scheduledPostAt =
+    delivery.buyerStatus === "Delay Posting" && delivery.scheduledPostAt
+      ? delivery.scheduledPostAt
+      : "";
 
   return {
     id: delivery.id,
@@ -510,6 +529,7 @@ function buildFilterLogRowFromDelivery(
     postPrice: money.postPrice,
     soldPrice: isAccept ? money.ttl : "—",
     status: delivery.buyerStatus,
+    scheduledPostAt,
     message: resolveFilterLogMessage(delivery),
     offeredPriceLabel: offeredPrice,
     timeLabel: formatFilterLogResponseTime(delivery.responseTimeMs),
@@ -523,6 +543,7 @@ function buildFilterLogRowFromDelivery(
     campaignDisabled: Boolean(options?.campaignDisabled),
     hasDelivery: true,
     wasPosted: wasBuyerDeliveryPosted({
+      buyerStatus: delivery.buyerStatus,
       httpStatus: delivery.httpStatus,
       requestPayload: delivery.requestPayload,
       responseBody: delivery.responseBody,
@@ -545,6 +566,7 @@ function buildPlaceholderFilterLogRow(campaign: LeadDetailTreeCampaign): LeadDet
         : "—",
     soldPrice: "—",
     status: disabled ? "Disabled" : "—",
+    scheduledPostAt: "",
     message: disabled ? "Campaign is disabled." : "",
     offeredPriceLabel: "",
     timeLabel: "—",
@@ -568,6 +590,7 @@ export function buildLeadFilterProcessing(params: {
     processingType?: string | null;
     postedAt: string;
     buyerStatus: string;
+    scheduledPostAt?: string | null;
     price: number | null;
     campaignMinPrice: number | null;
     buyerDisplayId: number | null;

@@ -29,7 +29,7 @@ import { METRIC_COLUMN_HINTS, metricColumnVisibilityLabel } from "@/lib/metric-c
 import { ToolbarDropdownMenu, toolbarDropdownItemClassName } from "@/components/ui/toolbar-dropdown-menu";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { PageSection } from "@/components/ui/state";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { DelayPostingStatusBadge } from "@/components/ui/delay-posting-status-badge";
 import { StatusMultiSelect } from "@/components/ui/status-multi-select";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { PublisherTagBadges } from "@/components/ui/publisher-tag-badges";
@@ -441,7 +441,23 @@ export function BuyerLeadDetailsPage() {
         key: "postStatus",
         label: "Status",
         sortValue: (row) => row.postStatus,
-        render: (row) => <StatusBadge status={row.postStatus} />,
+        render: (row) => (
+          <DelayPostingStatusBadge
+            status={row.postStatus}
+            scheduledPostAt={row.scheduledPostAt}
+            onDue={() => {
+              void (async () => {
+                try {
+                  await fetch("/api/cron/process-delayed-posts", { method: "POST" });
+                } catch {
+                  // Ignore — still refresh the table.
+                }
+                await new Promise((resolve) => window.setTimeout(resolve, 800));
+                setSearchNonce((value) => value + 1);
+              })();
+            }}
+          />
+        ),
       },
       {
         key: "displayLeadCode",

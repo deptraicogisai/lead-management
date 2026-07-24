@@ -152,7 +152,7 @@ function formatChartDateLabel(value: Date) {
 }
 
 function isRejectedBuyerStatus(status: string) {
-  return status === "Reject" || status === "Price Reject" || status === "Price Conflict";
+  return status === "Reject" || status === "Ping Reject" || status === "Price Reject" || status === "Price Conflict";
 }
 
 function buildDashboardRanges(reference = new Date()) {

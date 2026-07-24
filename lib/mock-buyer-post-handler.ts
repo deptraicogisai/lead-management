@@ -10,33 +10,57 @@ import {
 } from "@/lib/mock-buyer-post";
 import {
   buildCampaignTestMockBuyerResponse,
+  buildCampaignTestMockPingBuyerResponse,
   buildMockBuyerResponseFromOptions,
   DEFAULT_CAMPAIGN_TEST_MOCK,
+  DEFAULT_CAMPAIGN_TEST_PING_MOCK,
 } from "@/lib/campaign-test-mock";
 
 function buildControlledMockBuyerResponse(buyerPrice: number) {
   return buildMockBuyerResponseFromOptions({ buyerPrice, status: "Accept", statusText: "Accepted" });
 }
 
-function resolveMockBuyerResponse(mockOptions?: ReturnType<typeof readMockBuyerPostHeaders>) {
+function resolveMockBuyerResponse(
+  mockOptions?: ReturnType<typeof readMockBuyerPostHeaders>,
+  phase: "ping" | "post" = "post"
+) {
   if (mockOptions?.response && Object.keys(mockOptions.response).length > 0) {
     return mockOptions.response;
   }
 
   if (mockOptions) {
     if (mockOptions.status || mockOptions.statusText || mockOptions.reason) {
+      if (phase === "ping") {
+        const normalized = (mockOptions.status || mockOptions.statusText || "").trim().toLowerCase();
+        const isAccept = ["accept", "accepted", "1", "true", "yes"].includes(normalized);
+        return buildCampaignTestMockPingBuyerResponse({
+          ...DEFAULT_CAMPAIGN_TEST_PING_MOCK,
+          status: isAccept ? "Accept" : "Reject",
+          reasons: mockOptions.reason
+            ? [mockOptions.reason]
+            : [...DEFAULT_CAMPAIGN_TEST_PING_MOCK.reasons],
+          timeoutSeconds: mockOptions.responseDelaySeconds ?? 0,
+        });
+      }
       return buildMockBuyerResponseFromOptions(mockOptions);
     }
 
-    if (mockOptions.buyerPrice != null) {
+    if (mockOptions.buyerPrice != null && phase !== "ping") {
       return buildControlledMockBuyerResponse(mockOptions.buyerPrice);
     }
+  }
+
+  if (phase === "ping") {
+    return buildCampaignTestMockPingBuyerResponse(DEFAULT_CAMPAIGN_TEST_PING_MOCK);
   }
 
   return buildCampaignTestMockBuyerResponse(DEFAULT_CAMPAIGN_TEST_MOCK);
 }
 
-export async function handleMockBuyerLeadPost(req: Request, context?: { buyerId?: string }) {
+export async function handleMockBuyerLeadPost(
+  req: Request,
+  context?: { buyerId?: string; phase?: "ping" | "post" }
+) {
   try {
     const buyerId = context?.buyerId?.trim();
     const headerApiKey = req.headers.get(BUYER_API_KEY_HEADER)?.trim() ?? "";
@@ -98,7 +122,8 @@ export async function handleMockBuyerLeadPost(req: Request, context?: { buyerId?
       await sleep(mockOptions.responseDelaySeconds * 1000);
     }
 
-    const response = resolveMockBuyerResponse(mockOptions);
+    const phase = context?.phase === "ping" ? "ping" : "post";
+    const response = resolveMockBuyerResponse(mockOptions, phase);
 
     return NextResponse.json(response);
   } catch {

@@ -12,6 +12,7 @@ export type CampaignExportPayload = {
   integrationId?: string;
   name: string;
   campaignType: "Redirect" | "Silent";
+  delayScheduling?: string;
   timezone: string;
   minPrice: number;
   duplicates: CampaignRecord["duplicates"];
@@ -42,6 +43,7 @@ export function buildCampaignExportPayload(
     ...(record.integrationId ? { integrationId: record.integrationId } : {}),
     name: record.name,
     campaignType: record.campaignType,
+    delayScheduling: record.campaignType === "Silent" ? record.delayScheduling : "Off",
     timezone: record.timezone,
     minPrice: record.minPrice,
     duplicates: record.duplicates,

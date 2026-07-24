@@ -38,6 +38,7 @@ import { ContentAreaLoading } from "@/components/ui/content-area-loading";
 import { PageSection } from "@/components/ui/state";
 import { PageTabBar } from "@/components/ui/page-tab-bar";
 import {
+  CAMPAIGN_DELAY_SCHEDULING_OPTIONS,
   CAMPAIGN_STATUS_DETAIL_OPTIONS,
   CAMPAIGN_TYPE_OPTIONS,
   DUPLICATE_METHOD_OPTIONS,
@@ -52,6 +53,7 @@ import {
   resolveSelectableTimeZone,
   syncGeneralFiltersWithFields,
   validateGeneralFilters,
+  type CampaignDelayScheduling,
   type CampaignRecord,
   type CampaignScheduleRule,
 } from "@/lib/campaign";
@@ -100,6 +102,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     name: "",
     status: "Active" as CampaignRecord["status"],
     campaignType: "Redirect" as CampaignRecord["campaignType"],
+    delayScheduling: "Off" as CampaignDelayScheduling,
     timezone: "",
     minPrice: "0",
   });
@@ -160,6 +163,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         name: data.name,
         status: data.status,
         campaignType: data.campaignType,
+        delayScheduling: data.delayScheduling ?? "Off",
         timezone: data.timezone,
         minPrice: String(data.minPrice),
       });
@@ -629,10 +633,31 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                     setGeneralForm((current) => ({
                       ...current,
                       campaignType: campaignType as CampaignRecord["campaignType"],
+                      delayScheduling:
+                        campaignType === "Silent" ? current.delayScheduling : "Off",
                     }))
                   }
                 />
               </div>
+              {generalForm.campaignType === "Silent" ? (
+                <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
+                  <FieldLabel htmlFor="detail-delay-scheduling" label="Delay Scheduling" />
+                  <DropdownSelect
+                    id="detail-delay-scheduling"
+                    value={generalForm.delayScheduling}
+                    options={CAMPAIGN_DELAY_SCHEDULING_OPTIONS.map((option) => ({
+                      value: option,
+                      label: option,
+                    }))}
+                    onChange={(delayScheduling) =>
+                      setGeneralForm((current) => ({
+                        ...current,
+                        delayScheduling: delayScheduling as CampaignDelayScheduling,
+                      }))
+                    }
+                  />
+                </div>
+              ) : null}
               <div className="grid gap-2 md:grid-cols-[160px_minmax(0,1fr)] md:items-center">
                 <FieldLabel htmlFor="detail-timezone" label="Timezone" />
                 <TimezoneSelect
@@ -675,6 +700,10 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                       name: generalForm.name,
                       status: generalForm.status,
                       campaignType: generalForm.campaignType,
+                      delayScheduling:
+                        generalForm.campaignType === "Silent"
+                          ? generalForm.delayScheduling
+                          : "Off",
                       timezone: generalForm.timezone,
                       minPrice: generalForm.minPrice,
                     },

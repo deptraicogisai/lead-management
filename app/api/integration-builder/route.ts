@@ -4,10 +4,15 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ensureVerticalCollectionMigrated, VerticalModel } from "@/lib/models/industry";
 import { ensureIntegrationBuilderStatusMigrated, IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import {
-  DEFAULT_CONFIG_FIELDS,
   buildVerticalIndexMap,
+  createDefaultRequestMapping,
+  createDefaultResponseMapping,
+  getDefaultConfigFields,
+  isIntegrationPostModel,
+  normalizeIntegrationPostModel,
   toIntegrationBuilderRecord,
   type IntegrationBuilderStatus,
+  type IntegrationPostModel,
 } from "@/lib/integration-builder";
 import type { IntegrationBuilderExportPayload } from "@/lib/integration-builder-export";
 import {
@@ -22,6 +27,7 @@ type IntegrationBuilderPayload = {
   name?: string;
   verticalId?: string;
   status?: IntegrationBuilderStatus;
+  postModel?: IntegrationPostModel | string;
   createType?: "new" | "import";
   importSchema?: IntegrationBuilderExportPayload;
 };
@@ -140,12 +146,28 @@ export async function POST(req: Request) {
         ...buildIntegrationBuilderImportCreateData(parsed.schema),
       };
     } else {
+      const postModel = normalizeIntegrationPostModel(body.postModel);
+      if (body.postModel !== undefined && !isIntegrationPostModel(body.postModel)) {
+        return NextResponse.json(
+          { message: "Post Model must be Direct Post or Ping Post." },
+          { status: 400 }
+        );
+      }
+
       recordData = {
         displayId: nextDisplayId,
         name: body.name!.trim(),
         status: body.status ?? "Active",
         verticalRef: importVerticalId,
-        configFields: DEFAULT_CONFIG_FIELDS.map((field) => ({ ...field })),
+        postModel,
+        configFields: getDefaultConfigFields(postModel),
+        requestMapping: createDefaultRequestMapping(postModel, "POST"),
+        ...(postModel === "Ping Post"
+          ? {
+              pingRequestMapping: createDefaultRequestMapping("Ping Post", "PING"),
+              pingResponseMapping: createDefaultResponseMapping(),
+            }
+          : {}),
       };
     }
 

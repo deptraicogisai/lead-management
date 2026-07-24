@@ -355,6 +355,18 @@ function isAcceptedSoldSign(value: string) {
   );
 }
 
+function isRejectedSoldSign(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === "false" ||
+    normalized === "reject" ||
+    normalized === "rejected" ||
+    normalized === "declined" ||
+    normalized === "0" ||
+    normalized === "2"
+  );
+}
+
 function normalizeParsedBuyerResponseAcceptIndicators(parsed: ParsedBuyerResponse): ParsedBuyerResponse {
   const soldSign = parsed.soldSign.trim();
   const errorReason = parsed.errorReason.trim();
@@ -368,6 +380,75 @@ function normalizeParsedBuyerResponseAcceptIndicators(parsed: ParsedBuyerRespons
   }
 
   return parsed;
+}
+
+function readStatusTextFromBuyerResponse(parsedResponse: unknown) {
+  if (!parsedResponse || typeof parsedResponse !== "object" || Array.isArray(parsedResponse)) {
+    return "";
+  }
+
+  const responseRecord = parsedResponse as Record<string, unknown>;
+  return stringifyTemplateValue(
+    responseRecord.status ?? responseRecord.msg ?? responseRecord.message ?? responseRecord.status_text
+  ).trim();
+}
+
+function readRejectReasonFromBuyerResponse(parsedResponse: unknown) {
+  if (!parsedResponse || typeof parsedResponse !== "object" || Array.isArray(parsedResponse)) {
+    return "";
+  }
+
+  const responseRecord = parsedResponse as Record<string, unknown>;
+  const reasons = responseRecord.reasons ?? responseRecord.reason;
+  if (typeof reasons === "string" && reasons.trim()) {
+    return reasons.trim();
+  }
+  if (Array.isArray(reasons)) {
+    const joined = reasons
+      .map((entry) => {
+        if (typeof entry === "string") return entry.trim();
+        if (entry && typeof entry === "object" && "message" in entry) {
+          return String((entry as { message?: unknown }).message ?? "").trim();
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" | ");
+    if (joined) return joined;
+  }
+  if (reasons && typeof reasons === "object" && "message" in reasons) {
+    return String((reasons as { message?: unknown }).message ?? "").trim();
+  }
+
+  return stringifyTemplateValue(
+    responseRecord.reject_reason ?? responseRecord.rejectReason
+  ).trim();
+}
+
+function applySoftBuyerStatusFromResponse(
+  result: ParsedBuyerResponse,
+  parsedResponse: unknown
+): boolean {
+  const statusText = readStatusTextFromBuyerResponse(parsedResponse);
+  if (!statusText) return false;
+
+  if (isAcceptedSoldSign(statusText)) {
+    result.soldSign = statusText;
+    result.mappingError = false;
+    return true;
+  }
+
+  if (isRejectedSoldSign(statusText)) {
+    result.rejectSign = statusText;
+    if (!result.rejectReason.trim()) {
+      result.rejectReason = readRejectReasonFromBuyerResponse(parsedResponse);
+    }
+    result.mappingError = false;
+    result.errorReason = "";
+    return true;
+  }
+
+  return false;
 }
 
 function readRedirectUrlFromBuyerResponse(parsedResponse: unknown) {
@@ -480,7 +561,12 @@ export function parseIntegrationResponse(
     ).trim();
     result.soldSign = status;
     result.rejectSign = isAcceptedSoldSign(status) ? "" : status;
-    result.rejectReason = stringifyTemplateValue(responseRecord.reject_reason ?? responseRecord.rejectReason);
+    result.rejectReason = stringifyTemplateValue(
+      responseRecord.reject_reason ?? responseRecord.rejectReason
+    );
+    if (!result.rejectReason.trim() && !isAcceptedSoldSign(status)) {
+      result.rejectReason = readRejectReasonFromBuyerResponse(parsedResponse);
+    }
     result.errorReason = stringifyTemplateValue(responseRecord.error_reason ?? responseRecord.errorReason);
     result.redirectUrl = stringifyTemplateValue(
       responseRecord.redirectUrl ?? responseRecord.redirect_url ?? responseRecord.direct_url
@@ -511,26 +597,17 @@ export function parseIntegrationResponse(
       if (!trimmed) {
         result.mappingError = true;
         result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
+      } else if (applySoftBuyerStatusFromResponse(result, parsedResponse)) {
+        // Soft-read Accept/Reject from response.status when Sold::Sign / Reject::Sign
+        // templates did not resolve (common for Ping mock Accept/Reject payloads).
       } else if (hasExplicitSignMapping) {
-        // Sold::Sign / Reject::Sign were configured but neither matched.
-        // Do not soft-accept from top-level status:1 — that hid mapping mistakes.
+        // Sold::Sign / Reject::Sign were configured but neither matched, and the body
+        // does not contain a clear Accept/Reject status.
         result.mappingError = true;
         result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
       } else {
-        const responseRecord = parsedResponse as Record<string, unknown>;
-        const statusText = stringifyTemplateValue(
-          responseRecord.status ??
-            responseRecord.msg ??
-            responseRecord.message ??
-            responseRecord.status_text
-        ).trim();
-
-        if (isAcceptedSoldSign(statusText)) {
-          result.soldSign = statusText;
-        } else {
-          result.mappingError = true;
-          result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
-        }
+        result.mappingError = true;
+        result.errorReason = result.errorReason.trim() || RESPONSE_MAPPING_ERROR_REASON;
       }
     }
   }
@@ -573,6 +650,10 @@ export function inferBuyerStatusFromParsedResponse(
     rejectComparable === "declined" ||
     rejectComparable === "0" ||
     rejectComparable === "2" ||
+    soldComparable === "reject" ||
+    soldComparable === "rejected" ||
+    soldComparable === "declined" ||
+    soldComparable === "0" ||
     soldComparable === "2";
 
   if (isAccept) {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -16,6 +16,12 @@ import {
   Waypoints,
 } from "lucide-react";
 import { TwigTemplateInput } from "@/components/integration-builder/twig-template-input";
+import { MappingSectionCard } from "@/components/integration-builder/mapping-section-card";
+import {
+  RequestBuilderPanel,
+  type RequestBuilderDataRow,
+  type RequestBuilderHeaderRow,
+} from "@/components/integration-builder/request-builder-panel";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-context";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
 import { ComingSoonButton } from "@/components/ui/action-buttons";
@@ -29,6 +35,12 @@ import { PageTabBar } from "@/components/ui/page-tab-bar";
 import type { ApiFieldConfig } from "@/lib/mock-data";
 import {
   INTEGRATION_BUILDER_STATUS_DETAIL_OPTIONS,
+  INTEGRATION_POST_MODELS,
+  convertConfigFieldsForPostModel,
+  createDefaultRequestMapping,
+  createDefaultResponseMapping,
+  normalizeIntegrationPostModel,
+  rewriteRequestUrlForPostModel,
   type IntegrationBuilderArrayMappingEntry,
   type IntegrationBuilderConfigField,
   type IntegrationBuilderRequestMapping,
@@ -36,6 +48,7 @@ import {
   type IntegrationBuilderRequestMappingHeader,
   type IntegrationBuilderResponseMapping,
   type IntegrationBuilderStatus,
+  type IntegrationPostModel,
 } from "@/lib/integration-builder";
 import type { IntegrationBuilderResponseMappingField } from "@/lib/response-mapping";
 import {
@@ -159,18 +172,8 @@ const builderTabs = [
   },
 ] as const;
 
-type HeaderRow = {
-  id: string;
-  key: string;
-  value: string;
-};
-
-type RequestDataRow = {
-  id: string;
-  name: string;
-  type: string;
-  value: string;
-};
+type HeaderRow = RequestBuilderHeaderRow;
+type RequestDataRow = RequestBuilderDataRow;
 
 type ConfigFieldRow = {
   id: string;
@@ -323,12 +326,15 @@ type IntegrationBuilderDetailProps = {
     id: string;
     name: string;
     status: IntegrationBuilderStatus;
+    postModel: IntegrationPostModel;
     productLabel: string;
     verticalId: string;
     updatedAt: string;
     arrayMappings: IntegrationBuilderArrayMappingEntry[];
     requestMapping: IntegrationBuilderRequestMapping;
+    pingRequestMapping: IntegrationBuilderRequestMapping | null;
     responseMapping: IntegrationBuilderResponseMapping;
+    pingResponseMapping: IntegrationBuilderResponseMapping | null;
     configFields: IntegrationBuilderConfigField[];
   };
 };
@@ -365,18 +371,32 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const [methodType, setMethodType] = useState("POST");
   const [dataType, setDataType] = useState("JSON");
   const [payloadType, setPayloadType] = useState("Object");
+  const [showPingHeaders, setShowPingHeaders] = useState(true);
+  const [showPingData, setShowPingData] = useState(true);
+  const [pingRequestUrl, setPingRequestUrl] = useState("{{ config.ping_url }}");
+  const [pingMethodType, setPingMethodType] = useState("POST");
+  const [pingDataType, setPingDataType] = useState("JSON");
+  const [pingPayloadType, setPingPayloadType] = useState("Object");
   const [integrationName, setIntegrationName] = useState(builder?.name ?? "");
   useBreadcrumbLabel(integrationName || builder?.name || null);
   const [generalStatus, setGeneralStatus] = useState<IntegrationBuilderStatus>(builder?.status ?? "Active");
+  const [postModel, setPostModel] = useState<IntegrationPostModel>(
+    normalizeIntegrationPostModel(builder?.postModel)
+  );
   const [dateUpdated, setDateUpdated] = useState(builder?.updatedAt ?? "");
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
+  const [sampleImportPhase, setSampleImportPhase] = useState<"POST" | "PING">("POST");
   const [sampleJson, setSampleJson] = useState("");
   const [sampleImportError, setSampleImportError] = useState("");
   const [headers, setHeaders] = useState<HeaderRow[]>(DEFAULT_HEADER_ROWS);
   const [requestDataRows, setRequestDataRows] = useState<RequestDataRow[]>([]);
+  const [pingHeaders, setPingHeaders] = useState<HeaderRow[]>(DEFAULT_HEADER_ROWS);
+  const [pingRequestDataRows, setPingRequestDataRows] = useState<RequestDataRow[]>([]);
   const [isSavingHeaders, setIsSavingHeaders] = useState(false);
   const [isSavingData, setIsSavingData] = useState(false);
+  const [isSavingPingHeaders, setIsSavingPingHeaders] = useState(false);
+  const [isSavingPingData, setIsSavingPingData] = useState(false);
   const [arrayMappingFields, setArrayMappingFields] = useState<ApiFieldConfig[]>([]);
   const [arrayMappingEntries, setArrayMappingEntries] = useState<ArrayMappingEntry[]>([]);
   const [expandedArraySections, setExpandedArraySections] = useState<Record<string, boolean>>({});
@@ -389,8 +409,11 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
   const [isSavingConfigFields, setIsSavingConfigFields] = useState(false);
   const [responseDataType, setResponseDataType] = useState("JSON");
   const [responseFieldRows, setResponseFieldRows] = useState<ResponseMappingRow[]>([]);
+  const [pingResponseDataType, setPingResponseDataType] = useState("JSON");
+  const [pingResponseFieldRows, setPingResponseFieldRows] = useState<ResponseMappingRow[]>([]);
   const [isSavingResponseMapping, setIsSavingResponseMapping] = useState(false);
   const [linkedCampaigns, setLinkedCampaigns] = useState<LinkedCampaignSummary[]>([]);
+  const isPingPost = postModel === "Ping Post";
 
   const activeTab = builderTabs.find((tab) => tab.id === activeTabId) ?? builderTabs[0];
 
@@ -431,6 +454,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     if (!builder) return;
     setIntegrationName(builder.name);
     setGeneralStatus(builder.status);
+    setPostModel(normalizeIntegrationPostModel(builder.postModel));
     setDateUpdated(builder.updatedAt);
 
     const mapping = builder.requestMapping;
@@ -442,9 +466,21 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     setRequestDataRows(mapSavedDataRowsToState(mapping.dataRows));
     setConfigFieldRows(mapConfigFieldsToRows(builder.configFields ?? []));
 
+    const pingMapping = builder.pingRequestMapping ?? createDefaultRequestMapping("Ping Post", "PING");
+    setPingRequestUrl(pingMapping.requestUrl);
+    setPingMethodType(pingMapping.methodType);
+    setPingDataType(pingMapping.dataType);
+    setPingPayloadType(pingMapping.payloadType);
+    setPingHeaders(mapSavedHeadersToRows(pingMapping.headers));
+    setPingRequestDataRows(mapSavedDataRowsToState(pingMapping.dataRows));
+
     const response = builder.responseMapping;
     setResponseDataType(response.dataType);
     setResponseFieldRows(mapResponseFieldsToRows(response.fields));
+
+    const pingResponse = builder.pingResponseMapping ?? createDefaultResponseMapping();
+    setPingResponseDataType(pingResponse.dataType);
+    setPingResponseFieldRows(mapResponseFieldsToRows(pingResponse.fields));
   }, [builder]);
 
   const savedArrayMappingsRef = useRef<IntegrationBuilderArrayMappingEntry[]>(builder?.arrayMappings ?? []);
@@ -556,12 +592,48 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     setIsSavingGeneral(true);
 
     try {
+      const previousModel = normalizeIntegrationPostModel(builder.postModel);
+      const nextModel = postModel;
+      const modelChanged = previousModel !== nextModel;
+      const nextConfigFields = modelChanged
+        ? convertConfigFieldsForPostModel(
+            configFieldRows.map((row) => ({
+              variableName: row.variableName,
+              label: row.label,
+              type: row.type,
+              required: row.required,
+            })),
+            nextModel
+          )
+        : undefined;
+      const nextRequestUrl = modelChanged
+        ? rewriteRequestUrlForPostModel(requestUrl, nextModel)
+        : undefined;
+
       const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: integrationName.trim(),
           status: generalStatus,
+          postModel: nextModel,
+          ...(nextConfigFields ? { configFields: nextConfigFields } : {}),
+          ...(nextRequestUrl !== undefined
+            ? {
+                requestMapping: {
+                  requestUrl: nextRequestUrl,
+                },
+              }
+            : {}),
+          ...(modelChanged && nextModel === "Direct Post"
+            ? { pingRequestMapping: null, pingResponseMapping: null }
+            : {}),
+          ...(modelChanged && nextModel === "Ping Post"
+            ? {
+                pingRequestMapping: createDefaultRequestMapping("Ping Post", "PING"),
+                pingResponseMapping: createDefaultResponseMapping(),
+              }
+            : {}),
         }),
       });
 
@@ -574,12 +646,34 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       const updated = (await response.json()) as {
         name: string;
         status: typeof generalStatus;
+        postModel?: IntegrationPostModel;
         updatedAt: string;
+        configFields?: IntegrationBuilderConfigField[];
+        requestMapping?: IntegrationBuilderRequestMapping;
+        pingRequestMapping?: IntegrationBuilderRequestMapping | null;
+        pingResponseMapping?: IntegrationBuilderResponseMapping | null;
       };
 
       setIntegrationName(updated.name);
       setGeneralStatus(updated.status);
+      setPostModel(normalizeIntegrationPostModel(updated.postModel));
       setDateUpdated(updated.updatedAt);
+      if (updated.configFields) setConfigFieldRows(mapConfigFieldsToRows(updated.configFields));
+      if (updated.requestMapping) {
+        setRequestUrl(updated.requestMapping.requestUrl);
+      }
+      if (updated.pingRequestMapping) {
+        setPingRequestUrl(updated.pingRequestMapping.requestUrl);
+        setPingMethodType(updated.pingRequestMapping.methodType);
+        setPingDataType(updated.pingRequestMapping.dataType);
+        setPingPayloadType(updated.pingRequestMapping.payloadType);
+        setPingHeaders(mapSavedHeadersToRows(updated.pingRequestMapping.headers));
+        setPingRequestDataRows(mapSavedDataRowsToState(updated.pingRequestMapping.dataRows));
+      }
+      if (updated.pingResponseMapping) {
+        setPingResponseDataType(updated.pingResponseMapping.dataType);
+        setPingResponseFieldRows(mapResponseFieldsToRows(updated.pingResponseMapping.fields));
+      }
       toast.success("Integration saved successfully.");
     } catch {
       toast.error("Failed to save integration.");
@@ -616,8 +710,13 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     try {
       const parsed = JSON.parse(sampleJson);
       const result = buildRowsFromSample(parsed);
-      setPayloadType(result.payloadType);
-      setRequestDataRows(result.rows);
+      if (sampleImportPhase === "PING") {
+        setPingPayloadType(result.payloadType);
+        setPingRequestDataRows(result.rows);
+      } else {
+        setPayloadType(result.payloadType);
+        setRequestDataRows(result.rows);
+      }
       setSampleImportError("");
       setSampleModalOpen(false);
     } catch (error) {
@@ -693,6 +792,42 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     payloadType: payloadType.trim(),
   });
 
+  const buildPingRequestMappingSettings = () => ({
+    requestUrl: pingRequestUrl.trim(),
+    methodType: pingMethodType.trim(),
+    dataType: pingDataType.trim(),
+    payloadType: pingPayloadType.trim(),
+  });
+
+  const updatePingHeaderRow = (id: string, key: keyof HeaderRow, value: string) => {
+    setPingHeaders((current) => current.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
+  };
+
+  const addPingHeaderRow = () => {
+    setPingHeaders((current) => [...current, { id: `ping-header-${current.length + 1}`, key: "", value: "" }]);
+  };
+
+  const removePingHeaderRow = (id: string) => {
+    setPingHeaders((current) => current.filter((row) => row.id !== id));
+  };
+
+  const updatePingRequestDataRow = (id: string, key: keyof RequestDataRow, value: string) => {
+    setPingRequestDataRows((current) =>
+      current.map((row) => (row.id === id ? { ...row, [key]: value } : row))
+    );
+  };
+
+  const addPingRequestDataRow = () => {
+    setPingRequestDataRows((current) => [
+      ...current,
+      { id: `ping-field-${current.length + 1}`, name: "", type: "String", value: "" },
+    ]);
+  };
+
+  const removePingRequestDataRow = (id: string) => {
+    setPingRequestDataRows((current) => current.filter((row) => row.id !== id));
+  };
+
   const handleSaveHeaders = async () => {
     if (!builder?.id) {
       toast.error("Integration record is missing.");
@@ -746,6 +881,62 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       toast.error("Failed to save headers.");
     } finally {
       setIsSavingHeaders(false);
+    }
+  };
+
+  const handleSavePingHeaders = async () => {
+    if (!builder?.id) {
+      toast.error("Integration record is missing.");
+      return;
+    }
+
+    const twigError = validateRequestMappingTwigPayload(
+      {
+        requestUrl: pingRequestUrl.trim(),
+        headers: pingHeaders.map((row) => ({
+          key: row.key.trim(),
+          value: row.value,
+        })),
+      },
+      twigValidationContext
+    );
+
+    if (twigError) {
+      toast.error(twigError);
+      return;
+    }
+
+    setIsSavingPingHeaders(true);
+
+    try {
+      const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: integrationName.trim() || builder.name,
+          pingRequestMapping: {
+            ...buildPingRequestMappingSettings(),
+            headers: pingHeaders.map((row) => ({
+              key: row.key.trim(),
+              value: row.value,
+            })),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(payload?.message ?? "Failed to save ping headers.");
+        return;
+      }
+
+      const updated = (await response.json()) as { updatedAt?: string };
+      if (updated.updatedAt) setDateUpdated(updated.updatedAt);
+      toast.success("Ping headers saved successfully.");
+    } catch {
+      toast.error("Failed to save ping headers.");
+    } finally {
+      setIsSavingPingHeaders(false);
     }
   };
 
@@ -803,6 +994,63 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       toast.error("Failed to save data.");
     } finally {
       setIsSavingData(false);
+    }
+  };
+
+  const handleSavePingData = async () => {
+    if (!builder?.id) {
+      toast.error("Integration record is missing.");
+      return;
+    }
+
+    const twigError = validateRequestMappingTwigPayload(
+      {
+        requestUrl: pingRequestUrl.trim(),
+        dataRows: pingRequestDataRows.map((row) => ({
+          name: row.name.trim(),
+          value: row.value,
+        })),
+      },
+      twigValidationContext
+    );
+
+    if (twigError) {
+      toast.error(twigError);
+      return;
+    }
+
+    setIsSavingPingData(true);
+
+    try {
+      const response = await fetch(`/api/integration-builder/${encodeURIComponent(builder.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: integrationName.trim() || builder.name,
+          pingRequestMapping: {
+            ...buildPingRequestMappingSettings(),
+            dataRows: pingRequestDataRows.map((row) => ({
+              name: row.name.trim(),
+              type: row.type.trim() || "String",
+              value: row.value,
+            })),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        toast.error(payload?.message ?? "Failed to save ping data.");
+        return;
+      }
+
+      const updated = (await response.json()) as { updatedAt?: string };
+      if (updated.updatedAt) setDateUpdated(updated.updatedAt);
+      toast.success("Ping data saved successfully.");
+    } catch {
+      toast.error("Failed to save ping data.");
+    } finally {
+      setIsSavingPingData(false);
     }
   };
 
@@ -864,6 +1112,12 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     setResponseFieldRows((current) => current.map((row) => (row.id === id ? { ...row, value } : row)));
   };
 
+  const updatePingResponseFieldValue = (id: string, value: string) => {
+    setPingResponseFieldRows((current) =>
+      current.map((row) => (row.id === id ? { ...row, value } : row))
+    );
+  };
+
   const handleSaveResponseMapping = async () => {
     if (!builder?.id) {
       toast.error("Integration record is missing.");
@@ -885,6 +1139,22 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       return;
     }
 
+    if (isPingPost) {
+      const pingTwigError = validateResponseMappingTwigPayload(
+        {
+          fields: pingResponseFieldRows.map((row) => ({
+            key: row.key,
+            value: row.value,
+          })),
+        },
+        twigValidationContext
+      );
+      if (pingTwigError) {
+        toast.error(pingTwigError);
+        return;
+      }
+    }
+
     setIsSavingResponseMapping(true);
 
     try {
@@ -900,6 +1170,17 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               value: row.value,
             })),
           },
+          ...(isPingPost
+            ? {
+                pingResponseMapping: {
+                  dataType: pingResponseDataType.trim(),
+                  fields: pingResponseFieldRows.map((row) => ({
+                    key: row.key,
+                    value: row.value,
+                  })),
+                },
+              }
+            : { pingResponseMapping: null }),
         }),
       });
 
@@ -912,12 +1193,17 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
       const updated = (await response.json()) as {
         updatedAt?: string;
         responseMapping?: IntegrationBuilderResponseMapping;
+        pingResponseMapping?: IntegrationBuilderResponseMapping | null;
       };
 
       if (updated.updatedAt) setDateUpdated(updated.updatedAt);
       if (updated.responseMapping) {
         setResponseDataType(updated.responseMapping.dataType);
         setResponseFieldRows(mapResponseFieldsToRows(updated.responseMapping.fields));
+      }
+      if (updated.pingResponseMapping) {
+        setPingResponseDataType(updated.pingResponseMapping.dataType);
+        setPingResponseFieldRows(mapResponseFieldsToRows(updated.pingResponseMapping.fields));
       }
 
       toast.success("Response mapping saved successfully.");
@@ -1012,6 +1298,48 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
                 label: status,
               }))}
               onChange={(status) => setGeneralStatus(status as IntegrationBuilderStatus)}
+            />
+          )}
+          {renderGeneralRow(
+            "Post Model:",
+            <DropdownSelect
+              id="builder-post-model"
+              value={postModel}
+              options={INTEGRATION_POST_MODELS.map((model) => ({
+                value: model,
+                label: model,
+              }))}
+              onChange={(model) => {
+                const nextModel = model as IntegrationPostModel;
+                if (nextModel === postModel) return;
+                setPostModel(nextModel);
+                setConfigFieldRows(
+                  mapConfigFieldsToRows(
+                    convertConfigFieldsForPostModel(
+                      configFieldRows.map((row) => ({
+                        variableName: row.variableName,
+                        label: row.label,
+                        type: row.type,
+                        required: row.required,
+                      })),
+                      nextModel
+                    )
+                  )
+                );
+                setRequestUrl((current) => rewriteRequestUrlForPostModel(current, nextModel));
+                if (nextModel === "Ping Post") {
+                  const pingReq = createDefaultRequestMapping("Ping Post", "PING");
+                  const pingRes = createDefaultResponseMapping();
+                  setPingRequestUrl(pingReq.requestUrl);
+                  setPingMethodType(pingReq.methodType);
+                  setPingDataType(pingReq.dataType);
+                  setPingPayloadType(pingReq.payloadType);
+                  setPingHeaders(mapSavedHeadersToRows(pingReq.headers));
+                  setPingRequestDataRows(mapSavedDataRowsToState(pingReq.dataRows));
+                  setPingResponseDataType(pingRes.dataType);
+                  setPingResponseFieldRows(mapResponseFieldsToRows(pingRes.fields));
+                }
+              }}
             />
           )}
           <div className="flex flex-col gap-2 pt-6 sm:flex-row">
@@ -1175,7 +1503,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
               Map buyer response values. Type in a field or{" "}
               <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{`}</code> for
-              Twig suggestions — use{" "}
+              Twig suggestions â€” use{" "}
               <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ campaign.minPrice }}`}</code>,{" "}
               <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ response.msg }}`}</code>, and other tokens.
             </p>
@@ -1191,70 +1519,53 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
           </PrimaryButton>
         </div>
 
-        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-5 dark:border-blue-500/30 dark:bg-blue-500/10">
-          <div className="flex items-start gap-2">
-            <Info size={18} className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-300" />
-            <div className="space-y-3 text-sm text-slate-700 dark:text-slate-200">
-              <p className="font-medium text-slate-800 dark:text-slate-100">Campaign type & publisher result</p>
-              <ul className="list-disc space-y-1 pl-5 text-slate-600 dark:text-slate-300">
-                <li>
-                  <span className="font-medium">Redirect</span> campaign exists and buyer accepts → publisher receives{" "}
-                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Accepted</span>.
-                </li>
-                <li>
-                  <span className="font-medium">Redirect</span> campaign exists but buyer rejects → publisher receives{" "}
-                  <span className="font-medium text-red-600 dark:text-red-300">Rejected</span> (Silent accept does not
-                  override).
-                </li>
-                <li>
-                  No <span className="font-medium">Redirect</span> campaign in flow →{" "}
-                  <span className="font-medium">Silent</span> accept returns{" "}
-                  <span className="font-medium text-emerald-700 dark:text-emerald-300">Accepted</span> to publisher.
-                </li>
-              </ul>
 
-              {linkedCampaigns.length > 0 ? (
-                <div className="space-y-2 pt-1">
-                  <p className="font-medium text-slate-800 dark:text-slate-100">Campaigns using this integration</p>
-                  <div className="flex flex-wrap gap-2">
-                    {linkedCampaigns.map((campaign) => (
-                      <Link
-                        key={campaign.id}
-                        href={`/campaigns/${encodeURIComponent(campaign.id)}?tab=integration`}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400/40 dark:hover:bg-slate-800"
-                      >
-                        <span className="font-medium">[{campaign.displayId}] {campaign.name}</span>
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-                            campaign.campaignType === "Redirect"
-                              ? "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200"
-                              : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
-                          )}
-                        >
-                          {campaign.campaignType}
-                        </span>
-                        <span className="text-slate-500 dark:text-slate-400">{campaign.status}</span>
-                        <ExternalLink size={12} className="text-slate-400" />
-                      </Link>
-                    ))}
+
+        {isPingPost ? (
+          <MappingSectionCard
+            title="Response Builder"
+            badge="PING"
+            tone="ping"
+            description="Map the buyer response returned from the PING request."
+            defaultOpen
+          >
+            <div className="space-y-5 p-5">
+              <div className="max-w-xs">
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Data Type</label>
+                <DropdownSelect
+                  value={pingResponseDataType}
+                  options={[
+                    { value: "JSON", label: "JSON" },
+                    { value: "XML", label: "XML" },
+                  ]}
+                  onChange={setPingResponseDataType}
+                  className={selectControlClassName}
+                />
+              </div>
+
+              <div className="space-y-4">
+                {pingResponseFieldRows.map((row) => (
+                  <div key={row.id} className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
+                    <p className="pt-2.5 text-sm font-medium text-slate-700 dark:text-slate-200">{row.key}</p>
+                    <TwigTemplateInput
+                      value={row.value}
+                      onChange={(nextValue) => updatePingResponseFieldValue(row.id, nextValue)}
+                      {...twigInputProps}
+                    />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {redirectCampaigns.length > 0
-                      ? `${redirectCampaigns.length} Redirect, ${silentCampaigns.length} Silent — campaign tokens resolve from the active campaign at post time.`
-                      : "Only Silent campaigns use this integration — campaign tokens resolve from the active campaign at post time."}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  No campaigns linked yet. Assign this integration on a campaign Integration tab to see it here.
-                </p>
-              )}
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
+          </MappingSectionCard>
+        ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <MappingSectionCard
+          title="Response Builder"
+          badge="POST"
+          tone="post"
+          description="Map the buyer response returned from the final POST request."
+          defaultOpen
+        >
           <div className="space-y-5 p-5">
             <div className="max-w-xs">
               <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Data Type</label>
@@ -1282,7 +1593,7 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
               ))}
             </div>
           </div>
-        </div>
+        </MappingSectionCard>
       </div>
     );
   };
@@ -1295,263 +1606,134 @@ export function IntegrationBuilderDetail({ builder }: IntegrationBuilderDetailPr
     };
 
     return (
-    <div className="space-y-5">
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-700">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">Request Builder (POST)</h3>
-        </div>
-
-        <div className="space-y-6 p-5">
-          <div className="grid gap-4 md:max-w-3xl md:grid-cols-2 xl:grid-cols-3">
-            <div className="md:col-span-2 xl:col-span-1">
-              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Request-Url</label>
-              <TwigTemplateInput
-                value={requestUrl}
-                onChange={setRequestUrl}
-                placeholder="config.url or static value"
-                {...twigInputProps}
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Method Type</label>
-              <DropdownSelect
-                value={methodType}
-                options={["POST", "PUT", "PATCH", "GET"].map((method) => ({
-                  value: method,
-                  label: method,
-                }))}
-                onChange={setMethodType}
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Data Type</label>
-              <DropdownSelect
-                value={dataType}
-                options={["JSON", "FORM-DATA", "XML"].map((type) => ({
-                  value: type,
-                  label: type,
-                }))}
-                onChange={setDataType}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <RequestMappingToggle
-              open={showHeaders}
-              label="Headers"
-              onToggle={() => setShowHeaders((current) => !current)}
-            />
-
-            <RequestMappingCollapsible open={showHeaders}>
-              <DualSaveBar
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50"
-                dual={shouldUseDualSaveBar(headers.length)}
-                renderActions={() => (
-                  <PrimaryButton
-                    type="button"
-                    disabled={isSavingHeaders || !builder?.id}
-                    onClick={() => void handleSaveHeaders()}
-                    className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                  >
-                    {isSavingHeaders ? "Saving..." : "Save Headers"}
-                  </PrimaryButton>
-                )}
-              >
-              <div className="space-y-3">
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_48px]">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Key</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"> </p>
-                </div>
-
-                {headers.map((row) => (
-                  <div key={row.id} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_48px]">
-                    <TwigTemplateInput
-                      value={row.key}
-                      onChange={(nextValue) => updateHeaderRow(row.id, "key", nextValue)}
-                      {...twigInputProps}
-                    />
-                    <TwigTemplateInput
-                      value={row.value}
-                      onChange={(nextValue) => updateHeaderRow(row.id, "value", nextValue)}
-                      {...twigInputProps}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeHeaderRow(row.id)}
-                      className="flex h-11 items-center justify-center rounded-xl border border-red-200 text-red-500 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={addHeaderRow}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <Plus size={15} />
-                  <span>Add new</span>
-                </button>
-              </div>
-              </DualSaveBar>
-            </RequestMappingCollapsible>
-          </div>
-
-          <div className="space-y-4">
-            <RequestMappingToggle open={showData} label="Data" onToggle={() => setShowData((current) => !current)} />
-
-            <RequestMappingCollapsible open={showData}>
-              <DualSaveBar
-                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50"
-                dual={shouldUseDualSaveBar(requestDataRows.length)}
-                renderActions={() => (
-                  <PrimaryButton
-                    type="button"
-                    disabled={isSavingData || !builder?.id}
-                    onClick={() => void handleSaveData()}
-                    className="bg-emerald-700 hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                  >
-                    {isSavingData ? "Saving..." : "Save Data"}
-                  </PrimaryButton>
-                )}
-              >
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">Field Name</span> is the buyer field key sent in the request body.
-                  <span className="font-medium text-slate-700 dark:text-slate-200"> Value</span> accepts plain text or Twig templates — e.g.{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ lead.field_name }}`}</code> (lead),{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ mapped.slug }}`}</code> (Array Mapping),{" "}
-                  <code className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-700">{`{{ config.api_key }}`}</code> (Integration Config).
-                </p>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSampleImportError("");
-                      setSampleModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                  >
-                    <Upload size={15} />
-                    <span>Import by Sample</span>
-                  </button>
-
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Type</label>
-                    <DropdownSelect
-                      value={payloadType}
-                      options={[
-                        { value: "Object", label: "Object" },
-                        { value: "Array", label: "Array" },
-                      ]}
-                      onChange={setPayloadType}
-                      className="min-w-44"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_180px_minmax(0,1fr)_48px]">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Field Name</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Type</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Value</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"> </p>
-                </div>
-
-                {requestDataRows.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                    No data records yet. Click `Add new` or use `Import by Sample` to generate rows.
-                  </div>
-                ) : (
-                  requestDataRows.map((row) => (
-                    <div key={row.id} className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_180px_minmax(0,1fr)_48px]">
-                      <Input
-                        value={row.name}
-                        onChange={(event) => updateRequestDataRow(row.id, "name", event.target.value)}
-                        placeholder="buyer_field_name"
-                      />
-                      <DropdownSelect
-                        value={row.type}
-                        options={["String", "Number", "Boolean", "Object", "Array", "Null"].map(
-                          (type) => ({ value: type, label: type })
-                        )}
-                        onChange={(type) => updateRequestDataRow(row.id, "type", type)}
-                      />
-                      <TwigTemplateInput
-                        value={row.value}
-                        onChange={(nextValue) => updateRequestDataRow(row.id, "value", nextValue)}
-                        {...twigInputProps}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeRequestDataRow(row.id)}
-                        className="flex h-11 items-center justify-center rounded-xl border border-red-200 text-red-500 transition hover:bg-red-50 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))
-                )}
-
-                <button
-                  type="button"
-                  onClick={addRequestDataRow}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 bg-emerald-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
-                >
-                  <Plus size={15} />
-                  <span>Add new</span>
-                </button>
-              </div>
-              </DualSaveBar>
-            </RequestMappingCollapsible>
-          </div>
-        </div>
-      </div>
-
-      <Modal
-        open={sampleModalOpen}
-        title="Import by Sample"
-        description="Paste a JSON object or array sample. Rows will use Twig lead templates such as {{ lead.first_name }} for each field name."
-        onClose={() => {
-          setSampleImportError("");
-          setSampleModalOpen(false);
-        }}
-        panelClassName="max-w-3xl"
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                setSampleImportError("");
-                setSampleModalOpen(false);
-              }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <PrimaryButton type="button" onClick={handleImportSample}>
-              Import Sample
-            </PrimaryButton>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <textarea
-            value={sampleJson}
-            onChange={(event) => {
-              setSampleJson(event.target.value);
-              if (sampleImportError) setSampleImportError("");
+      <div className="space-y-5">
+        {isPingPost ? (
+          <RequestBuilderPanel
+            title="Request Builder"
+            badge="PING"
+            tone="ping"
+            description="Lightweight ping request sent before the full POST."
+            defaultOpen
+            requestUrl={pingRequestUrl}
+            methodType={pingMethodType}
+            dataType={pingDataType}
+            payloadType={pingPayloadType}
+            headers={pingHeaders}
+            dataRows={pingRequestDataRows}
+            showHeaders={showPingHeaders}
+            showData={showPingData}
+            urlPlaceholder="config.ping_url or static value"
+            isSavingHeaders={isSavingPingHeaders}
+            isSavingData={isSavingPingData}
+            canSave={Boolean(builder?.id)}
+            twigInputProps={twigInputProps}
+            onRequestUrlChange={setPingRequestUrl}
+            onMethodTypeChange={setPingMethodType}
+            onDataTypeChange={setPingDataType}
+            onPayloadTypeChange={setPingPayloadType}
+            onToggleHeaders={() => setShowPingHeaders((current) => !current)}
+            onToggleData={() => setShowPingData((current) => !current)}
+            onUpdateHeader={updatePingHeaderRow}
+            onAddHeader={addPingHeaderRow}
+            onRemoveHeader={removePingHeaderRow}
+            onSaveHeaders={() => void handleSavePingHeaders()}
+            onUpdateDataRow={updatePingRequestDataRow}
+            onAddDataRow={addPingRequestDataRow}
+            onRemoveDataRow={removePingRequestDataRow}
+            onSaveData={() => void handleSavePingData()}
+            onOpenSampleImport={() => {
+              setSampleImportPhase("PING");
+              setSampleImportError("");
+              setSampleModalOpen(true);
             }}
-            placeholder={`{\n  "first_name": "Jim",\n  "last_name": "Cena",\n  "email": "jim@example.com",\n  "phone": "+15551234567"\n}`}
-            className="min-h-64 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-400 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
           />
-          {sampleImportError ? <p className="text-sm text-red-600 dark:text-red-300">{sampleImportError}</p> : null}
-        </div>
-      </Modal>
-    </div>
+        ) : null}
+
+        <RequestBuilderPanel
+          title="Request Builder"
+          badge="POST"
+          tone="post"
+          description={
+            isPingPost
+              ? "Outbound request used after a successful Ping Accept."
+              : "Outbound request sent to the buyer API."
+          }
+          defaultOpen
+          requestUrl={requestUrl}
+          methodType={methodType}
+          dataType={dataType}
+          payloadType={payloadType}
+          headers={headers}
+          dataRows={requestDataRows}
+          showHeaders={showHeaders}
+          showData={showData}
+          urlPlaceholder={isPingPost ? "config.post_url or static value" : "config.url or static value"}
+          isSavingHeaders={isSavingHeaders}
+          isSavingData={isSavingData}
+          canSave={Boolean(builder?.id)}
+          twigInputProps={twigInputProps}
+          onRequestUrlChange={setRequestUrl}
+          onMethodTypeChange={setMethodType}
+          onDataTypeChange={setDataType}
+          onPayloadTypeChange={setPayloadType}
+          onToggleHeaders={() => setShowHeaders((current) => !current)}
+          onToggleData={() => setShowData((current) => !current)}
+          onUpdateHeader={updateHeaderRow}
+          onAddHeader={addHeaderRow}
+          onRemoveHeader={removeHeaderRow}
+          onSaveHeaders={() => void handleSaveHeaders()}
+          onUpdateDataRow={updateRequestDataRow}
+          onAddDataRow={addRequestDataRow}
+          onRemoveDataRow={removeRequestDataRow}
+          onSaveData={() => void handleSaveData()}
+          onOpenSampleImport={() => {
+            setSampleImportPhase("POST");
+            setSampleImportError("");
+            setSampleModalOpen(true);
+          }}
+        />
+
+        <Modal
+          open={sampleModalOpen}
+          title={sampleImportPhase === "PING" ? "Import Ping Sample" : "Import by Sample"}
+          description="Paste a JSON object or array sample. Rows will use Twig lead templates such as {{ lead.first_name }} for each field name."
+          onClose={() => {
+            setSampleImportError("");
+            setSampleModalOpen(false);
+          }}
+          panelClassName="max-w-3xl"
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setSampleImportError("");
+                  setSampleModalOpen(false);
+                }}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <PrimaryButton type="button" onClick={handleImportSample}>
+                Import Sample
+              </PrimaryButton>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <textarea
+              value={sampleJson}
+              onChange={(event) => {
+                setSampleJson(event.target.value);
+                if (sampleImportError) setSampleImportError("");
+              }}
+              placeholder={`{\n  "first_name": "Jim",\n  "last_name": "Cena",\n  "email": "jim@example.com",\n  "phone": "+15551234567"\n}`}
+              className="min-h-64 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-400 dark:focus:border-blue-400 dark:focus:ring-blue-400/25"
+            />
+            {sampleImportError ? <p className="text-sm text-red-600 dark:text-red-300">{sampleImportError}</p> : null}
+          </div>
+        </Modal>
+      </div>
     );
   };
 

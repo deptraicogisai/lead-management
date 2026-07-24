@@ -62,6 +62,11 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     solid: { background: "#ca8a04", text: "#ffffff", border: "#a16207" },
     outline: { background: "#fefce8", text: "#854d0e", border: "#ca8a04" },
   },
+  "delay posting": {
+    pill: { background: "#fef08a", text: "#713f12", border: "#ca8a04" },
+    solid: { background: "#ca8a04", text: "#ffffff", border: "#a16207" },
+    outline: { background: "#fefce8", text: "#854d0e", border: "#ca8a04" },
+  },
   enabled: {
     pill: { background: "#86efac", text: "#14532d", border: "#22c55e" },
     solid: { background: "#22c55e", text: "#ffffff", border: "#16a34a" },
@@ -101,6 +106,31 @@ const STATUS_STYLES: Record<string, StatusStyleSet> = {
     pill: { background: "#fca5a5", text: "#7f1d1d", border: "#ef4444" },
     solid: { background: "#ef4444", text: "#ffffff", border: "#dc2626" },
     outline: { background: "#fef2f2", text: "#b91c1c", border: "#ef4444" },
+  },
+  "ping reject": {
+    pill: { background: "#f9a8d4", text: "#831843", border: "#ec4899" },
+    solid: { background: "#db2777", text: "#ffffff", border: "#be185d" },
+    outline: { background: "#fdf2f8", text: "#9d174d", border: "#ec4899" },
+  },
+  "price reject": {
+    pill: { background: "#fdba74", text: "#9a3412", border: "#f97316" },
+    solid: { background: "#ea580c", text: "#ffffff", border: "#c2410c" },
+    outline: { background: "#fff7ed", text: "#9a3412", border: "#f97316" },
+  },
+  "price conflict": {
+    pill: { background: "#fcd34d", text: "#78350f", border: "#f59e0b" },
+    solid: { background: "#d97706", text: "#ffffff", border: "#b45309" },
+    outline: { background: "#fffbeb", text: "#92400e", border: "#f59e0b" },
+  },
+  timeout: {
+    pill: { background: "#c4b5fd", text: "#4c1d95", border: "#8b5cf6" },
+    solid: { background: "#7c3aed", text: "#ffffff", border: "#6d28d9" },
+    outline: { background: "#f5f3ff", text: "#5b21b6", border: "#8b5cf6" },
+  },
+  skipped: {
+    pill: { background: "#cbd5e1", text: "#334155", border: "#64748b" },
+    solid: { background: "#64748b", text: "#ffffff", border: "#475569" },
+    outline: { background: "#f8fafc", text: "#475569", border: "#94a3b8" },
   },
   "intake reject": {
     pill: { background: "#fbcfe8", text: "#831843", border: "#db2777" },
@@ -211,6 +241,12 @@ const STATUS_LABELS: Record<string, string> = {
   accept: "Accept",
   accepted: "Accepted",
   reject: "Reject",
+  "ping reject": "Ping Reject",
+  "price reject": "Price Reject",
+  "price conflict": "Price Conflict",
+  timeout: "Timeout",
+  skipped: "Skipped",
+  "delay posting": "Delay Posting",
   "intake reject": "Intake Reject",
   "post error": "Post Error",
   pl: "PL",

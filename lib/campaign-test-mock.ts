@@ -5,7 +5,7 @@ export const CAMPAIGN_TEST_MOCK_STATUS_OPTIONS = ["Accept", "Reject"] as const;
 
 export type CampaignTestMockStatus = (typeof CAMPAIGN_TEST_MOCK_STATUS_OPTIONS)[number];
 
-export type CampaignTestMockResponse = {
+export type CampaignTestMockPhaseConfig = {
   timeoutSeconds: number | null;
   status: CampaignTestMockStatus;
   price: number | null;
@@ -13,12 +13,30 @@ export type CampaignTestMockResponse = {
   reasons: string[];
 };
 
-export const DEFAULT_CAMPAIGN_TEST_MOCK: CampaignTestMockResponse = {
+export type CampaignTestMockResponse = CampaignTestMockPhaseConfig & {
+  /** Present when campaign integration is Ping Post — mock for the Ping phase. */
+  ping?: CampaignTestMockPhaseConfig | null;
+};
+
+export const DEFAULT_CAMPAIGN_TEST_MOCK_PHASE: CampaignTestMockPhaseConfig = {
   timeoutSeconds: 0,
   status: "Accept",
   price: 25,
   redirectUrl: "https://example.com/landing",
   reasons: ["Buyer declined the lead."],
+};
+
+export const DEFAULT_CAMPAIGN_TEST_MOCK: CampaignTestMockResponse = {
+  ...DEFAULT_CAMPAIGN_TEST_MOCK_PHASE,
+  ping: null,
+};
+
+export const DEFAULT_CAMPAIGN_TEST_PING_MOCK: CampaignTestMockPhaseConfig = {
+  timeoutSeconds: 0,
+  status: "Accept",
+  price: null,
+  redirectUrl: "",
+  reasons: ["Buyer declined the ping."],
 };
 
 function readConfiguredDirectUrl(record: Record<string, unknown>) {
@@ -81,6 +99,36 @@ function readLegacyResponse(record: Record<string, unknown>) {
   return record;
 }
 
+function sanitizePhaseConfig(
+  value: unknown,
+  defaults: CampaignTestMockPhaseConfig = DEFAULT_CAMPAIGN_TEST_MOCK_PHASE
+): CampaignTestMockPhaseConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...defaults };
+  }
+
+  const record = value as Record<string, unknown>;
+  const status = sanitizeStatus(record.status);
+
+  if (status === "Reject") {
+    return {
+      timeoutSeconds: sanitizeOptionalNumber(record.timeoutSeconds ?? record.responseDelaySeconds),
+      status,
+      price: null,
+      redirectUrl: "",
+      reasons: sanitizeReasons(record.reasons ?? record.reason),
+    };
+  }
+
+  return {
+    timeoutSeconds: sanitizeOptionalNumber(record.timeoutSeconds ?? record.responseDelaySeconds),
+    status: "Accept",
+    price: sanitizeOptionalNumber(record.price ?? record.buyerPrice),
+    redirectUrl: readConfiguredDirectUrl(record),
+    reasons: [...defaults.reasons],
+  };
+}
+
 function migrateLegacyMock(record: Record<string, unknown>): CampaignTestMockResponse {
   const legacy = readLegacyResponse(record);
   const status = sanitizeStatus(legacy.status ?? record.status);
@@ -92,6 +140,7 @@ function migrateLegacyMock(record: Record<string, unknown>): CampaignTestMockRes
       price: null,
       redirectUrl: "",
       reasons: sanitizeReasons(legacy.reasons ?? legacy.reject_reason ?? legacy.reason ?? record.reason),
+      ping: null,
     };
   }
 
@@ -101,6 +150,7 @@ function migrateLegacyMock(record: Record<string, unknown>): CampaignTestMockRes
     price: sanitizeOptionalNumber(legacy.price ?? record.buyerPrice) ?? DEFAULT_CAMPAIGN_TEST_MOCK.price,
     redirectUrl: readConfiguredDirectUrl(legacy) || DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl,
     reasons: [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons],
+    ping: null,
   };
 }
 
@@ -110,6 +160,7 @@ export function sanitizeCampaignTestMock(value: unknown): CampaignTestMockRespon
   }
 
   const record = value as Record<string, unknown>;
+  const pingRaw = record.ping;
 
   if (
     record.status === "Accept" ||
@@ -121,7 +172,7 @@ export function sanitizeCampaignTestMock(value: unknown): CampaignTestMockRespon
   ) {
     if (record.status === "Accept" || record.status === "Reject") {
       const status = record.status as CampaignTestMockStatus;
-      return {
+      const post: CampaignTestMockResponse = {
         timeoutSeconds: sanitizeOptionalNumber(record.timeoutSeconds ?? record.responseDelaySeconds),
         status,
         price: status === "Accept" ? sanitizeOptionalNumber(record.price) ?? DEFAULT_CAMPAIGN_TEST_MOCK.price : null,
@@ -130,7 +181,14 @@ export function sanitizeCampaignTestMock(value: unknown): CampaignTestMockRespon
             ? readConfiguredDirectUrl(record) || DEFAULT_CAMPAIGN_TEST_MOCK.redirectUrl
             : "",
         reasons: status === "Reject" ? sanitizeReasons(record.reasons) : [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons],
+        ping: null,
       };
+
+      if (pingRaw && typeof pingRaw === "object" && !Array.isArray(pingRaw)) {
+        post.ping = sanitizePhaseConfig(pingRaw, DEFAULT_CAMPAIGN_TEST_PING_MOCK);
+      }
+
+      return post;
     }
 
     return migrateLegacyMock(record);
@@ -139,6 +197,7 @@ export function sanitizeCampaignTestMock(value: unknown): CampaignTestMockRespon
   return { ...DEFAULT_CAMPAIGN_TEST_MOCK };
 }
 
+/** Post-phase buyer mock JSON (Sold / Reject). */
 export function buildCampaignTestMockBuyerResponse(mock: CampaignTestMockResponse) {
   if (mock.status === "Accept") {
     const response: Record<string, unknown> = {
@@ -165,6 +224,26 @@ export function buildCampaignTestMockBuyerResponse(mock: CampaignTestMockRespons
     status_text: "Reject",
     reasons: formatPublisherReasons(
       reasons.length > 0 ? reasons : [...DEFAULT_CAMPAIGN_TEST_MOCK.reasons]
+    ),
+  };
+}
+
+/** Ping-phase buyer mock JSON — numeric status 1/2 (matches Sold::Sign / Reject::Sign). */
+export function buildCampaignTestMockPingBuyerResponse(mock: CampaignTestMockPhaseConfig) {
+  if (mock.status === "Accept") {
+    return {
+      status: 1,
+      status_text: "Accept",
+    };
+  }
+
+  const reasons = mock.reasons.map((reason) => reason.trim()).filter(Boolean);
+
+  return {
+    status: 2,
+    status_text: "Reject",
+    reasons: formatPublisherReasons(
+      reasons.length > 0 ? reasons : [...DEFAULT_CAMPAIGN_TEST_PING_MOCK.reasons]
     ),
   };
 }
@@ -207,6 +286,25 @@ export function campaignTestMockToMockBuyerPostOptions(
     statusText: isAccept ? "Sold" : "Reject",
     reason: isAccept ? undefined : reasons.join(" | ") || DEFAULT_CAMPAIGN_TEST_MOCK.reasons[0],
     response,
+  };
+}
+
+/** Convert nested ping mock config for the Ping request phase. */
+export function campaignTestMockToPingMockBuyerPostOptions(
+  mock: CampaignTestMockResponse | null | undefined
+): MockBuyerPostOptions | undefined {
+  if (!mock?.ping) return undefined;
+
+  const ping = mock.ping;
+  const isAccept = ping.status === "Accept";
+  const reasons = ping.reasons.map((reason) => reason.trim()).filter(Boolean);
+
+  return {
+    responseDelaySeconds: ping.timeoutSeconds,
+    status: isAccept ? "Accept" : "Reject",
+    statusText: isAccept ? "Accept" : "Reject",
+    reason: isAccept ? undefined : reasons.join(" | ") || DEFAULT_CAMPAIGN_TEST_PING_MOCK.reasons[0],
+    response: buildCampaignTestMockPingBuyerResponse(ping),
   };
 }
 

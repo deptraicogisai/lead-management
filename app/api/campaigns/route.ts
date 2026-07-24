@@ -5,8 +5,10 @@ import {
   buildGeneralFiltersFromVerticalFields,
   buildCampaignListStatusFilter,
   defaultCampaignDuplicates,
+  normalizeCampaignDelayScheduling,
   toCampaignListRecord,
   toCampaignRecord,
+  type CampaignDelayScheduling,
   type CampaignStatus,
   type CampaignType,
 } from "@/lib/campaign";
@@ -26,6 +28,7 @@ type CampaignPayload = {
   verticalId?: string;
   buyerId?: string;
   campaignType?: CampaignType;
+  delayScheduling?: CampaignDelayScheduling | string;
   timezone?: string;
   minPrice?: number | string;
   status?: CampaignStatus;
@@ -187,6 +190,7 @@ export async function POST(req: Request) {
         buyerRef: importData.buyerRef,
         integrationRef: importData.integrationRef,
         campaignType: importData.campaignType,
+        delayScheduling: importData.delayScheduling,
         timezone: importData.timezone,
         minPrice: importData.minPrice,
         duplicates: importData.duplicates,
@@ -252,6 +256,10 @@ export async function POST(req: Request) {
       verticalRef: body.verticalId.trim(),
       buyerRef: body.buyerId.trim(),
       campaignType: body.campaignType,
+      delayScheduling:
+        body.campaignType === "Silent"
+          ? normalizeCampaignDelayScheduling(body.delayScheduling)
+          : "Off",
       timezone: body.timezone.trim(),
       minPrice: Number.isFinite(minPrice) ? minPrice : 0,
       duplicates: defaultCampaignDuplicates(),

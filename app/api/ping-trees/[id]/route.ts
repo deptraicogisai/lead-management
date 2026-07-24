@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { buildCampaignLookupContext } from "@/lib/campaign-context";
 import { toCampaignRecord } from "@/lib/campaign";
 import { CampaignModel } from "@/lib/models/campaign";
+import { IntegrationBuilderModel } from "@/lib/models/integration-builder";
 import { PingTreeModel } from "@/lib/models/ping-tree";
 import { connectToDatabase } from "@/lib/mongodb";
 import { excludeDeletedStatusFilter } from "@/lib/soft-delete";
 import { sortInactiveCampaignsByBuyerMinPrice, toPingTreeRecord, type PingTreeCampaignCard } from "@/lib/ping-tree";
 import { normalizeCampaignTestMocks, sanitizeCampaignTestMock } from "@/lib/campaign-test-mock";
+import { normalizeIntegrationPostModel } from "@/lib/integration-post-model";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -66,6 +68,22 @@ export async function GET(_: Request, context: Params) {
       .lean();
     const records = campaigns.map((campaign) => toCampaignRecord(campaign, lookup));
 
+    const integrationIds = [
+      ...new Set(records.map((record) => record.integrationId).filter((id) => Types.ObjectId.isValid(id))),
+    ];
+    const integrationDocs =
+      integrationIds.length > 0
+        ? await IntegrationBuilderModel.find({ _id: { $in: integrationIds } })
+            .select({ postModel: 1 })
+            .lean()
+        : [];
+    const postModelByIntegrationId = new Map(
+      integrationDocs.map((doc) => [
+        doc._id.toString(),
+        normalizeIntegrationPostModel((doc as { postModel?: string }).postModel),
+      ])
+    );
+
     const activeIds = new Set(tree.activeCampaignIds ?? []);
     const prioritiesRaw = tree.campaignPriorities ?? {};
     const priorities: Record<string, number> = {};
@@ -92,6 +110,7 @@ export async function GET(_: Request, context: Params) {
       productLabel: record.productLabel,
       priority,
       testMock: campaignTestMocks[record.id] ?? null,
+      integrationPostModel: postModelByIntegrationId.get(record.integrationId) ?? "Direct Post",
     });
 
     const pingTreeList = (tree.activeCampaignIds ?? [])

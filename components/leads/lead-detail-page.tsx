@@ -21,6 +21,7 @@ import { PageTabBar } from "@/components/ui/page-tab-bar";
 import { SectionLoading } from "@/components/ui/loading-indicator";
 import { PageSection } from "@/components/ui/state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DelayPostingStatusBadge } from "@/components/ui/delay-posting-status-badge";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
 import {
   parseResponseBodyForDisplay,
@@ -276,16 +277,19 @@ function FilterLogMessageCell({ message }: { message: string }) {
 function FilterLogDetailRow({
   row,
   onOpenLog,
+  onDelayDue,
 }: {
   row: LeadDetailFilterLogRow;
   onOpenLog: (row: LeadDetailFilterLogRow) => void;
+  onDelayDue?: () => void;
 }) {
   const { timeZone } = useSystemSettings();
   const statusNormalized = row.status.trim().toLowerCase();
   const showMessageIcon =
     statusNormalized.includes("reject") ||
     statusNormalized === "skipped" ||
-    statusNormalized === "disabled";
+    statusNormalized === "disabled" ||
+    statusNormalized === "delay posting";
 
   return (
     <tr
@@ -295,7 +299,9 @@ function FilterLogDetailRow({
           ? "bg-slate-100/90 text-slate-500 dark:bg-slate-800/70 dark:text-slate-400"
           : statusNormalized === "accept"
             ? "bg-emerald-50/70 dark:bg-emerald-500/10"
-            : undefined
+            : statusNormalized === "delay posting"
+              ? "bg-sky-50/70 dark:bg-sky-500/10"
+              : undefined
       )}
     >
       <td className="whitespace-nowrap px-4 py-2.5 align-middle tabular-nums text-slate-700 dark:text-slate-200">
@@ -336,11 +342,11 @@ function FilterLogDetailRow({
       </td>
       <td className="px-4 py-2.5 align-middle">
         <span className="relative inline-flex max-w-full items-start pt-2.5 pr-2">
-          {row.status.trim() && row.status.trim() !== "—" ? (
-            <StatusBadge status={row.status} />
-          ) : (
-            <span className="text-slate-500 dark:text-slate-300">—</span>
-          )}
+          <DelayPostingStatusBadge
+            status={row.status}
+            scheduledPostAt={row.scheduledPostAt || null}
+            onDue={onDelayDue}
+          />
           {row.offeredPriceLabel ? (
             <span className="absolute right-0 top-0 rounded border border-amber-200 bg-amber-50 px-1 py-px text-[11px] font-semibold leading-none text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
               {row.offeredPriceLabel}
@@ -537,26 +543,49 @@ export function LeadDetailPage() {
     }
   }, [lead, filterProcessingKey]);
 
-  const loadLead = useCallback(async () => {
+  const loadLead = useCallback(async (options?: { silent?: boolean }) => {
     if (!leadIdParam) return;
-    setIsLoading(true);
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
     setError("");
     try {
       const response = await fetch(`/api/leads/${encodeURIComponent(leadIdParam)}`);
       const data = (await response.json().catch(() => null)) as LeadDetailRecord | { message?: string } | null;
       if (!response.ok) {
-        setLead(null);
-        setError((data as { message?: string } | null)?.message ?? "Failed to load lead.");
+        if (!options?.silent) {
+          setLead(null);
+          setError((data as { message?: string } | null)?.message ?? "Failed to load lead.");
+        }
         return;
       }
       setLead(data as LeadDetailRecord);
     } catch {
-      setLead(null);
-      setError("Failed to load lead.");
+      if (!options?.silent) {
+        setLead(null);
+        setError("Failed to load lead.");
+      }
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, [leadIdParam]);
+
+  const refreshAfterDelayDue = useCallback(() => {
+    void (async () => {
+      try {
+        await fetch("/api/cron/process-delayed-posts", { method: "POST" });
+      } catch {
+        // Ignore cron trigger failures; still refresh lead detail.
+      }
+      // Give the worker a moment, then poll a few times for status update.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 800 : 1500));
+        await loadLead({ silent: true });
+      }
+    })();
+  }, [loadLead]);
 
   useEffect(() => {
     void loadLead();
@@ -936,6 +965,7 @@ export function LeadDetailPage() {
                                           key={`filter-${row.id}`}
                                           row={row}
                                           onOpenLog={setLogRow}
+                                          onDelayDue={refreshAfterDelayDue}
                                         />
                                       ))
                                     ) : (

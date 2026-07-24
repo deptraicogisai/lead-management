@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useSystemSettings } from "@/components/settings/system-settings-context";
-import { buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
+import { buildBuyerLeadApiUrls, buildBuyerLeadPostUrl, generateBuyerApiKey } from "@/lib/buyer-lead-api";
 import { type BuyerCreatePayload } from "@/lib/buyer";
 import { CopyableValue } from "@/components/ui/copy-button";
 import { FieldLabel, FormError, Input, PrimaryButton, SecondaryButton } from "@/components/ui/form-controls";
@@ -37,10 +37,11 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
   const handleGenerateApi = () => {
     const apiKey = generateBuyerApiKey();
     const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const urls = origin ? buildBuyerLeadApiUrls(origin) : null;
     setForm((current) => ({
       ...current,
       apiKey,
-      postLeadUrl: origin ? buildBuyerLeadPostUrl(origin) : "",
+      postLeadUrl: urls?.postUrl || "",
     }));
     setErrors((current) => {
       const next = { ...current };
@@ -125,8 +126,7 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
             <div>
               <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Buyer Lead API</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Used while Test Mode is on. Post leads to{" "}
-                <code className="text-[11px]">/api/lists/addlead</code> with{" "}
+                Used while Test Mode is on. Generate Ping + Post mock URLs and send{" "}
                 <code className="text-[11px]">x-api-key</code> in the integration request mapping header.
               </p>
             </div>
@@ -148,21 +148,45 @@ export function BuyerForm({ isSaving = false, onSubmit }: BuyerFormProps) {
               />
             </div>
 
-            <div>
-              <FieldLabel htmlFor="buyer-post-lead-url" label="API URL" />
-              <FormError error={errors.postLeadUrl} />
-              {form.postLeadUrl ? (
-                <CopyableValue value={form.postLeadUrl} copyLabel="Copy post lead URL" />
-              ) : (
-                <Input
-                  id="buyer-post-lead-url"
-                  value=""
-                  readOnly
-                  invalid={Boolean(errors.postLeadUrl)}
-                  placeholder="Generated automatically"
-                />
-              )}
-            </div>
+            {(() => {
+              const origin = typeof window !== "undefined" ? window.location.origin : "";
+              const urls = origin ? buildBuyerLeadApiUrls(origin) : null;
+              const pingUrl = urls?.pingUrl ?? "";
+              const postUrl = form.postLeadUrl?.trim() || urls?.postUrl || "";
+              return (
+                <>
+                  <div>
+                    <FieldLabel htmlFor="buyer-ping-lead-url" label="Ping URL" />
+                    <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      <code className="text-[11px]">/api/lists/addlead/ping</code>
+                    </p>
+                    {pingUrl ? (
+                      <CopyableValue value={pingUrl} copyLabel="Copy Ping URL" />
+                    ) : (
+                      <Input id="buyer-ping-lead-url" value="" readOnly placeholder="Click Generate API" />
+                    )}
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="buyer-post-lead-url" label="Post URL" />
+                    <FormError error={errors.postLeadUrl} />
+                    <p className="mb-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      <code className="text-[11px]">/api/lists/addlead/post</code>
+                    </p>
+                    {postUrl ? (
+                      <CopyableValue value={postUrl} copyLabel="Copy Post URL" />
+                    ) : (
+                      <Input
+                        id="buyer-post-lead-url"
+                        value=""
+                        readOnly
+                        invalid={Boolean(errors.postLeadUrl)}
+                        placeholder="Generated automatically"
+                      />
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       ) : null}
